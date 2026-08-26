@@ -44,6 +44,42 @@ Worth knowing, because they are why certain things "cannot" happen:
 If you ever need to verify these still hold, run `bash supabase/tests/run-migrations.sh` — it rebuilds
 the schema from scratch and asserts every one of them.
 
+## 2b. Working on it — the two things that are not in this repo
+
+### The Supabase connection an agent uses
+
+Claude Code talks to the project through an MCP server, added per-person and per-machine:
+
+```bash
+claude mcp add --scope local --transport http supabase-voice-to-content \
+  "https://mcp.supabase.com/mcp?project_ref=<your-project-ref>"
+claude mcp login supabase-voice-to-content   # browser; sign in as the project owner
+```
+
+Local scope, deliberately: the OAuth credential is personal, so it does not belong in a file that
+gets committed. It also pins the project ref, which a general Supabase connection does not — and
+that is the reason this server exists at all. A connection authorised as a different account
+reports itself healthy and then refuses every call with `You do not have permission to perform
+this action`, which reads like a bug in the query rather than a bug in the login.
+
+### The migration ledger has seven backfilled rows
+
+Migrations 0017–0023 were applied as raw SQL and never recorded, so the ledger said 0016 while the
+schema said 0023. Anything rebuilding from the ledger — which 14.1 eventually will, in Josh's
+account — would have replayed seven migrations already in place.
+
+They are recorded now and marked `created_by = 'ledger-backfill'`, so which rows were applied out
+of band is visible rather than inferred. Their `statements` column holds a pointer to the canonical
+file plus its size and hash, not the SQL itself: `db push` replays from `supabase/migrations/`, so
+the column is a record rather than a source, and 33 KB transcribed by hand could drift from the
+file with nothing to catch it.
+
+Check it with:
+
+```sql
+select version, name, created_by from supabase_migrations.schema_migrations order by version;
+```
+
 ## 3. Setting it up from nothing
 
 ```bash
