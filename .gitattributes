@@ -1,0 +1,9 @@
+# The whole repo deploys to Deno and Postgres, both of which read these files verbatim.
+# Normalise to LF in the index so a Windows checkout cannot introduce CRLF into a
+# migration, an edge function, or a prompt string.
+* text=auto eol=lf
+
+# Binary, never normalised.
+*.png binary
+*.jpg binary
+*.svg text eol=lf

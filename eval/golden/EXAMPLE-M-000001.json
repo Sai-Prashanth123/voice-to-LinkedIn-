@@ -1,0 +1,28 @@
+{
+  "_comment": [
+    "A golden moment: the shape the regression harness expects.",
+    "",
+    "Replace this with 20-30 real moments exported from the seeding session (clause 6, 'the cold",
+    "start'). They are the fixed set every library change is measured against, so they should be",
+    "genuinely representative — strong scenes AND thin ones, because a library change that improves",
+    "the strong ones while breaking the thin ones is not an improvement.",
+    "",
+    "`entry` must contain ONLY fields the drafter is allowed to see (9.1). The claim verifier checks",
+    "every span against exactly these strings, so they must be the real text, not a paraphrase."
+  ],
+  "ref": "M-000001",
+  "pillar": "positioning",
+  "audience": "founders selling into enterprise for the first time",
+  "entry": {
+    "the_moment": "On a call last Tuesday the CFO put his hand up halfway through the deck and asked what happens when the champion leaves.",
+    "the_detail": "He did not ask it aggressively. He asked it like someone who had been burned before and was checking whether I had thought about it.",
+    "their_actual_words": "what happens when the champion leaves",
+    "how_he_felt": "Caught out. I had an answer but it was a platitude and I could hear it as I said it.",
+    "the_realisation": "Every deal I have lost late had one person holding it up, and I had never once mapped that as a risk.",
+    "the_lesson": "A deal with one advocate is not a pipeline entry, it is a bet on someone staying in their job.",
+    "what_changed": "I now ask who else would have to agree if the champion left tomorrow."
+  },
+  "names": [
+    { "name": "Northwind", "kind": "company", "cleared": false }
+  ]
+}

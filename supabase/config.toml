@@ -1,0 +1,47 @@
+# Supabase project configuration.
+#
+# `verify_jwt` is declared here for every function, deliberately, because it is sticky: passing
+# `--no-verify-jwt` once on the command line sets it on the deployed function and a later deploy
+# WITHOUT the flag does not put it back. That is how `worker-dispatch` ended up publicly callable —
+# one flag on one early deploy, invisible thereafter.
+#
+# Declaring it in the repo means the setting is reviewed like code, and a redeploy cannot quietly
+# drift from it.
+#
+# Only two functions are reachable without a JWT, and both authenticate themselves:
+#   telegram-webhook   — Telegram sends a shared secret in x-telegram-bot-api-secret-token
+#   transcript-webhook — the call recorder sends a shared secret in a header or query string
+#
+# Everything else is invoked by pg_cron with the service_role key and must stay closed.
+
+project_id = "uzqvebxcxgmseqjhfpku"
+
+[functions.telegram-webhook]
+verify_jwt = false
+
+[functions.transcript-webhook]
+verify_jwt = false
+
+[functions.worker-dispatch]
+verify_jwt = true
+
+[functions.worker-select]
+verify_jwt = true
+
+[functions.worker-triage]
+verify_jwt = true
+
+[functions.worker-slack]
+verify_jwt = true
+
+[functions.worker-publish]
+verify_jwt = true
+
+[functions.worker-metrics]
+verify_jwt = true
+
+[functions.worker-learn]
+verify_jwt = true
+
+[functions.worker-ops]
+verify_jwt = true

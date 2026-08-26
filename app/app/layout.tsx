@@ -1,0 +1,46 @@
+import type { Metadata, Viewport } from "next";
+import Link from "next/link";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "The desk",
+  description: "Weekly pass, calendar, reference library and proposals.",
+  appleWebApp: {
+    capable: true,
+    title: "The desk",
+    // Matches the paper ground, so the status bar does not sit on a white strip when installed.
+    statusBarStyle: "default",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // Zoom stays enabled. Josh reads prose here and may want to pinch in; disabling it to make an app
+  // feel "native" trades a real accessibility need for a cosmetic one.
+  maximumScale: 5,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f0f1ee" },
+    { media: "(prefers-color-scheme: dark)", color: "#14171a" },
+  ],
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>
+        <header className="masthead">
+          <h1><Link href="/">The desk</Link></h1>
+          <nav aria-label="Sections">
+            <Link href="/">This week</Link>
+            <Link href="/calendar">Calendar</Link>
+            <Link href="/bank">Idea bank</Link>
+            <Link href="/library">Library</Link>
+            <Link href="/proposals">Proposals</Link>
+          </nav>
+        </header>
+        {children}
+      </body>
+    </html>
+  );
+}
