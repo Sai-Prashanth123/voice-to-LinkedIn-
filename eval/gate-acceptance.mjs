@@ -23,13 +23,9 @@
  * source-backed checks have something to compare with.
  */
 
-const URL_BASE = process.env.SUPABASE_URL;
-const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+import { loadEnv } from "./env.mjs";
 
-if (!URL_BASE || !KEY) {
-  console.error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.");
-  process.exit(2);
-}
+const { url: URL_BASE, key: KEY } = loadEnv();
 
 /**
  * Ten generic drafts. Each names what makes it generic, so a surprising verdict can be argued with
@@ -156,8 +152,15 @@ async function main() {
     process.exit(2);
   }
 
+  // 8.4 — every draft records which library wrote it, and the column is NOT NULL. This harness had
+  // never been run, so it had never met that constraint: it inserted drafts with no library version
+  // and died on the first one. The most testable clause in the contract, with a test that did not
+  // work.
+  const [current] = await rest("library_versions?select=version&order=version.desc&limit=1");
+  const libraryVersion = current?.version ?? 1;
+
   console.log(`Acceptance test 8 — ten generic drafts, at least nine must be rejected.`);
-  console.log(`Source moment: ${host.ref}\n`);
+  console.log(`Source moment: ${host.ref} · library v${libraryVersion}\n`);
 
   const results = [];
 
@@ -174,6 +177,7 @@ async function main() {
         body: spec.body,
         hook: spec.body.split("\n")[0],
         framework: "acceptance-fixture",
+        library_version: libraryVersion,
         model: "acceptance-fixture",
         claims: [],
         claims_verified: true,
@@ -225,11 +229,29 @@ async function main() {
     if (verdict?.gate_passed) console.log(`      why it should have failed: ${r.why}`);
   }
 
+  const unjudged = results.length - judged.length;
   console.log(`\n  ${rejected} of ${results.length} rejected. The bar is 9.\n`);
 
   if (rejected >= 9) {
     console.log("  PASS — acceptance test 8 is met.");
     process.exit(0);
+  }
+
+  // "Never judged" and "judged and let through" are opposite results and this used to report both
+  // as the same failure — which would have accused the gate of passing generic writing when the
+  // truth was that the provider never let it read any. The distinction is the same one the clause 17
+  // scorecard draws between "failing" and "blocked", and it matters more here: one of these is a
+  // quality defect and the other is a rate limit.
+  if (unjudged > 0) {
+    console.log(
+      `  INCONCLUSIVE — ${unjudged} of ${results.length} drafts were never judged.\n\n` +
+        "  This is NOT the gate letting generic writing through. It is the gate not getting to read\n" +
+        "  them. One full gate run needs roughly 16,000 tokens and the configured provider allows\n" +
+        "  8,000 a minute, so the checks are rate-limited rather than wrong. The queued jobs are\n" +
+        "  resumable and will keep grinding; re-run this to collect the verdicts, or configure a\n" +
+        "  provider that can carry the gate and it finishes in minutes.",
+    );
+    process.exit(2);
   }
 
   console.log(

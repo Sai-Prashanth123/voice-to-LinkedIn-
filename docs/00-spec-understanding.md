@@ -1226,6 +1226,41 @@ attached, not a decision made silently in a commit.
 
 ---
 
+### AUDIT — 27 August 2026 (clauses 16 and 17)
+
+**Clause 16 holds.** All seven decisions are recommended with reasoning, including the build order.
+Its models table had drifted — it still named OpenAI for embeddings after the tool list was corrected
+— and now says what is recommended alongside a note that the recommendation is not what is running.
+
+**Clause 17: zero of twelve component tests pass, and none had ever been checked.** Not failed —
+never run. The line the engagement is judged by was answerable only by querying the database by hand.
+`eval/acceptance.mjs` answers it now, and `worker-ops` folds the same summary into the monthly
+message, because 17a names Josh as the judge and he should not have to ask.
+
+Eleven are **blocked** rather than failing: five need weeks of running, three need Josh, and the rest
+need a model that can clear the gate. One is genuinely **failing** — the interview reached depth on
+1 of 7 moments against a bar of 8 in 10, and that is actionable today.
+
+**17a is unmeasurable, not zero.** No draft has been approved by Josh, so there is nothing to score.
+Reporting 0 of 6 would assert that six drafts were rewritten. Pinned by a test.
+
+**The gate is not broken; the drafter is.** `claims_trace` accounts for 12 of the gate's 16
+draft-level failures, and three of the four sampled are genuine fabrication correctly caught — *"still
+haunts me"*, *"grinding on a client project"*, *"because it took me most of that week to stop arguing
+with it"*, none of it in the source. So R2 works and the drafter, on a free-tier model, invents
+things. Two different failures with two different fixes, and the second is the Anthropic key.
+
+**One gate check cannot currently fail.** `voice_guide` has passed 13 times and failed none, because
+the section it reads is empty. A check that cannot fail is not a check. It becomes real when 8.2 is
+supplied; until then the scoreboard says so rather than letting it inflate the gate's apparent health.
+
+**Two things found by running what had never been run.** `eval/gate-acceptance.mjs` — the harness for
+acceptance test 8, the most testable clause in the contract — did not work: it inserted drafts without
+`library_version`, which 8.4 makes NOT NULL. And 13.3's monthly counts did not exclude fixtures: the
+report said 18 drafts and 2 published where the real figures are 8 and 0.
+
+---
+
 ## 17. Acceptance
 
 ### 17a — The overall test

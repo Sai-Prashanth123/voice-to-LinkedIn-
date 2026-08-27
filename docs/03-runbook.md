@@ -293,6 +293,31 @@ supabase db dump -f idea-bank.sql          # everything, restorable anywhere
 Audio and images live in Storage and download from the dashboard or the CLI. Nothing is in a
 proprietary format, and nothing requires our involvement (6.2, 14.3).
 
+## 6b. Where the build stands against clause 17
+
+```bash
+node eval/acceptance.mjs        # all twelve component tests, plus 17a
+node eval/gate-acceptance.mjs   # component test 8, on its own (slow)
+```
+
+Both read `eval/.env` — copy `eval/.env.example` and fill in the service role key. It bypasses RLS,
+so it lives in a gitignored file rather than a shell export where it would sit in history.
+
+`acceptance.mjs` reports three verdicts, and the difference matters:
+
+| | Meaning | Who acts |
+|---|---|---|
+| `PASS` | Measured against the criterion in the spec | Nobody |
+| `FAIL` | Enough data to judge, and it does not meet the bar | Us |
+| `----` | Cannot be judged yet — the line says what on | Depends: Josh, elapsed time, or a model |
+
+One voice note out of twenty is not a failing capture test; nobody has sent twenty. **17a with no
+measurements reports as unmeasurable, never as zero** — reporting 0 of 6 would say six drafts were
+rewritten when none has been approved at all.
+
+The same scoring runs inside `worker-ops` monthly, from the same module, so the scoreboard Josh
+receives and the one you run cannot disagree.
+
 ## 7. Running the tests
 
 ```bash

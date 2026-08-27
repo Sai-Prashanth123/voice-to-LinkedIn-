@@ -196,6 +196,20 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
 
   await db.from("drafts").update({ gate_passed: true, gate_reason: null }).eq("id", draftId);
 
+  // Acceptance test 8 seeds ten deliberately generic drafts and asks the gate to reject them. Two
+  // are near-misses, written to be arguable — so one of them getting through is a possible and even
+  // expected outcome of running the test. Without this, that outcome would put a fixture post in
+  // Josh's calendar and announce it to him in Telegram: the test would corrupt the thing it is
+  // testing. The verdict is still recorded; only the calendar is spared.
+  if (draft.framework === "acceptance-fixture") {
+    await logEvent(db, "gate_fixture_passed", "info", {
+      draft_id: draftId,
+      moment_id: momentId,
+      note: "acceptance test 8 draft cleared the gate — recorded, not pushed to the calendar",
+    });
+    return;
+  }
+
   await pushToCalendar(db, momentId, draftId, draft.body);
 
   await db.from("moments").update({

@@ -38,7 +38,11 @@ export async function gatherCounts(db: SupabaseClient): Promise<Counts> {
     db.from("moments").select("id, source, depth_reached, killed"),
     db.from("raw_inputs").select("moment_id, kind, transcript"),
     db.from("material").select("moment_id, the_moment, the_detail, the_realisation"),
-    db.from("drafts").select("moment_id, gate_passed"),
+    // `acceptance-fixture` is what eval/gate-acceptance.mjs writes: ten deliberately generic drafts
+    // hung off a REAL moment, because testing the gate against an empty source entry proves nothing.
+    // The harness does not clean them up, so without this they would be counted as drafts the system
+    // produced — the same leak as the killed moments, arriving from a different direction.
+    db.from("drafts").select("moment_id, gate_passed, framework"),
     db.from("gate_runs").select("check_key", { count: "exact", head: true }),
     db.from("selection_runs").select("ran_at"),
     db.from("visuals").select("id", { count: "exact", head: true }),
@@ -76,7 +80,8 @@ export async function gatherCounts(db: SupabaseClient): Promise<Counts> {
     ccMoments: liveMoments.filter((m) => m.source === "claude_code").length,
     reachedDepth: liveMoments.filter((m) => m.depth_reached && m.depth_reached !== "none").length,
     reachedNone: liveMoments.filter((m) => !m.depth_reached || m.depth_reached === "none").length,
-    gatePassedDrafts: ofLive(drafts.data).filter((d) => d.gate_passed).length,
+    gatePassedDrafts: ofLive(drafts.data)
+      .filter((d) => d.framework !== "acceptance-fixture" && d.gate_passed).length,
     namesOnFile: ofLive(names.data).filter((n) => n.kind !== "not_a_name").length,
     gateChecksRun: gateRuns.count ?? 0,
     gateAcceptanceRun: false,

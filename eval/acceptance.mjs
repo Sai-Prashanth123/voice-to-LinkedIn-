@@ -17,40 +17,10 @@
  * SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, or put them in a gitignored `eval/.env`.
  */
 
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 import { overall, score, summarise, voiceGuideWarning } from "../supabase/functions/_shared/acceptance.ts";
+import { loadEnv } from "./env.mjs";
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-
-// A gitignored file rather than a shell export, because this key opens everything and a shell
-// history is a poor place for it.
-for (const line of readEnvFile(join(HERE, ".env"))) {
-  const eq = line.indexOf("=");
-  if (eq > 0 && !process.env[line.slice(0, eq).trim()]) {
-    process.env[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
-  }
-}
-
-function readEnvFile(path) {
-  try {
-    return readFileSync(path, "utf8").split("\n").map((l) => l.trim())
-      .filter((l) => l && !l.startsWith("#"));
-  } catch {
-    return [];
-  }
-}
-
-const URL_BASE = process.env.SUPABASE_URL;
-const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!URL_BASE || !KEY) {
-  console.error(
-    "Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, or copy eval/.env.example to eval/.env.",
-  );
-  process.exit(2);
-}
+const { url: URL_BASE, key: KEY } = loadEnv();
 
 async function q(path) {
   const res = await fetch(`${URL_BASE}/rest/v1/${path}`, {
@@ -69,7 +39,7 @@ async function gather() {
     q("moments?select=id,source,status,depth_reached,killed"),
     q("raw_inputs?select=moment_id,kind,transcript"),
     q("material?select=moment_id,the_moment,the_detail,the_realisation"),
-    q("drafts?select=moment_id,gate_passed"),
+    q("drafts?select=moment_id,gate_passed,framework"),
     q("gate_runs?select=check_key,passed"),
     q("selection_runs?select=ran_at"),
     q("visuals?select=id"),
@@ -106,7 +76,8 @@ async function gather() {
     ccMoments: liveMoments.filter((m) => m.source === "claude_code").length,
     reachedDepth: liveMoments.filter((m) => m.depth_reached && m.depth_reached !== "none").length,
     reachedNone: liveMoments.filter((m) => !m.depth_reached || m.depth_reached === "none").length,
-    gatePassedDrafts: ofLive(drafts).filter((d) => d.gate_passed).length,
+    gatePassedDrafts: ofLive(drafts)
+      .filter((d) => d.framework !== "acceptance-fixture" && d.gate_passed).length,
     namesOnFile: 0, // filled below
     gateChecksRun: gateRuns.length,
     gateAcceptanceRun: false, // set by gate-acceptance.mjs when it writes its result
