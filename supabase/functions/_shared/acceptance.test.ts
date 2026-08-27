@@ -17,6 +17,8 @@ const EMPTY: Counts = {
   ccMoments: 0,
   reachedDepth: 0,
   reachedNone: 0,
+  interviewEngaged: 0,
+  interviewEngagedWithDepth: 0,
   gatePassedDrafts: 0,
   namesOnFile: 0,
   gateChecksRun: 0,
@@ -74,10 +76,16 @@ test("not started and not good enough are different verdicts", () => {
   assert.equal(capture.verdict, "blocked");
   assert.match(capture.blocker ?? "", /19 more/);
 
-  // The interview IS failing: it has run and is mostly reaching nothing.
-  const interview = score({ ...EMPTY, reachedDepth: 1, reachedNone: 6 })[4];
-  assert.equal(interview.verdict, "failing");
-  assert.match(interview.blocker ?? "", /reaching nothing/);
+  // Six moments asked once and never answered is the interview WAITING, not failing. Scored the
+  // other way this read "1 of 7 reached depth" and looked like the one actionable defect on the
+  // board. It was live: five of seven had a single question and no reply.
+  const waiting = score({ ...EMPTY, reachedDepth: 1, reachedNone: 6, interviewEngaged: 1, interviewEngagedWithDepth: 1 })[4];
+  assert.equal(waiting.verdict, "blocked");
+  assert.match(waiting.blocker ?? "", /asked and left/);
+
+  // Ten moments Josh DID answer, only three reaching depth, is a real failure.
+  const real = score({ ...EMPTY, reachedDepth: 3, reachedNone: 7, interviewEngaged: 10, interviewEngagedWithDepth: 3 })[4];
+  assert.equal(real.verdict, "failing");
 });
 
 test("a blocked test always names what it is blocked on", () => {
@@ -107,7 +115,7 @@ test("the voice-guide warning fires only while the section is empty", () => {
 });
 
 test("the summary counts all three verdicts", () => {
-  const s = summarise(score({ ...EMPTY, reachedDepth: 1, reachedNone: 6 }));
+  const s = summarise(score({ ...EMPTY, reachedDepth: 3, reachedNone: 7, interviewEngaged: 10, interviewEngagedWithDepth: 3 }));
   assert.match(s, /0 of 12 passing/);
   assert.match(s, /1 failing/);
 });

@@ -60,6 +60,17 @@ export interface Counts {
   ccMoments: number;
   reachedDepth: number;
   reachedNone: number;
+  /**
+   * Moments Josh actually answered at least once.
+   *
+   * Test 5 asks what the INTERVIEW does with ten thin inputs. A moment that was asked one question
+   * and never replied to says nothing about the interview — it says Josh was busy. Counting those as
+   * failures read as "the interview reaches depth on 1 of 7" when the truth was "5 of those 7 were
+   * asked once and never answered", and it would have sent someone tuning a prompt set that is not
+   * broken.
+   */
+  interviewEngaged: number;
+  interviewEngagedWithDepth: number;
   gatePassedDrafts: number;
   namesOnFile: number;
   gateChecksRun: number;
@@ -126,20 +137,26 @@ export function score(c: Counts): TestResult[] {
     blocker: "cc-agent has never uploaded — cc-agent/install.mjs has not been run",
   });
 
-  // The one test genuinely FAILING rather than merely unstarted: the interview is running and is not
-  // reaching depth. That is a quality problem someone can act on today.
-  const seen = c.reachedDepth + c.reachedNone;
-  const shortOfBar = c.reachedDepth * 10 < seen * 8;
+  // Judged ONLY on moments Josh engaged with. An unanswered question is not the interview failing;
+  // it is the interview waiting. Scored the other way this read "1 of 7 reached depth" and looked
+  // like the one actionable failure on the board, when five of those seven had been asked once and
+  // never replied to.
+  const asked = c.reachedDepth + c.reachedNone;
+  const unanswered = asked - c.interviewEngaged;
   t.push({
     n: "5",
     name: "Interview",
     clause: "5",
     requires: "10 thin one-line inputs, at least 8 reaching depth; the rest parked, not padded",
-    actual: `${c.reachedDepth} of ${seen} reached depth`,
-    verdict: seen >= 10 ? (c.reachedDepth >= 8 ? "passing" : "failing") : (shortOfBar ? "failing" : "blocked"),
-    blocker: shortOfBar
-      ? `mostly reaching nothing. Either the prompt set, or ${NO_MODEL}`
-      : `${Math.max(0, 10 - seen)} more thin inputs to judge against`,
+    actual: `${c.interviewEngagedWithDepth} of ${c.interviewEngaged} answered moments reached depth` +
+      (unanswered > 0 ? ` (${unanswered} more asked and never answered)` : ""),
+    verdict: c.interviewEngaged < 10
+      ? "blocked"
+      : (c.interviewEngagedWithDepth >= 8 ? "passing" : "failing"),
+    blocker: c.interviewEngaged < 10
+      ? `${10 - c.interviewEngaged} more moments Josh actually answers. ` +
+        `${unanswered} were asked and left, which measures nothing about the interview`
+      : `reaching depth on too few. Either the prompt set, or ${NO_MODEL}`,
   });
 
   const auditBlocker = c.gatePassedDrafts < 10

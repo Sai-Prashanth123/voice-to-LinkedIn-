@@ -25,6 +25,7 @@ export async function gatherCounts(db: SupabaseClient): Promise<Counts> {
     moments,
     rawInputs,
     material,
+    answers,
     drafts,
     gateRuns,
     selectionRuns,
@@ -38,6 +39,7 @@ export async function gatherCounts(db: SupabaseClient): Promise<Counts> {
     db.from("moments").select("id, source, depth_reached, killed"),
     db.from("raw_inputs").select("moment_id, kind, transcript"),
     db.from("material").select("moment_id, the_moment, the_detail, the_realisation"),
+    db.from("interview_turns").select("moment_id, role").eq("role", "answer"),
     // `acceptance-fixture` is what eval/gate-acceptance.mjs writes: ten deliberately generic drafts
     // hung off a REAL moment, because testing the gate against an empty source entry proves nothing.
     // The harness does not clean them up, so without this they would be counted as drafts the system
@@ -66,6 +68,9 @@ export async function gatherCounts(db: SupabaseClient): Promise<Counts> {
   const livePosts = ofLive(posts.data);
   const liveOutcomes = ofLive(outcomes.data);
 
+  // Moments Josh actually replied to. Anything else is the interview waiting, not failing.
+  const engaged = new Set(ofLive(answers.data).map((a) => a.moment_id as number));
+
   const guide = ((sections.data as { body?: string } | null)?.body ?? "")
     .replace(/DELIBERATELY EMPTY[\s\S]*/, "").trim();
 
@@ -80,6 +85,10 @@ export async function gatherCounts(db: SupabaseClient): Promise<Counts> {
     ccMoments: liveMoments.filter((m) => m.source === "claude_code").length,
     reachedDepth: liveMoments.filter((m) => m.depth_reached && m.depth_reached !== "none").length,
     reachedNone: liveMoments.filter((m) => !m.depth_reached || m.depth_reached === "none").length,
+    interviewEngaged: engaged.size,
+    interviewEngagedWithDepth: liveMoments.filter((m) =>
+      engaged.has(m.id) && m.depth_reached && m.depth_reached !== "none"
+    ).length,
     gatePassedDrafts: ofLive(drafts.data)
       .filter((d) => d.framework !== "acceptance-fixture" && d.gate_passed).length,
     namesOnFile: ofLive(names.data).filter((n) => n.kind !== "not_a_name").length,

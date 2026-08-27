@@ -33,12 +33,13 @@ async function q(path) {
 /** Rows, with killed moments excluded wherever a moment is involved. */
 async function gather() {
   const [
-    moments, rawInputs, material, drafts, gateRuns, selectionRuns,
+    moments, rawInputs, material, answers, drafts, gateRuns, selectionRuns,
     visuals, posts, outcomes, proposals, sections,
   ] = await Promise.all([
     q("moments?select=id,source,status,depth_reached,killed"),
     q("raw_inputs?select=moment_id,kind,transcript"),
     q("material?select=moment_id,the_moment,the_detail,the_realisation"),
+    q("interview_turns?select=moment_id,role&role=eq.answer"),
     q("drafts?select=moment_id,gate_passed,framework"),
     q("gate_runs?select=check_key,passed"),
     q("selection_runs?select=ran_at"),
@@ -60,6 +61,9 @@ async function gather() {
     return Math.floor((Date.now() - Math.min(...times)) / (7 * 86_400_000));
   };
 
+  // Moments Josh actually replied to. Anything else is the interview waiting, not failing.
+  const engaged = new Set(ofLive(answers).map((a) => a.moment_id));
+
   const voice = ofLive(rawInputs).filter((r) => r.kind === "voice");
   const liveMaterial = ofLive(material);
   const livePosts = ofLive(posts);
@@ -76,6 +80,10 @@ async function gather() {
     ccMoments: liveMoments.filter((m) => m.source === "claude_code").length,
     reachedDepth: liveMoments.filter((m) => m.depth_reached && m.depth_reached !== "none").length,
     reachedNone: liveMoments.filter((m) => !m.depth_reached || m.depth_reached === "none").length,
+    interviewEngaged: engaged.size,
+    interviewEngagedWithDepth: liveMoments.filter((m) =>
+      engaged.has(m.id) && m.depth_reached && m.depth_reached !== "none"
+    ).length,
     gatePassedDrafts: ofLive(drafts)
       .filter((d) => d.framework !== "acceptance-fixture" && d.gate_passed).length,
     namesOnFile: 0, // filled below

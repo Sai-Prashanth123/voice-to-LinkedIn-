@@ -1237,9 +1237,14 @@ never run. The line the engagement is judged by was answerable only by querying 
 `eval/acceptance.mjs` answers it now, and `worker-ops` folds the same summary into the monthly
 message, because 17a names Josh as the judge and he should not have to ask.
 
-Eleven are **blocked** rather than failing: five need weeks of running, three need Josh, and the rest
-need a model that can clear the gate. One is genuinely **failing** — the interview reached depth on
-1 of 7 moments against a bar of 8 in 10, and that is actionable today.
+All twelve are **blocked** rather than failing: five need weeks of running, four need Josh, and the
+rest need a model that can clear the gate.
+
+Test 5 was briefly scored as failing — "the interview reached depth on 1 of 7" — and that was wrong.
+Five of those seven moments were asked one question and never answered. An unanswered question is
+the interview waiting, not the interview failing, and the original reading would have sent someone
+tuning a prompt set that is not broken. It is judged on answered moments only now, and pinned by a
+test.
 
 **17a is unmeasurable, not zero.** No draft has been approved by Josh, so there is nothing to score.
 Reporting 0 of 6 would assert that six drafts were rewritten. Pinned by a test.
