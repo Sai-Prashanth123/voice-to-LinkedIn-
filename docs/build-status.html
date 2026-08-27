@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Status of the Slingshot GTM content system against build spec v2.0.">
+</head>
+<body>
+<title>Where the Build Stands</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+  :root {
+    --paper:      #EFEEE8;
+    --card:       #F7F6F1;
+    --ink:        #1B1A17;
+    --ink-soft:   #4E4B44;
+    --ink-faint:  #7C776C;
+    --rule:       #DAD6CB;
+    --rule-firm:  #C2BCAD;
+    --accent:     #2E4B3C;
+    --accent-ink: #FFFFFF;
+
+    --pass:       #3B6647;
+    --pass-bg:    #DFE8DF;
+    --fail:       #9E3628;
+    --fail-bg:    #F0DFDB;
+    --wait:       #6F6656;
+    --wait-bg:    #E4E0D5;
+
+    --shadow: 0 1px 2px rgba(27,26,23,.05);
+
+    --s1: .35rem; --s2: .7rem; --s3: 1.1rem; --s4: 1.7rem;
+    --s5: 2.6rem; --s6: 4rem; --s7: 6rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #16171A;
+      --card:       #1D1F22;
+      --ink:        #E8E6E0;
+      --ink-soft:   #B0ACA3;
+      --ink-faint:  #858076;
+      --rule:       #2C2F33;
+      --rule-firm:  #3D4147;
+      --accent:     #8FBFA0;
+      --accent-ink: #12140F;
+
+      --pass:       #8FBFA0;
+      --pass-bg:    #1F2A22;
+      --fail:       #E08C7C;
+      --fail-bg:    #2E1F1B;
+      --wait:       #9A9285;
+      --wait-bg:    #242524;
+
+      --shadow: 0 1px 2px rgba(0,0,0,.3);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:      #16171A;
+    --card:       #1D1F22;
+    --ink:        #E8E6E0;
+    --ink-soft:   #B0ACA3;
+    --ink-faint:  #858076;
+    --rule:       #2C2F33;
+    --rule-firm:  #3D4147;
+    --accent:     #8FBFA0;
+    --accent-ink: #12140F;
+
+    --pass:       #8FBFA0;
+    --pass-bg:    #1F2A22;
+    --fail:       #E08C7C;
+    --fail-bg:    #2E1F1B;
+    --wait:       #9A9285;
+    --wait-bg:    #242524;
+
+    --shadow: 0 1px 2px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Source Serif 4", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.62;
+    margin: 0;
+    padding: var(--s5) var(--s3) var(--s7);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 62rem; margin: 0 auto; }
+  .col  { max-width: 40rem; }
+
+  h1, h2, h3, .label, .chip, .stat-n, .clause, table, .mono {
+    font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 5vw, 2.9rem);
+    font-weight: 700; line-height: 1.08;
+    letter-spacing: -.022em;
+    margin: 0 0 var(--s3);
+    text-wrap: balance;
+  }
+  h2 {
+    font-size: 1.32rem; font-weight: 600;
+    letter-spacing: -.012em;
+    margin: 0 0 var(--s3);
+    text-wrap: balance;
+  }
+  h3 {
+    font-size: 1rem; font-weight: 600;
+    letter-spacing: -.004em;
+    margin: 0 0 var(--s2);
+  }
+
+  p { margin: 0 0 var(--s3); }
+  p:last-child { margin-bottom: 0; }
+  strong { font-weight: 600; }
+
+  .label {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .7rem; font-weight: 500;
+    letter-spacing: .13em; text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .mono, .clause, code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .clause {
+    font-size: .72rem; font-weight: 500;
+    color: var(--accent);
+    border: 1px solid var(--rule-firm);
+    border-radius: 2px;
+    padding: .08em .38em;
+    white-space: nowrap;
+  }
+
+  code {
+    font-size: .86em;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: .07em .32em;
+  }
+
+  /* ---- masthead ------------------------------------------------------- */
+
+  header { border-bottom: 2px solid var(--ink); padding-bottom: var(--s4); margin-bottom: var(--s5); }
+
+  .kicker {
+    display: flex; flex-wrap: wrap; gap: var(--s3);
+    justify-content: space-between; align-items: baseline;
+    margin-bottom: var(--s4);
+  }
+
+  .lede { font-size: 1.12rem; color: var(--ink-soft); max-width: 42rem; }
+  .lede strong { color: var(--ink); }
+
+  /* ---- stat row ------------------------------------------------------- */
+
+  .stats {
+    display: grid; gap: 1px;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: var(--s4) 0 0;
+  }
+  .stat { background: var(--card); padding: var(--s3); }
+  .stat-n {
+    display: block; font-size: 1.85rem; font-weight: 700;
+    letter-spacing: -.03em; line-height: 1.05;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-k { font-size: .78rem; color: var(--ink-faint); line-height: 1.35; display: block; margin-top: .25rem; }
+  .stat.hero .stat-n { color: var(--accent); }
+
+  /* ---- sections ------------------------------------------------------- */
+
+  section { margin-top: var(--s7); }
+  .sec-head {
+    display: flex; align-items: baseline; gap: var(--s2);
+    border-bottom: 1px solid var(--rule-firm);
+    padding-bottom: var(--s2); margin-bottom: var(--s4);
+  }
+  .sec-head .label { margin-left: auto; }
+
+  /* ---- built list ----------------------------------------------------- */
+
+  .built { display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+  .item {
+    background: var(--card);
+    display: grid; gap: var(--s2) var(--s3);
+    grid-template-columns: 1fr auto;
+    padding: var(--s3);
+  }
+  .item h3 { margin: 0; }
+  .item p { margin: 0; font-size: .93rem; color: var(--ink-soft); grid-column: 1 / -1; }
+  .item .clause { align-self: start; }
+
+  /* ---- verdict chips -------------------------------------------------- */
+
+  .chip {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .68rem; font-weight: 600;
+    letter-spacing: .07em; text-transform: uppercase;
+    padding: .18em .5em; border-radius: 2px;
+    white-space: nowrap; display: inline-block;
+  }
+  .chip.pass  { color: var(--pass); background: var(--pass-bg); }
+  .chip.fail  { color: var(--fail); background: var(--fail-bg); }
+  .chip.wait  { color: var(--wait); background: var(--wait-bg); }
+  .chip.built { color: var(--pass); background: var(--pass-bg); }
+  .chip.part  { color: var(--wait); background: var(--wait-bg); }
+
+  /* ---- scorecard ------------------------------------------------------ */
+
+  .scroll { overflow-x: auto; border: 1px solid var(--rule-firm); }
+  table { border-collapse: collapse; width: 100%; min-width: 42rem; font-size: .9rem; }
+  thead th {
+    text-align: left; font-weight: 600; font-size: .7rem;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--ink-faint);
+    padding: var(--s2) var(--s3); border-bottom: 1px solid var(--rule-firm);
+    background: var(--card); white-space: nowrap;
+  }
+  tbody td { padding: var(--s2) var(--s3); border-bottom: 1px solid var(--rule); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr.finish td { background: var(--card); border-top: 2px solid var(--ink); font-weight: 600; }
+  td.n { font-family: "IBM Plex Mono", monospace; color: var(--ink-faint); font-size: .8rem; width: 2.6rem; }
+  td.name { font-weight: 600; white-space: nowrap; }
+  td.why { color: var(--ink-soft); font-family: "Source Serif 4", Georgia, serif; min-width: 18rem; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s3); font-size: .88rem; color: var(--ink-soft); }
+  .legend div { display: flex; gap: .45rem; align-items: baseline; }
+
+  /* ---- blocking ------------------------------------------------------- */
+
+  .blocking { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
+  .block {
+    background: var(--card); border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule-firm);
+    padding: var(--s3); box-shadow: var(--shadow);
+  }
+  .block.now { border-left-color: var(--accent); }
+  .block ul { margin: var(--s2) 0 0; padding-left: 1.05rem; font-size: .93rem; color: var(--ink-soft); }
+  .block li { margin-bottom: .4rem; }
+  .block li::marker { color: var(--ink-faint); }
+
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: var(--card);
+    padding: var(--s3) var(--s4);
+    margin: var(--s4) 0;
+  }
+  .callout p:first-child { margin-top: 0; }
+
+  footer {
+    margin-top: var(--s7); padding-top: var(--s3);
+    border-top: 1px solid var(--rule-firm);
+    font-size: .85rem; color: var(--ink-faint);
+  }
+
+  @media (max-width: 34rem) {
+    body { padding: var(--s4) var(--s2) var(--s6); font-size: 16px; }
+    .item { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <div class="kicker">
+      <span class="label">Thought Pilot &nbsp;·&nbsp; for Slingshot GTM</span>
+      <span class="label">Build spec v2.0 &nbsp;·&nbsp; 27 August 2026</span>
+    </div>
+    <h1>Where the build stands</h1>
+    <p class="lede">
+      All seventeen clauses are built and audited against live data. <strong>Nothing in the system is
+      currently known to be broken.</strong> Nothing has been accepted either — every one of the
+      twelve component tests is waiting on a model, on elapsed time, or on Josh.
+    </p>
+
+    <div class="stats">
+      <div class="stat hero"><span class="stat-n">17</span><span class="stat-k">clauses built &amp; audited</span></div>
+      <div class="stat"><span class="stat-n">116</span><span class="stat-k">numbered requirements</span></div>
+      <div class="stat"><span class="stat-n">28</span><span class="stat-k">database tables</span></div>
+      <div class="stat"><span class="stat-n">10</span><span class="stat-k">edge functions</span></div>
+      <div class="stat"><span class="stat-n">84</span><span class="stat-k">tests passing</span></div>
+      <div class="stat"><span class="stat-n">0/12</span><span class="stat-k">acceptance tests met</span></div>
+    </div>
+  </header>
+
+  <!-- ============================================================= -->
+  <section>
+    <div class="sec-head"><h2>What Josh asked for</h2><span class="label">The contract</span></div>
+    <div class="col">
+      <p>
+        A system that turns things Josh already says — voice notes, calls, working sessions — into
+        LinkedIn posts that could only have been written by him. The spec attaches to the services
+        agreement, so every <em>must</em> is an acceptance criterion, not a preference.
+      </p>
+      <p>Three rules are never negotiable, and each is enforced by the database rather than by intent:</p>
+    </div>
+
+    <div class="built" style="margin-top:var(--s3)">
+      <div class="item">
+        <h3>The lived experience test</h3><span class="clause">clause 1</span>
+        <p>Could anyone else have written this? If yes, it fails. Held in an immutable library section the learning loop structurally cannot reach.</p>
+      </div>
+      <div class="item">
+        <h3>No fabrication</h3><span class="clause">9.4</span>
+        <p>Every claim, quote, number and name must trace to something Josh actually said. Verified mechanically, before any model gets an opinion.</p>
+      </div>
+      <div class="item">
+        <h3>Nothing publishes without Josh</h3><span class="clause">11.2</span>
+        <p>Four CHECK constraints make an unauthorised published row impossible to <em>store</em>. Tested adversarially — the database refuses all three violation shapes.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+  <section>
+    <div class="sec-head"><h2>What is built</h2><span class="label">Nine steps, five ways in</span></div>
+
+    <div class="built">
+      <div class="item">
+        <h3>Capture — five ways in</h3><span class="chip built">Proven</span>
+        <p>Voice notes, prompted sessions, call transcripts, Claude Code sessions and typed thoughts, all landing in one idea bank. Telegram capture is proven live; the Claude Code agent is written but has never uploaded.</p>
+      </div>
+      <div class="item">
+        <h3>The interview</h3><span class="chip built">Proven</span>
+        <p>Asks until a moment has a scene, a detail and a realisation — then stops and parks rather than padding. Budgets questions, rephrases prompts that never land, and never writes.</p>
+      </div>
+      <div class="item">
+        <h3>The idea bank</h3><span class="chip built">Proven</span>
+        <p>28 tables, 73 row-level policies, and no DELETE policy anywhere: nothing can be destroyed, only killed and labelled. Re-openable, editable without a developer, exportable in full.</p>
+      </div>
+      <div class="item">
+        <h3>Selection</h3><span class="chip built">Proven</span>
+        <p>Five-factor scoring, retelling detection against the published archive, pillar balance, and a queue that runs short and says so rather than dropping the bar.</p>
+      </div>
+      <div class="item">
+        <h3>Drafting &amp; the gate</h3><span class="chip part">Unproven</span>
+        <p>Eight independent checks, each able to reject. The gate demonstrably rejects — but no draft has ever cleared all eight, and on the current free-tier model 10 of 14 calls are rate-limited.</p>
+      </div>
+      <div class="item">
+        <h3>Visuals</h3><span class="chip part">Unproven</span>
+        <p>Rebuilds a diagram as SVG in Josh's brand — structurally incapable of resembling the source. No visual has ever been built; the request is recorded and sweeps in automatically when a vision-capable model exists.</p>
+      </div>
+      <div class="item">
+        <h3>The calendar</h3><span class="chip built">Proven</span>
+        <p>Drafts arrive as drafts. Josh edits in place and marks ready; only that authorises publishing. His edits are read back into the bank automatically.</p>
+      </div>
+      <div class="item">
+        <h3>The learning loop</h3><span class="chip built">Proven</span>
+        <p>Draft-versus-approved measured at approval — needing no LinkedIn. A one-line verdict asked on the taps Josh already makes. Library changes proposed with evidence, approved by him alone, and reversible.</p>
+      </div>
+      <div class="item">
+        <h3>Operations</h3><span class="chip built">Proven</span>
+        <p>Silence alerts, queue warnings, error surfacing, monthly self-reporting — and a system that now tells Josh when it starts using a service he was never told about.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+  <section>
+    <div class="sec-head"><h2>The acceptance tests</h2><span class="label">Clause 17</span></div>
+    <div class="col">
+      <p>
+        Twelve component tests and one finish line. Until this week none had ever been checked — not
+        failed, never run. They are computed from the live database now, and folded into the monthly
+        report Josh already receives.
+      </p>
+    </div>
+
+    <div class="scroll" style="margin-top:var(--s3)">
+      <table>
+        <thead>
+          <tr><th class="n">#</th><th>Test</th><th>Status</th><th>Where it stands</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="n">01</td><td class="name">Raw capture</td><td><span class="chip wait">Waiting</span></td><td class="why">1 of 20 voice notes. Needs 19 more from Josh.</td></tr>
+          <tr><td class="n">02</td><td class="name">Prompted session</td><td><span class="chip wait">Waiting</span></td><td class="why">3 of 5 sessions run. Needs two more.</td></tr>
+          <tr><td class="n">03</td><td class="name">Call transcripts</td><td><span class="chip wait">Waiting</span></td><td class="why">Needs a call recorder, then two weeks of running.</td></tr>
+          <tr><td class="n">04</td><td class="name">Claude Code</td><td><span class="chip wait">Waiting</span></td><td class="why">The agent has never uploaded. One install starts a two-week clock.</td></tr>
+          <tr><td class="n">05</td><td class="name">Interview</td><td><span class="chip wait">Waiting</span></td><td class="why">1 of 2 answered moments reached depth. Five more were asked and never answered — which measures nothing about the interview.</td></tr>
+          <tr><td class="n">06</td><td class="name">Fabrication</td><td><span class="chip wait">Waiting</span></td><td class="why">Needs 10 drafts through the gate for Josh to audit. There are none.</td></tr>
+          <tr><td class="n">07</td><td class="name">Names</td><td><span class="chip wait">Waiting</span></td><td class="why">Same blocker. Four client names are on file and correctly held.</td></tr>
+          <tr><td class="n">08</td><td class="name">The gate</td><td><span class="chip wait">Inconclusive</span></td><td class="why">Ran for real: 6 of 80 checks completed before the free tier rate-limited it. Not a failure — the gate never got to read them.</td></tr>
+          <tr><td class="n">09</td><td class="name">Selection</td><td><span class="chip wait">Waiting</span></td><td class="why">22 runs so far. Needs four weeks of elapsed running.</td></tr>
+          <tr><td class="n">10</td><td class="name">Visuals</td><td><span class="chip wait">Waiting</span></td><td class="why">Needs a vision-capable model. Josh's image is stored and queued.</td></tr>
+          <tr><td class="n">11</td><td class="name">Calendar</td><td><span class="chip wait">Waiting</span></td><td class="why">Zero exceptions, but the four-week window has not started — LinkedIn is not connected. The guarantee itself is proven.</td></tr>
+          <tr><td class="n">12</td><td class="name">Learning loop</td><td><span class="chip wait">Waiting</span></td><td class="why">Needs a month of real posts. The mechanism runs; nothing has published.</td></tr>
+          <tr class="finish"><td class="n">17a</td><td class="name">The finish line</td><td><span class="chip wait">Unmeasurable</span></td><td class="why">Five of the last six drafts needing only light editing. No draft has been approved yet, so there is nothing to score.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="legend">
+      <div><span class="chip pass">Passing</span> measured against the spec</div>
+      <div><span class="chip fail">Failing</span> judged, and short of the bar</div>
+      <div><span class="chip wait">Waiting</span> not yet checkable — deliberately neutral, not a mark against the build</div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+  <section>
+    <div class="sec-head"><h2>What is remaining</h2><span class="label">By who owns it</span></div>
+
+    <div class="blocking">
+      <div class="block now">
+        <h3>One purchase unblocks the most</h3>
+        <ul>
+          <li><strong>An Anthropic key.</strong> Unblocks tests 6, 7, 8 and the finish line itself. One gate run needs ~16,000 tokens; the current free tier allows 8,000 a minute.</li>
+        </ul>
+      </div>
+      <div class="block now">
+        <h3>Ours, and quick</h3>
+        <ul>
+          <li>Deploy the web app — it has only ever run on localhost, and four clauses require a screen</li>
+          <li>Exercise the export route, the oldest open item in the build</li>
+          <li>Install the Claude Code agent to start its clock</li>
+        </ul>
+      </div>
+      <div class="block">
+        <h3>Josh's, and on the critical path</h3>
+        <ul>
+          <li><strong>The voice guide</strong> — 7 of 14 library sections still await him, and this one carries the whole quality argument</li>
+          <li>Pillars, audience, reference posts, visual brand</li>
+          <li>Answering the five moments already asked and left</li>
+          <li>Connecting LinkedIn, which starts two four-week clocks</li>
+        </ul>
+      </div>
+      <div class="block">
+        <h3>Before handover</h3>
+        <ul>
+          <li>Move every account into Josh's name — the migration is rehearsed, not just written</li>
+          <li>Rotate the development keys</li>
+          <li>Record the walkthrough</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout">
+      <p>
+        <strong>The critical path is calendar time, not code.</strong> Five component tests need two
+        to four weeks of live running, and those clocks have not started. Every day they stay
+        unstarted is a day added to the end, and no amount of building shortens them.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    Every number on this page was read from the live database with verification fixtures excluded,
+    and can be reproduced with <code>node eval/acceptance.mjs</code>. Nine of the seventeen moments in
+    the development project are labelled test material, kept rather than deleted, and excluded from
+    everything that learns or scores.
+  </footer>
+
+</div>
+
+</body>
+</html>
