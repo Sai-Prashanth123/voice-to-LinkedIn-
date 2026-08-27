@@ -1,4 +1,5 @@
 import { supabaseServer } from "@/lib/supabase";
+import { SubmitButton } from "../submit-button";
 import { decideProposal } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -77,12 +78,12 @@ export default async function Proposals() {
                     placeholder="Why, if you want to note it"
                     style={{ flex: 1, minWidth: "16rem" }}
                   />
-                  <button type="submit" name="decision" value="approve" className="primary">
+                  <SubmitButton name="decision" value="approve" className="primary" pendingLabel="Approving…">
                     Approve
-                  </button>
-                  <button type="submit" name="decision" value="reject" className="danger">
+                  </SubmitButton>
+                  <SubmitButton name="decision" value="reject" className="danger" pendingLabel="Rejecting…">
                     Reject
-                  </button>
+                  </SubmitButton>
                 </form>
               </article>
             );

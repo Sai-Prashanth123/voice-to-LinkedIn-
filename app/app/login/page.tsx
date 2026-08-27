@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { SubmitButton } from "../submit-button";
 import { supabaseServer } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -65,7 +66,7 @@ export default async function Login({
                   aria-label="Email address"
                   style={{ minWidth: "18rem" }}
                 />
-                <button type="submit" className="primary">Send me a link</button>
+                <SubmitButton className="primary" pendingLabel="Sending…">Send me a link</SubmitButton>
               </form>
             </>
           )}

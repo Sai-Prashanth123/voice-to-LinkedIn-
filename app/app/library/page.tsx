@@ -1,4 +1,5 @@
 import { supabaseServer } from "@/lib/supabase";
+import { SubmitButton } from "../submit-button";
 import { revertSection, saveLibrarySection } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -86,25 +87,24 @@ export default async function Library() {
                         aria-label={s.title}
                       />
                       <div className="row">
-                        <button type="submit" className="primary">Save</button>
+                        <SubmitButton className="primary" pendingLabel="Saving…">Save</SubmitButton>
                         {versions.length > 1 && (
                           <>
                             <span className="step-no">roll back to</span>
                             {versions.slice(1, 5).map((v) => (
-                              <button
+                              <SubmitButton
                                 key={v.version}
-                                type="submit"
-                                formAction={revertSection}
-                                name="version"
-                                value={v.version}
-                                /* 12.12 — "Josh can see WHICH change and undo it." A bare version
-                                   number is the undo without the seeing. */
+                                /* Bound, not read off name/value: React overrides a button's
+                                   name when formAction is a function, so the version never
+                                   reached the action and the rollback silently did nothing. */
+                                formAction={revertSection.bind(null, s.key, v.version)}
+                                pendingLabel="Rolling back…"
                                 title={`${v.reason ?? "changed"} — ${
                                   new Date(v.created_at).toLocaleDateString()
                                 }`}
                               >
                                 v{v.version}
-                              </button>
+                              </SubmitButton>
                             ))}
                           </>
                         )}

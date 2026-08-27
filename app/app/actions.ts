@@ -322,10 +322,19 @@ export async function decideProposal(formData: FormData) {
  * 12.12 — a change must be reversible. Restores a section to an earlier version, which itself
  * becomes a new version, so the history stays append-only and nothing is lost.
  */
-export async function revertSection(formData: FormData) {
+/**
+ * Takes its arguments BOUND, not from the form.
+ *
+ * It used to read the version off a submit button's `name`/`value`, and React overrides `name` on a
+ * button whose `formAction` is a function — it needs that attribute to encode which action to
+ * invoke. So the version arrived as NaN, matched no row, and the function returned at `if (!old)`.
+ * Silently. The 12.12 rollback has never once worked, and looked fine doing it.
+ *
+ * A form here holds several rollback buttons, one per version, so a hidden input cannot carry the
+ * value either — each button needs its own. Binding is what does that correctly.
+ */
+export async function revertSection(key: string, version: number) {
   const db = await supabaseServer();
-  const key = String(formData.get("key"));
-  const version = Number(formData.get("version"));
 
   const { data: old } = await db
     .from("library_section_versions")

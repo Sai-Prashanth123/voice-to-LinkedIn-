@@ -474,3 +474,69 @@ details.section > pre { padding: 0 1.3rem 1.3rem; margin-top: 0; }
   .row { gap: .45rem; }
   button, .btn { flex: 1 1 auto; }
 }
+
+/* ── Waiting ───────────────────────────────────────────────────────────────
+ *
+ * Every page here reads the database and every button crosses to it and back, so neither is
+ * instant. Without these, a click did nothing visible for a second or more — which reads as a dead
+ * control, and the second click starts arriving.
+ *
+ * The skeleton mirrors the real layout rather than showing a spinner, so nothing jumps when the
+ * content lands.
+ */
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skeleton-title,
+.skeleton-line {
+  background: var(--sunk);
+  height: 1em;
+  border-radius: 0;
+  position: relative;
+  overflow: hidden;
+}
+.skeleton-title { width: 42%; height: 1.5em; }
+.skeleton-line  { margin-bottom: .6rem; }
+.skeleton-line.short { width: 30%; }
+.skeleton-line:last-child { margin-bottom: 0; width: 72%; }
+
+/* One slow sweep rather than a pulse. A pulse at this size reads as a fault light. */
+.skeleton-title::after,
+.skeleton-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--panel), transparent);
+  transform: translateX(-100%);
+  animation: sweep 1.4s ease-in-out infinite;
+}
+@keyframes sweep { to { transform: translateX(100%); } }
+
+.entry.skeleton { border-color: var(--rule); }
+.entry.skeleton::before { content: none; }
+
+/* A pressed control says so, and cannot be pressed again. */
+button[disabled] { opacity: .55; cursor: progress; }
+button[data-pending] {
+  opacity: 1;
+  border-color: var(--green);
+  color: var(--green);
+  background-image: none;
+}
+button.primary[data-pending] {
+  background-color: var(--green-deep);
+  border-color: var(--green-deep);
+  color: var(--on-green);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-title::after, .skeleton-line::after { animation: none; }
+}

@@ -1,4 +1,5 @@
 import { supabaseServer } from "@/lib/supabase";
+import { SubmitButton } from "../submit-button";
 import { unschedule } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -91,7 +92,7 @@ export default async function Calendar() {
                     {p.status === "scheduled" && (
                       <form action={unschedule} className="row">
                         <input type="hidden" name="post_id" value={p.id} />
-                        <button type="submit">Take it back out</button>
+                        <SubmitButton pendingLabel="Removing…">Take it back out</SubmitButton>
                       </form>
                     )}
                   </article>

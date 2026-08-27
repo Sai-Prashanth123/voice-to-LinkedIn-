@@ -1,4 +1,5 @@
 import { many, one } from "@/lib/embed";
+import { SubmitButton } from "../submit-button";
 import { parsePillars } from "@/lib/pillars";
 import { supabaseServer } from "@/lib/supabase";
 import { editMoment, overrideMoment, reopenMoment, setNameClearance } from "../actions";
@@ -150,9 +151,9 @@ export default async function Bank({
                       >
                         <input type="hidden" name="name_id" value={n.id} />
                         <input type="hidden" name="cleared" value={String(!n.cleared)} />
-                        <button type="submit" className={n.cleared ? undefined : "danger"}>
+                        <SubmitButton className={n.cleared ? undefined : "danger"}>
                           {n.name} · {n.cleared ? "cleared" : "not cleared"}
-                        </button>
+                        </SubmitButton>
                       </form>
                     ))}
                   </div>
@@ -160,14 +161,14 @@ export default async function Bank({
 
                 <form action={overrideMoment} className="row">
                   <input type="hidden" name="moment_id" value={m.id} />
-                  <button type="submit" name="action" value={m.pinned ? "unpin" : "pin"}>
+                  <SubmitButton name="action" value={m.pinned ? "unpin" : "pin"}>
                     {m.pinned ? "Unpin" : "Write this next"}
-                  </button>
-                  <button type="submit" name="action" value="not_this_month">Not this month</button>
+                  </SubmitButton>
+                  <SubmitButton name="action" value="not_this_month" pendingLabel="Updating…">Not this month</SubmitButton>
                   {!m.killed && (
-                    <button type="submit" name="action" value="kill" className="danger">
+                    <SubmitButton name="action" value="kill" className="danger">
                       Do not write this
-                    </button>
+                    </SubmitButton>
                   )}
                 </form>
 
@@ -175,11 +176,11 @@ export default async function Bank({
                 {(m.status === "parked" || m.status === "published") && (
                   <form action={reopenMoment} className="row">
                     <input type="hidden" name="moment_id" value={m.id} />
-                    <button type="submit">
+                    <SubmitButton>
                       {m.status === "parked"
                         ? "Re-open — I remember more"
                         : "Re-open — there is more in this"}
-                    </button>
+                    </SubmitButton>
                     <span className="quiet">
                       Goes back in front of the interviewer, and back into the queue.
                     </span>
@@ -258,7 +259,7 @@ export default async function Bank({
                     </div>
 
                     <div className="row">
-                      <button type="submit" className="primary">Save</button>
+                      <SubmitButton className="primary" pendingLabel="Saving…">Save</SubmitButton>
                       <span className="quiet">
                         Drafts are written from these fields and checked against them. Nothing is
                         deleted — this corrects the entry in place.

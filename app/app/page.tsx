@@ -1,4 +1,5 @@
 import { one } from "@/lib/embed";
+import { SubmitButton } from "./submit-button";
 import { supabaseServer } from "@/lib/supabase";
 import {
   decideProposal,
@@ -130,10 +131,10 @@ export default async function WeeklyPass() {
                 )}
                 <form action={decideProposal} className="row">
                   <input type="hidden" name="proposal_id" value={p.id} />
-                  <button type="submit" name="decision" value="approve" className="primary">
+                  <SubmitButton name="decision" value="approve" className="primary">
                     Do it
-                  </button>
-                  <button type="submit" name="decision" value="reject">Leave it</button>
+                  </SubmitButton>
+                  <SubmitButton name="decision" value="reject">Leave it</SubmitButton>
                   <a className="btn" href="/proposals">See the wording</a>
                 </form>
               </article>
@@ -178,7 +179,7 @@ export default async function WeeklyPass() {
                         <option value="client">A client</option>
                       </select>
                       <input type="text" name="who" placeholder="Who, if you want to say" />
-                      <button type="submit">Record</button>
+                      <SubmitButton>Record</SubmitButton>
                     </form>
                   </div>
                 );
@@ -189,7 +190,7 @@ export default async function WeeklyPass() {
                   name="post_ids"
                   value={unanswered.map((p) => p.id).join(",")}
                 />
-                <button type="submit">Skip this week</button>
+                <SubmitButton pendingLabel="Skipping…">Skip this week</SubmitButton>
               </form>
             </>
           )}
@@ -269,8 +270,8 @@ export default async function WeeklyPass() {
                     <div className="row">
                       <input type="date" name="scheduled_for" defaultValue={today} required />
                       <input type="text" name="time" defaultValue="09:00" size={5} aria-label="Time" />
-                      <button type="submit" className="primary">Mark ready</button>
-                      <button type="submit" formAction={saveDraft}>Save, decide later</button>
+                      <SubmitButton className="primary" pendingLabel="Marking ready…">Mark ready</SubmitButton>
+                      <SubmitButton formAction={saveDraft} pendingLabel="Saving…">Save, decide later</SubmitButton>
                     </div>
                   </form>
 
@@ -286,7 +287,7 @@ export default async function WeeklyPass() {
                       style={{ flex: 1, minWidth: "18rem" }}
                       aria-label={`One line on ${m.ref}`}
                     />
-                    <button type="submit">Note it</button>
+                    <SubmitButton pendingLabel="Noting…">Note it</SubmitButton>
                   </form>
                 </article>
               );
@@ -324,7 +325,7 @@ export default async function WeeklyPass() {
                 <p className="prose">{firstLine(post.body)}</p>
                 <form action={unschedule} className="row">
                   <input type="hidden" name="post_id" value={post.id} />
-                  <button type="submit">Take it back out</button>
+                  <SubmitButton pendingLabel="Removing…">Take it back out</SubmitButton>
                 </form>
               </article>
             ))
@@ -376,7 +377,7 @@ export default async function WeeklyPass() {
                     placeholder="Hook was wrong. / This one nailed it."
                     style={{ flex: 1, minWidth: "18rem" }}
                   />
-                  <button type="submit">Save</button>
+                  <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
                 </form>
               </article>
             );
