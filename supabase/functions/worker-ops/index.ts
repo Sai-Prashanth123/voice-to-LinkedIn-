@@ -17,6 +17,8 @@ import { json } from "../_shared/jobs.ts";
 import { LEARN_SYSTEM, PROMPT_VERSION } from "../_shared/prompts.ts";
 import { rephraseDeadQuestions } from "../_shared/questions.ts";
 import { announcement, markAnnounced, undeclared } from "../_shared/providers.ts";
+import { overall, score, summarise, voiceGuideWarning } from "../_shared/acceptance.ts";
+import { gatherCounts } from "../_shared/acceptance-data.ts";
 import { ReportSchema } from "../_shared/schemas.ts";
 import { joshChatId, sendMessage } from "../_shared/telegram.ts";
 
@@ -256,9 +258,15 @@ async function monthly(db: SupabaseClient): Promise<Response> {
   const since = new Date(Date.now() - 31 * 86_400_000).toISOString();
 
   // ── 13.3 — the system reports on itself ────────────────────────────────────
+  //
+  // Fixtures excluded here too. This report is 13.3's account of what the system DID, and counting
+  // nine labelled test moments as "captured" is the same lie as counting them in the acceptance
+  // bar — just quieter, because a slightly wrong number reads as a number rather than as a fault.
+  // Caught by reading the report's own output: it said two posts published, and both were fixtures.
   const { data: bySource } = await db
     .from("moments")
     .select("source, status")
+    .eq("killed", false)
     .gte("captured_at", since);
 
   const captured: Record<string, number> = {};
@@ -270,10 +278,12 @@ async function monthly(db: SupabaseClient): Promise<Response> {
   }
 
   const [{ count: draftsWritten }, { count: rejected }, { count: published }] = await Promise.all([
-    db.from("drafts").select("*", { count: "exact", head: true }).gte("created_at", since),
+    db.from("drafts").select("*, moments!inner(killed)", { count: "exact", head: true })
+      .eq("moments.killed", false).gte("created_at", since),
     db.from("gate_runs").select("*", { count: "exact", head: true })
       .eq("passed", false).gte("created_at", since),
-    db.from("posts").select("*", { count: "exact", head: true })
+    db.from("posts").select("*, moments!inner(killed)", { count: "exact", head: true })
+      .eq("moments.killed", false)
       .eq("status", "published").gte("published_at", since),
   ]);
 
@@ -405,6 +415,45 @@ async function monthly(db: SupabaseClient): Promise<Response> {
       `What worked:\n${report.what_is_working}\n\nWhat did not:\n${report.what_is_not}\n\n` +
         `${report.recommendation}`,
     );
+  }
+
+  // ── Clause 17 — where the build stands ─────────────────────────────────────
+  //
+  // 17a names Josh as the judge, so he should not have to ask. Twelve component tests and a
+  // finish line, none of which had ever been checked - not failed, never run - and answerable
+  // only by someone querying the database by hand.
+  //
+  // Folded into the monthly message he already receives rather than given a place of its own:
+  // 12.7 rules out a second thing to remember, and that applies to a report as much as to a
+  // question. The same scoring runs in eval/acceptance.mjs, from the same module, so the two
+  // surfaces cannot disagree about how far along this is.
+  try {
+    const counts = await gatherCounts(db);
+    const results = score(counts);
+    const finish = overall(counts);
+
+    const notPassing = [...results, finish].filter((r) => r.verdict !== "passing");
+    const lines = notPassing.slice(0, 6).map((r) =>
+      `  ${r.n} ${r.name}: ${r.blocker ?? r.actual}`,
+    );
+
+    await sendMessage(
+      joshChatId(),
+      `Against the acceptance tests: ${summarise(results)}.\n\n` +
+        `17a, the finish line: ${finish.actual}.\n\n` +
+        (lines.length > 0
+          ? `What is holding the rest up:\n${lines.join("\n")}\n\n`
+          : "") +
+        `Nothing here is a judgement on the writing - it is what has and has not been ` +
+          `measured yet.` +
+        (voiceGuideWarning(counts) ? `\n\n${voiceGuideWarning(counts)}` : ""),
+    );
+  } catch (err) {
+    // The monthly numbers above are the point of this run. A scoreboard that fails must not take
+    // them down - the same rule as the reword in the daily run.
+    await logEvent(db, "acceptance_scoreboard_failed", "warn", {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   await logEvent(db, "monthly_report", "info", { published, drafts: draftsWritten, spend });

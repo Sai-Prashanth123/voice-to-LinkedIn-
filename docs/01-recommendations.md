@@ -49,7 +49,11 @@ looking at it.
 | Call and Slack triage | Claude Sonnet 5 | Moderate volume, and names have to be caught reliably. |
 | Claude Code triage | Claude Haiku 4.5 | ~700 sessions a month even after local filtering. Volume dominates. |
 | Transcription | Deepgram (Whisper as fallback) | Cheapest per minute at this volume; Claude does not take audio. |
-| Dedup embeddings | OpenAI `text-embedding-3-small` | Pennies. Used only to check you are not retelling a story. |
+| Dedup embeddings | Hugging Face `bge-m3` | Free at this volume, and 1024 dimensions like the OpenAI alternative, so a swap does not write vectors the column cannot hold. Used only to check you are not retelling a story. |
+
+**This table is the recommendation. It is not what is running.** No Anthropic key has ever been
+configured, so the drafter, the gate and the interview are on Groq and Hugging Face free tiers — see
+the tool list below and the cost model. The recommendation has not changed; the key has not arrived.
 
 ### The calendar tool — **built into the app, publishing through LinkedIn directly**
 
