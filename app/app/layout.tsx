@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "The desk",
-    // Matches the paper ground, so the status bar does not sit on a white strip when installed.
+    // Matches the paper ground, so the status bar does not sit on a mismatched strip.
     statusBarStyle: "default",
   },
 };
@@ -20,8 +20,8 @@ export const viewport: Viewport = {
   // feel "native" trades a real accessibility need for a cosmetic one.
   maximumScale: 5,
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f0f1ee" },
-    { media: "(prefers-color-scheme: dark)", color: "#14171a" },
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0b0a" },
   ],
 };
 

@@ -1,440 +1,476 @@
-/*
-  The editing desk.
+/**
+ * THE DESK — Josh's working surface.
+ *
+ * Not a dashboard. It is where a writer approves, edits and corrects, so it is built like a proof
+ * sheet: white ground, hard rectangles, hairline rules, and one colour.
+ *
+ * TWO STATES, BOTH FROM THE BRIEF'S PALETTE
+ *
+ * Green means clean — cleared, light edit, ready to go. Solid black means this one needs you. There
+ * is no red anywhere, which turns out to suit the product better than the red pen it replaces: on a
+ * page where most entries are fine, an alarm colour on the exceptions reads as failure. A black edge
+ * reads as a mark.
+ *
+ * THE SIGNATURE
+ *
+ * Each entry's state edge strikes down the left side on load, staggered, the way an editor works
+ * through a proof marking as they go. The motion carries the information — by the time it settles,
+ * the marked ones are already obvious. Nothing else on the page animates on load.
+ */
 
-  This is a tool one person opens once a week for half an hour, to read prose and decide what ships.
-  So it is set like a manuscript, not like a dashboard: a single column at a readable measure, a
-  margin gutter for marks, and colour used only where it carries meaning.
-
-  The proof-red is the discipline here. It appears ONLY where an editor's red pen would be right —
-  a name not cleared, a draft the gate rejected, a post Josh rewrote. Never for decoration, never
-  for emphasis. When Josh sees red, something needs him.
-*/
-
-@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap");
 
 :root {
-  /* Cool proof paper — grey-green cast, deliberately not a warm cream. */
-  --ground: #f0f1ee;
-  --raised: #fafbf9;
-  --ink: #14181d;
-  --ink-soft: #5b6470;
-  --rule: #cbcec8;
+  --paper:     #ffffff;
+  --panel:     #fbfcfb;
+  --sunk:      #f4f6f4;
+  --ink:       #0b0c0b;
+  --ink-soft:  #565e58;
+  --ink-faint: #8a938c;
+  --rule:      #e4e8e5;
+  --rule-firm: #c7cfc9;
 
-  /* Semantic only. */
-  --mark: #b23a2e;      /* the red pen: rejected, uncleared, rewritten */
-  --mark-wash: #f6e6e3;
-  --keep: #2e5d4b;      /* clean: cleared, light edit, ready to go */
-  --keep-wash: #e3ece8;
+  /* The one colour. Deep enough to sit on white without glowing. */
+  --green:      #0e6b40;
+  --green-deep: #0a4f30;
+  --green-wash: #e9f2ed;
+  --on-green:   #ffffff;
 
-  --font-ui: "Archivo", ui-sans-serif, system-ui, sans-serif;
-  --font-prose: "Source Serif 4", Georgia, serif;
-  --font-data: "IBM Plex Mono", ui-monospace, monospace;
+  --font-ui: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --font-data: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
 
-  --measure: 64ch;
+  --measure: 68ch;
   --gutter: 2.5rem;
+
+  --edge: 3px;              /* the state mark down the left of an entry */
+  --ease: cubic-bezier(.16, .84, .44, 1);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --ground: #14171a;
-    --raised: #1b1f23;
-    --ink: #e8eae6;
-    --ink-soft: #98a1ab;
-    --rule: #333a41;
-    --mark: #e0705f;
-    --mark-wash: #3a201c;
-    --keep: #6fae93;
-    --keep-wash: #1a2b25;
+  :root:not([data-theme="light"]) {
+    --paper:     #0a0b0a;
+    --panel:     #121412;
+    --sunk:      #171a18;
+    --ink:       #f0f3f0;
+    --ink-soft:  #9aa39c;
+    --ink-faint: #6d766f;
+    --rule:      #232724;
+    --rule-firm: #38403a;
+
+    --green:      #4fbe84;
+    --green-deep: #6fd39c;
+    --green-wash: #13251b;
+    --on-green:   #06170e;
   }
 }
 
-* { box-sizing: border-box; }
+:root[data-theme="dark"] {
+  --paper:     #0a0b0a;
+  --panel:     #121412;
+  --sunk:      #171a18;
+  --ink:       #f0f3f0;
+  --ink-soft:  #9aa39c;
+  --ink-faint: #6d766f;
+  --rule:      #232724;
+  --rule-firm: #38403a;
+
+  --green:      #4fbe84;
+  --green-deep: #6fd39c;
+  --green-wash: #13251b;
+  --on-green:   #06170e;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
 
 html { -webkit-text-size-adjust: 100%; }
 
 body {
   margin: 0;
-  background: var(--ground);
+  background: var(--paper);
   color: var(--ink);
   font-family: var(--font-ui);
   font-size: 16px;
-  line-height: 1.55;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
-
-/* ── Chrome ──────────────────────────────────────────────────────────────── */
-
-.masthead {
-  border-bottom: 1px solid var(--rule);
-  padding: 1.25rem var(--gutter);
-  display: flex;
-  align-items: baseline;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-}
-
-.masthead h1 {
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  margin: 0;
-}
-
-.masthead nav { display: flex; gap: 1.25rem; margin-left: auto; }
-
-.masthead a,
-.masthead h1 a {
-  color: var(--ink-soft);
-  text-decoration: none;
-  font-size: 0.875rem;
-}
-
-.masthead a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
-.masthead a[aria-current="page"] { color: var(--ink); font-weight: 500; }
 
 main {
-  max-width: calc(var(--measure) + var(--gutter) * 2);
+  max-width: 58rem;
   margin: 0 auto;
-  padding: 3rem var(--gutter) 6rem;
+  padding: 0 var(--gutter) 6rem;
 }
 
-/* ── The pass is a sequence, so it is numbered. Numbering is not decoration here. ── */
+/* ── Type ──────────────────────────────────────────────────────────────── */
 
-.step { margin-bottom: 4rem; }
+h1, h2 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -.01em;
+  text-wrap: balance;
+  margin: 0;
+}
+h1 { font-size: clamp(2.1rem, 5vw, 2.9rem); line-height: 1.05; }
+h2 { font-size: clamp(1.5rem, 3vw, 1.95rem); line-height: 1.12; }
+
+p { margin: 0 0 1rem; }
+p:last-child { margin-bottom: 0; }
+
+a { color: var(--green); text-decoration: none; border-bottom: 1px solid currentColor; }
+a:hover { color: var(--green-deep); }
+
+/* ── Masthead ──────────────────────────────────────────────────────────── */
+
+.masthead {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 1.25rem;
+  padding: 1.1rem var(--gutter);
+  margin-bottom: 3.5rem;
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--rule);
+}
+.masthead h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.35rem;
+  line-height: 1;
+  letter-spacing: -.01em;
+  margin: 0 auto 0 0;
+}
+.masthead h1 a { color: var(--ink); border-bottom: none; }
+.masthead h1 a:hover { color: var(--green); }
+
+.masthead nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.6rem;
+}
+.masthead a {
+  font-size: .84rem;
+  letter-spacing: .01em;
+  color: var(--ink-soft);
+  border-bottom: 1px solid transparent;
+  padding-bottom: 2px;
+  transition: color .18s var(--ease), border-color .18s var(--ease);
+}
+.masthead a:hover { color: var(--ink); border-bottom-color: var(--green); }
+
+/* ── Step: the numbered blocks of the weekly pass ──────────────────────── */
+
+.step { margin-bottom: 4.5rem; }
 
 .step-head {
   display: flex;
   align-items: baseline;
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
+  gap: .9rem;
+  padding-bottom: .7rem;
+  margin-bottom: 1.4rem;
+  border-bottom: 1px solid var(--ink);
 }
 
+/* The pass has a real order — the question first, then drafts, then what is going
+   out — so the numbers carry sequence rather than decorate it. */
 .step-no {
   font-family: var(--font-data);
-  font-size: 0.75rem;
-  color: var(--ink-soft);
-  letter-spacing: 0.08em;
-}
-
-.step h2 {
-  font-size: 1.35rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  margin: 0;
+  font-size: .72rem;
+  font-weight: 500;
+  letter-spacing: .12em;
+  color: var(--green);
+  text-transform: uppercase;
 }
 
 .step-note {
+  font-size: .93rem;
   color: var(--ink-soft);
-  font-size: 0.9rem;
-  margin: 0 0 1.5rem;
-  max-width: 52ch;
+  max-width: var(--measure);
+  margin: -.6rem 0 1.6rem;
 }
 
-/* ── The margin mark: the one signature element ───────────────────────────── */
+/* ── Entry: one draft, one moment, one post ────────────────────────────── */
 
 .entry {
   position: relative;
-  padding-left: 1.25rem;
-  margin-bottom: 2.5rem;
-  border-left: 2px solid var(--rule);
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  padding: 1.4rem 1.6rem;
+  margin-bottom: 1px;
+  transition: border-color .2s var(--ease), background .2s var(--ease);
 }
+.entry:hover { border-color: var(--rule-firm); }
 
-.entry[data-mark="needs-you"] { border-left-color: var(--mark); }
-.entry[data-mark="clean"]     { border-left-color: var(--keep); }
+/* The mark. Drawn as a pseudo-element so it can strike in without shifting layout. */
+.entry[data-mark]::before {
+  content: "";
+  position: absolute;
+  inset: -1px auto -1px -1px;
+  width: var(--edge);
+  background: var(--ink);
+  transform: scaleY(0);
+  transform-origin: top;
+  animation: strike .5s var(--ease) forwards;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+.entry[data-mark="clean"]::before { background: var(--green); }
+
+
+/* The stagger. Set here rather than in the markup so the pages stay about content. */
+.entry:nth-child(1) { --i: 0; }
+.entry:nth-child(2) { --i: 1; }
+.entry:nth-child(3) { --i: 2; }
+.entry:nth-child(4) { --i: 3; }
+.entry:nth-child(5) { --i: 4; }
+.entry:nth-child(6) { --i: 5; }
+.entry:nth-child(7) { --i: 6; }
+.entry:nth-child(8) { --i: 7; }
+.entry:nth-child(9) { --i: 8; }
+.entry:nth-child(10) { --i: 9; }
+
+@keyframes strike {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
 
 .entry-meta {
-  font-family: var(--font-data);
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  color: var(--ink-soft);
   display: flex;
-  gap: 1rem;
   flex-wrap: wrap;
-  margin-bottom: 0.6rem;
-}
-
-.entry-meta .flag { color: var(--mark); }
-.entry-meta .ok { color: var(--keep); }
-
-/* Drafts are prose. They are set as prose. */
-.prose,
-textarea.prose {
-  font-family: var(--font-prose);
-  font-size: 1.0625rem;
-  line-height: 1.62;
-  white-space: pre-wrap;
-}
-
-textarea.prose {
-  width: 100%;
-  min-height: 16rem;
-  background: var(--raised);
-  color: var(--ink);
-  border: 1px solid var(--rule);
-  border-radius: 2px;
-  padding: 1rem 1.1rem;
-  resize: vertical;
-}
-
-textarea.prose:focus-visible,
-input:focus-visible,
-select:focus-visible,
-button:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
-}
-
-/* ── Controls ────────────────────────────────────────────────────────────── */
-
-.row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; margin-top: 0.85rem; }
-
-button, .btn {
-  font-family: var(--font-ui);
-  font-size: 0.85rem;
-  font-weight: 500;
-  padding: 0.45rem 0.9rem;
-  border: 1px solid var(--rule);
-  border-radius: 2px;
-  background: var(--raised);
-  color: var(--ink);
-  cursor: pointer;
-}
-
-button:hover { border-color: var(--ink-soft); }
-
-button.primary {
-  background: var(--ink);
-  color: var(--ground);
-  border-color: var(--ink);
-}
-
-button.danger { color: var(--mark); border-color: var(--mark); background: transparent; }
-
-input[type="date"], input[type="text"], input[type="email"], select {
+  gap: .5rem 1.1rem;
   font-family: var(--font-data);
-  font-size: 0.85rem;
-  padding: 0.4rem 0.6rem;
-  border: 1px solid var(--rule);
-  border-radius: 2px;
-  background: var(--raised);
-  color: var(--ink);
+  font-size: .72rem;
+  letter-spacing: .04em;
+  color: var(--ink-faint);
+  margin-bottom: .9rem;
 }
-
-/* ── The one question (12.5) ─────────────────────────────────────────────── */
-
-.conversation-q {
-  border: 1px solid var(--rule);
-  border-radius: 2px;
-  background: var(--raised);
-  padding: 1.25rem 1.4rem;
-  margin-bottom: 1.25rem;
-}
-
-.conversation-q p.q {
-  font-family: var(--font-prose);
-  font-size: 1.05rem;
-  margin: 0 0 0.9rem;
-}
+.entry-meta .ok   { color: var(--green); }
+.entry-meta .flag { color: var(--ink); font-weight: 500; }
 
 .hook {
-  font-family: var(--font-prose);
-  font-style: italic;
-  color: var(--ink-soft);
-  margin: 0 0 0.75rem;
-}
-
-/* ── Empty and quiet states are directions, not moods ─────────────────────── */
-
-.quiet {
-  border: 1px dashed var(--rule);
-  border-radius: 2px;
-  padding: 1.5rem;
-  color: var(--ink-soft);
-  font-size: 0.95rem;
-}
-
-.quiet strong { color: var(--ink); font-weight: 600; }
-
-/* ── Library and proposals ───────────────────────────────────────────────── */
-
-.section-list { display: flex; flex-direction: column; gap: 0.25rem; }
-
-.locked {
-  font-family: var(--font-data);
-  font-size: 0.7rem;
-  color: var(--mark);
-  letter-spacing: 0.06em;
-}
-
-details.section {
-  border-bottom: 1px solid var(--rule);
-  padding: 0.85rem 0;
-}
-
-details.section summary {
-  cursor: pointer;
+  font-size: 1.06rem;
   font-weight: 500;
-  display: flex;
-  gap: 0.75rem;
-  align-items: baseline;
+  line-height: 1.42;
+  margin: 0 0 .7rem;
+  text-wrap: balance;
 }
 
-details.section summary::marker { color: var(--ink-soft); }
-
-.version {
-  font-family: var(--font-data);
-  font-size: 0.7rem;
-  color: var(--ink-soft);
-  margin-left: auto;
-}
-
-textarea.markdown {
-  width: 100%;
-  min-height: 22rem;
-  font-family: var(--font-data);
-  font-size: 0.85rem;
-  line-height: 1.6;
-  background: var(--raised);
+.prose {
+  white-space: pre-wrap;
+  line-height: 1.68;
+  max-width: var(--measure);
   color: var(--ink);
-  border: 1px solid var(--rule);
-  border-radius: 2px;
-  padding: 0.9rem;
-  margin-top: 0.85rem;
-  resize: vertical;
+}
+
+.why {
+  font-size: .9rem;
+  color: var(--ink-soft);
+  max-width: var(--measure);
 }
 
 .evidence {
   font-family: var(--font-data);
-  font-size: 0.78rem;
-  background: var(--raised);
+  font-size: .78rem;
+  line-height: 1.6;
+  background: var(--sunk);
   border: 1px solid var(--rule);
-  border-radius: 2px;
-  padding: 0.7rem 0.85rem;
-  margin: 0.75rem 0;
+  padding: .8rem 1rem;
+  margin: .9rem 0 0;
   overflow-x: auto;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .entry { transition: border-color 160ms ease; }
-}
-
-/* ── Phone ───────────────────────────────────────────────────────────────────
-   The weekly pass is a half-hour job that Josh may well do on a phone, one-handed, on a Monday.
-   So this is not a shrunken desktop layout: tap targets grow, the nav scrolls rather than wrapping
-   into three ragged lines, and the controls under each draft stack into full-width rows instead of
-   becoming a row of 30px buttons.
-   ────────────────────────────────────────────────────────────────────────── */
-
-@media (max-width: 640px) {
-  :root {
-    --gutter: 1rem;
-    --measure: 100%;
-  }
-
-  main { padding: 1.5rem var(--gutter) 5rem; }
-
-  /* The masthead becomes a scrolling strip. Wrapping five links looks broken on a narrow screen. */
-  .masthead {
-    padding: 0.9rem var(--gutter);
-    gap: 0.75rem;
-    flex-wrap: nowrap;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    background: var(--ground);
-  }
-
-  .masthead nav {
-    gap: 1rem;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 0.15rem;
-  }
-  .masthead nav::-webkit-scrollbar { display: none; }
-  .masthead nav a { white-space: nowrap; }
-
-  .step { margin-bottom: 3rem; }
-  .step h2 { font-size: 1.2rem; }
-
-  /* 44px is the smallest comfortable tap target. Below that, marking a post ready becomes fiddly
-     enough that it gets postponed — and the weekly pass only works if it actually happens. */
-  button,
-  .btn,
-  input[type="date"],
-  input[type="text"],
-  input[type="email"],
-  select {
-    min-height: 44px;
-    font-size: 16px; /* iOS zooms the page on focus for anything smaller */
-  }
-
-  .row { gap: 0.5rem; }
-  .row > form,
-  .row > input[type="text"] { flex: 1 1 100%; min-width: 0; }
-
-  /* Editing a post is the main event on this screen, so it gets the room. */
-  textarea.prose { min-height: 20rem; font-size: 1rem; }
-  textarea.markdown { min-height: 16rem; font-size: 0.85rem; }
-
-  .entry { padding-left: 0.9rem; margin-bottom: 2rem; }
-  .entry-meta { gap: 0.6rem; font-size: 0.68rem; }
-
-  .conversation-q { padding: 1rem; }
-  .evidence { font-size: 0.72rem; }
-}
-
-/* Installed to the home screen: pad for the notch and the home indicator. */
-@media (display-mode: standalone) {
-  .masthead { padding-top: max(0.9rem, env(safe-area-inset-top)); }
-  main { padding-bottom: max(5rem, calc(env(safe-area-inset-bottom) + 3rem)); }
-}
-
-/* ── Editing a moment in place (6.1) ───────────────────────────────────────
-   "Readable and editable by Josh directly, without a developer and without going through the chat
-   interface." Reading comes first, so the form is folded away until he wants it — the common visit
-   is to look, not to correct. */
-
-.field { margin-top: 0.9rem; }
-
-.field > label {
-  display: block;
-  font-family: var(--font-ui);
-  font-size: 0.7rem;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  white-space: pre-wrap;
   color: var(--ink-soft);
-  margin-bottom: 0.3rem;
+}
+ul.evidence { list-style: none; margin: .9rem 0 0; }
+ul.evidence li + li { margin-top: .3rem; }
+
+.quiet {
+  color: var(--ink-faint);
+  font-size: .94rem;
+  border: 1px dashed var(--rule-firm);
+  padding: 1.6rem;
+  text-align: center;
+}
+.quiet strong { color: var(--ink); font-weight: 500; }
+
+/* ── Controls ──────────────────────────────────────────────────────────── */
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .55rem;
+  margin-top: 1rem;
 }
 
-.field .why {
-  text-transform: none;
-  letter-spacing: 0;
-  font-size: 0.75rem;
-  margin-left: 0.5rem;
-}
-
-textarea.field-body {
-  width: 100%;
-  min-height: 3.5rem;
-  font-family: var(--font-prose);
-  font-size: 0.95rem;
-  line-height: 1.55;
-  background: var(--raised);
+button, .btn {
+  font-family: var(--font-ui);
+  font-size: .87rem;
+  font-weight: 500;
+  line-height: 1;
+  padding: .62rem 1.05rem;
+  border: 1px solid var(--rule-firm);
+  border-radius: 0;
+  background: var(--paper);
   color: var(--ink);
-  border: 1px solid var(--rule);
-  border-radius: 2px;
-  padding: 0.6rem 0.75rem;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: color .2s var(--ease), border-color .2s var(--ease), background-size .26s var(--ease);
+}
+
+/* The fill wipes in from the left rather than fading: it reads as a deliberate
+   commitment, which is what every control on this page is. */
+button, .btn {
+  background-color: var(--paper);
+  background-image: linear-gradient(var(--fill), var(--fill));
+  background-repeat: no-repeat;
+  background-size: 0% 100%;
+  --fill: var(--ink);
+}
+button:hover, .btn:hover {
+  color: var(--paper);
+  border-color: var(--ink);
+  background-size: 100% 100%;
+}
+
+button.primary {
+  background-color: var(--green);
+  border-color: var(--green);
+  color: var(--on-green);
+  --fill: var(--green-deep);
+}
+button.primary:hover { color: var(--on-green); border-color: var(--green-deep); }
+
+button.danger { border-color: var(--ink); }
+
+button:focus-visible, .btn:focus-visible, a:focus-visible,
+input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+button:disabled { opacity: .45; cursor: not-allowed; }
+
+input[type="text"], input[type="email"], input[type="date"], input[type="time"],
+input[type="number"], select, textarea {
+  font-family: var(--font-ui);
+  font-size: .93rem;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule-firm);
+  border-radius: 0;
+  padding: .58rem .7rem;
+  transition: border-color .18s var(--ease), box-shadow .18s var(--ease);
+}
+input:hover, textarea:hover, select:hover { border-color: var(--ink-faint); }
+input:focus, textarea:focus, select:focus {
+  border-color: var(--green);
+  box-shadow: inset 0 -2px 0 var(--green);
+  outline: none;
+}
+input::placeholder, textarea::placeholder { color: var(--ink-faint); }
+
+textarea {
+  display: block;
+  width: 100%;
+  min-height: 12rem;
+  line-height: 1.68;
   resize: vertical;
 }
+textarea.prose { font-family: var(--font-ui); }
+textarea.markdown { font-family: var(--font-data); font-size: .84rem; min-height: 18rem; }
 
-details.edit { margin-top: 1rem; border-top: 1px dotted var(--rule); padding-top: 0.6rem; }
+/* ── Bank fields ───────────────────────────────────────────────────────── */
 
-details.edit summary {
+.field { display: grid; gap: .3rem; margin-bottom: .9rem; }
+.field > label,
+.field-body > label {
+  font-family: var(--font-data);
+  font-size: .68rem;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.field-body { display: grid; gap: .3rem; }
+.field input, .field textarea, .field-body textarea { width: 100%; }
+.field textarea, .field-body textarea { min-height: 5rem; }
+
+/* ── Library sections ──────────────────────────────────────────────────── */
+
+.section-list { display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+
+details.section { background: var(--panel); }
+details.section > summary {
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  padding: 1rem 1.3rem;
   cursor: pointer;
-  font-family: var(--font-ui);
-  font-size: 0.8rem;
-  color: var(--ink-soft);
+  font-weight: 500;
+  list-style: none;
+  transition: background .18s var(--ease);
+}
+details.section > summary::-webkit-details-marker { display: none; }
+details.section > summary::before {
+  content: "";
+  width: 7px; height: 7px;
+  background: var(--rule-firm);
+  transition: background .18s var(--ease), transform .22s var(--ease);
+  flex: none;
+}
+details.section[open] > summary::before { background: var(--green); transform: rotate(45deg); }
+details.section > summary:hover { background: var(--sunk); }
+details.section > form,
+details.section > p,
+details.section > pre { padding: 0 1.3rem 1.3rem; margin-top: 0; }
+
+.locked, .version {
+  font-family: var(--font-data);
+  font-size: .64rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: .18em .45em;
+  border: 1px solid var(--rule-firm);
+  color: var(--ink-faint);
+}
+.version { margin-left: auto; }
+.locked { color: var(--ink); border-color: var(--ink); }
+
+/* ── The one question (12.5) ───────────────────────────────────────────── */
+
+.conversation-q {
+  border: 1px solid var(--ink);
+  padding: 1.5rem 1.6rem;
+  margin-bottom: 1.4rem;
+  background: var(--panel);
+}
+.conversation-q .hook { margin-bottom: 1rem; }
+
+/* ── Motion, honestly ──────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: .001ms !important;
+  }
+  .entry[data-mark]::before { transform: scaleY(1); }
 }
 
-details.edit summary::marker { color: var(--ink-soft); }
+/* ── Small screens ─────────────────────────────────────────────────────── */
+
+@media (max-width: 42rem) {
+  :root { --gutter: 1.1rem; --measure: 100%; }
+  body { font-size: 15px; }
+  main { padding-bottom: 4rem; }
+  .masthead { gap: .8rem 1rem; padding: .9rem var(--gutter); margin-bottom: 2.2rem; }
+  .masthead h1 { flex-basis: 100%; margin: 0 0 .2rem; }
+  .masthead nav { gap: 1.1rem; }
+  .entry { padding: 1.15rem 1.2rem; }
+  .step { margin-bottom: 3rem; }
+  .row { gap: .45rem; }
+  button, .btn { flex: 1 1 auto; }
+}

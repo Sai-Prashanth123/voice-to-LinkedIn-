@@ -24,3 +24,6 @@ cc-agent/run-scheduled.mjs
 
 # Evaluation harness credentials. See eval/.env.example.
 eval/.env
+
+# Deploy artefact, rebuilt by the host. Never committed.
+app/desk-deploy.zip
