@@ -43,6 +43,10 @@ export const SECRET_NAMES = [
   "SLACK_USER_TOKEN",
   "LINKEDIN_CLIENT_ID",
   "LINKEDIN_CLIENT_SECRET",
+  "HUGGINGFACE_API_KEY",
+  // 11.4 — where The desk is reachable. Read by rewriteLink so the "Rewrite it" button in the
+  // weekly pass hands Josh a working link rather than the words "open The desk".
+  "APP_URL",
 ] as const;
 
 /**

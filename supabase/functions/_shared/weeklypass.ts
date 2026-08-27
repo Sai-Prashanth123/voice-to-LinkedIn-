@@ -26,6 +26,7 @@
  */
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { secret } from "./secrets.ts";
 import { embedOne } from "./db.ts";
 import {
   type ConversationAnswer,
@@ -323,7 +324,9 @@ export async function recordConversation(
 
 /** Rewrite hands off to the web app, where a textarea beats a chat box. */
 export function rewriteLink(postId: number): string {
-  const base = Deno.env.get("APP_URL") ?? "";
+  // Through secret(), not Deno.env: everything else in this system keeps its configuration in
+  // Vault, and a value stored there was invisible to a direct env read.
+  const base = secret("APP_URL") ?? "";
   return base ? `${base}/?post=${postId}` : "";
 }
 
