@@ -41,8 +41,17 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // 15.4 — "the idea bank holds call transcripts and client material, so 'has an account' is not
+  // sufficient — it must be Josh, by address."
+  //
+  // FAILS CLOSED. This used to read `if (user && allowed && ...)`, so an unset ALLOWED_EMAIL made
+  // the condition short-circuit and let every signed-in user straight through. On a laptop with the
+  // variable always set it looked correct for months; on a public deployment where it was missing,
+  // anyone holding an account on this Supabase project could have read the whole bank.
+  //
+  // A missing allowlist is now a locked door, not an open one.
   const allowed = process.env.ALLOWED_EMAIL?.toLowerCase();
-  if (user && allowed && user.email?.toLowerCase() !== allowed) {
+  if (user && (!allowed || user.email?.toLowerCase() !== allowed)) {
     await supabase.auth.signOut();
     const url = request.nextUrl.clone();
     url.pathname = "/login";
