@@ -1140,6 +1140,42 @@ Josh's accounts from the start — retrofitting this at handover is painful and 
 
 ---
 
+### AUDIT — 27 August 2026 (clause 14)
+
+**14.1 and 14.3 are unmet, and were also unproven.** Everything runs in a Thought Pilot Supabase
+organisation on Thought Pilot's keys, which was known. What was not known is whether the move out
+would work: no migration had ever been applied to an empty database as a chain — they went on
+incrementally over days, several as raw SQL — and `/export`, the only route data leaves by, has
+never been run.
+
+The chain has now been run. All 26 migrations apply cleanly from nothing and every assertion passes,
+including the R3 constraints. `/export` remains unexercised and is named as such in
+`docs/04-handover.md` rather than assumed.
+
+**The rehearsal corrected one of my own findings.** The production ledger carries a
+`0006b_storage_policy` entry with no matching file, which looked like a migration that existed only
+in production — a rebuild would then have had no read policy on private storage buckets, and every
+voice note and image would have been stored correctly and unreadable. It is not that:
+`0006_security.sql:83` already creates that exact policy, and `0006b` is a duplicate application.
+Recorded because the false version is the kind that gets re-raised.
+
+It did find a real one. `run-migrations.sh` waited on `pg_isready`, which reports ready while
+Postgres is still starting, so the run failed intermittently with *the database system is starting
+up* — in the script whoever inherits this system runs first, where an intermittent failure reads as a
+broken schema. It now waits for a query that succeeds.
+
+**14.2 had no artifact at all** — no licence, no ownership statement. `OWNERSHIP.md` now states it,
+naming the prompts and the seeded library explicitly, since those are what a vendor would otherwise
+treat as method rather than deliverable, and listing every dependency licence so "no ongoing licence
+required" is checkable rather than asserted.
+
+**14.4 claimed a section it did not have.** The runbook opened by claiming to satisfy 14.4 —
+including *"what it costs"* — and had no cost section. Added as §4b.
+
+**14.5 is outstanding** and needs a call with Josh.
+
+---
+
 ## 15. Practicalities
 
 ### 15a — Which tools

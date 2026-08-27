@@ -18,10 +18,21 @@ echo "==> recreating $CONTAINER"
 docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
 docker run -d --name "$CONTAINER" -e POSTGRES_PASSWORD=pw -p 55432:5432 "$IMAGE" >/dev/null
 
-for _ in $(seq 1 30); do
-  docker exec "$CONTAINER" pg_isready -U postgres >/dev/null 2>&1 && break
+# pg_isready answers "ready" while the server is still coming up, so the shim could land on a
+# database that then refused it: "FATAL: the database system is starting up". Seen for real. The
+# only honest readiness check is a query that succeeds.
+ready=0
+for _ in $(seq 1 60); do
+  if docker exec "$CONTAINER" psql -U postgres -tAc 'select 1' >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
   sleep 2
 done
+if [ "$ready" -ne 1 ]; then
+  echo "!! $CONTAINER never accepted a connection" >&2
+  exit 1
+fi
 
 psql_run() { docker exec -i "$CONTAINER" psql -U postgres -q -v ON_ERROR_STOP=1 "$@"; }
 
