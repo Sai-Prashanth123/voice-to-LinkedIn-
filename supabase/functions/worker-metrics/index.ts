@@ -8,6 +8,7 @@
  */
 
 import { admin, logEvent } from "../_shared/db.ts";
+import { noteProvider } from "../_shared/providers.ts";
 import { loadSecrets } from "../_shared/secrets.ts";
 import { runWorker } from "../_shared/jobs.ts";
 import { fetchMetrics, getAuth } from "../_shared/linkedin.ts";
@@ -78,6 +79,7 @@ Deno.serve(async () => {
     try {
       const auth = await getAuth(db);
       metrics = await fetchMetrics(auth, post.linkedin_urn);
+      await noteProvider(db, "linkedin", "publishing");
       if (!metrics) {
         unavailable =
           "r_member_postAnalytics not granted — Community Management API access is still pending.";

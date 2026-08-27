@@ -16,6 +16,7 @@ import { meetsAcceptanceBar } from "../_shared/diff.ts";
 import { json } from "../_shared/jobs.ts";
 import { LEARN_SYSTEM, PROMPT_VERSION } from "../_shared/prompts.ts";
 import { rephraseDeadQuestions } from "../_shared/questions.ts";
+import { announcement, markAnnounced, undeclared } from "../_shared/providers.ts";
 import { ReportSchema } from "../_shared/schemas.ts";
 import { joshChatId, sendMessage } from "../_shared/telegram.ts";
 
@@ -145,6 +146,24 @@ async function daily(db: SupabaseClient): Promise<Response> {
       .update({ notified_at: new Date().toISOString() })
       .eq("severity", "error")
       .is("notified_at", null);
+  }
+
+  // 15.3 — "Where a new tool is added later, Josh should be told AT THE TIME rather than finding it
+  // on a statement."
+  //
+  // That clause had no mechanism, and it showed: Groq and Hugging Face ran the drafter, the gate and
+  // the dedup embeddings for days while the tool list Josh holds named Anthropic and OpenAI, neither
+  // of which was ever keyed. The cost model was still billing that work to Anthropic at $25 a month.
+  //
+  // Told once. `announced_at` is what stops tomorrow repeating it — the same rule as the error
+  // alert above, and for the same reason: a message that arrives every morning stops being read.
+  const newProviders = await undeclared(db);
+  if (newProviders.length > 0) {
+    alerts.push(announcement(newProviders));
+    await markAnnounced(db, newProviders.map((p) => p.provider));
+    await logEvent(db, "undeclared_providers_announced", "info", {
+      providers: newProviders.map((p) => p.provider),
+    });
   }
 
   // The queue was healthy enough not to trip 13.4, but the last run still declined to fill it. Worth

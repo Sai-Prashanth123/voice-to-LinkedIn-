@@ -215,6 +215,55 @@ order by created_at desc limit 20;
 update jobs set status = 'pending', attempts = 0, run_after = now() where id = <id>;
 ```
 
+## 4b. What it costs, and where
+
+14.4 names five things a runbook must cover and this document claimed all five while covering four.
+The cost lived only in `docs/02-cost-model.md`, which is the *budget*. This is the operational half:
+what each running part costs, in the place you would look when a bill surprises you.
+
+| Where it runs | What it costs | Billed by |
+|---|---|---|
+| Supabase (database, storage, edge functions, cron) | $25/mo on Pro | Supabase |
+| Drafting, the gate, the interview, triage, learning | ~$24/mo **if Anthropic is keyed** | Anthropic |
+| The same work today, with no Anthropic key | $0 | Groq, Hugging Face free tiers |
+| Transcription | ~$2/mo | Deepgram |
+| Dedup embeddings | $0 | Hugging Face free tier |
+| The desk | $0 | Vercel Hobby |
+| Telegram, LinkedIn, GitHub | $0 | — |
+
+**Budget $53/month. Today it is closer to $25**, because the model work is on free tiers — which is
+also why no draft has yet cleared all eight gate checks. See "What is actually being spent today" in
+the cost model.
+
+### Where the money went this month
+
+```sql
+-- by purpose
+select purpose, sum(cost_usd) as usd, count(*) as calls
+  from llm_calls where created_at > now() - interval '30 days'
+ group by 1 order by 2 desc;
+
+-- by service, which is the question a bill actually asks (15.9)
+select provider, sum(cost_usd) as usd, count(*) as calls
+  from llm_calls where created_at > now() - interval '30 days'
+ group by 1 order by 2 desc;
+
+-- what the system is calling at all, and whether Josh has been told (15.1, 15.3)
+select provider, purposes, first_seen_at, announced_at from providers_seen order by provider;
+```
+
+### The three things that move it
+
+1. **Volume.** The budget assumes ~30 moments drafted a month. Double the capture, roughly double the
+   model cost.
+2. **Gate rejection rate.** A moment that fails twice costs three drafts and three full gate passes.
+   Highest in the first weeks, falling as the library is tuned.
+3. **A provider change.** The daily message names any service in use that is not on the tool list,
+   the first time it is used (15.3). You should never learn about one from a statement.
+
+Storage only goes up — 6.3 forbids deleting anything, and the audio is kept as well as the transcript
+(4.1.2). About 2 GB a year, against 100 GB on Pro.
+
 ## 5. How to change things
 
 | To change | Do this | Deploy needed? |

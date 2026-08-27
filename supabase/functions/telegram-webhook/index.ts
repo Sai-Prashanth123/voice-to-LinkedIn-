@@ -12,6 +12,7 @@
  */
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { noteProvider } from "../_shared/providers.ts";
 import type { Awaiting } from "../_shared/types.ts";
 import { admin, getSetting, logEvent } from "../_shared/db.ts";
 import { loadSecrets, secret } from "../_shared/secrets.ts";
@@ -130,6 +131,9 @@ Deno.serve(async (req) => {
 
 async function route(db: SupabaseClient, msg: Message): Promise<void> {
   const chatId = msg.chat.id;
+  // Declared, so this raises nothing — but the record of what this system touches should be
+  // complete, because the handover document is generated from it.
+  await noteProvider(db, "telegram", "messaging");
   const text = (msg.text ?? msg.caption ?? "").trim();
 
   // ── Commands ────────────────────────────────────────────────────────────────
@@ -534,7 +538,9 @@ async function handleAnswer(
       { upsert: true },
     );
     const { transcribe } = await import("../_shared/stt.ts");
-    body = (await transcribe(bytes, voice.mime_type ?? "audio/ogg")).text;
+    const heard = await transcribe(bytes, voice.mime_type ?? "audio/ogg");
+    body = heard.text;
+    await noteProvider(db, heard.provider.split(":")[0], "transcription");
   }
 
   if (!body.trim()) return;

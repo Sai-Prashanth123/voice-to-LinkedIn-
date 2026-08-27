@@ -13,9 +13,10 @@
  */
 
 import { admin, logEvent } from "../_shared/db.ts";
+import { noteProvider } from "../_shared/providers.ts";
 import { loadSecrets } from "../_shared/secrets.ts";
 import { recordEditDiff } from "../_shared/outcome.ts";
-import { embed } from "../_shared/embeddings.ts";
+import { embed, embeddingProvider } from "../_shared/embeddings.ts";
 import { json } from "../_shared/jobs.ts";
 import { getAuth, publish } from "../_shared/linkedin.ts";
 import { joshChatId, sendMessage } from "../_shared/telegram.ts";
@@ -59,6 +60,7 @@ Deno.serve(async () => {
       }
 
       const urn = await publish(auth, post.body, image);
+      await noteProvider(db, "linkedin", "publishing");
 
       await db.from("posts").update({
         status: "published",
@@ -117,6 +119,7 @@ async function recordOutcome(db: any, post: any): Promise<void> {
   // Everything published joins the dedup index, so the system will not retell this story (7.2).
   try {
     const { vector, model } = await embed(post.body);
+    await noteProvider(db, embeddingProvider() ?? "", "embeddings");
     await db.from("published_archive").insert({
       origin: "system",
       moment_id: post.moment_id,

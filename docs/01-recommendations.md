@@ -112,20 +112,49 @@ produces.
 
 Everything below runs on **your** accounts and your keys (14.1). We work inside them.
 
-| Service | What it does | Cost |
-|---|---|---|
-| **Supabase** (Pro) | Idea bank, reference library, job queue, scheduling, file storage, sign-in | $25/mo |
-| **Anthropic** | The interview, the drafter, the gate, triage, the learning loop | ~$25/mo |
-| **Deepgram** | Turning your voice notes into text | ~$2/mo |
-| **OpenAI** | Embeddings for the "have I told this story already" check; Whisper as a transcription fallback | ~$1/mo |
-| **Telegram** | Where you send voice notes and get asked questions | Free |
-| **LinkedIn developer app** | Publishing, and post analytics once approved | Free |
-| **Vercel** (Hobby) | Hosting the calendar and weekly pass | Free |
-| **GitHub** | Where the code lives, and how it gets deployed | Free |
+| Service | What it does | Cost | Status |
+|---|---|---|---|
+| **Supabase** (Pro) | Idea bank, reference library, job queue, scheduling, file storage, sign-in | $25/mo | In use |
+| **Anthropic** | The interview, the drafter, the gate, triage, the learning loop | ~$25/mo | **Declared, never keyed** |
+| **Groq** | Doing Anthropic's work on a free tier while no Anthropic key exists | Free tier | **In use — added mid-build** |
+| **Hugging Face** | Embeddings for the "have I told this story already" check, and a second free-tier model provider | Free tier | **In use — added mid-build** |
+| **OpenAI** | Fallback for embeddings and for transcription | ~$1/mo if keyed | Not keyed, never used |
+| **Deepgram** | Turning your voice notes into text | ~$2/mo | In use |
+| **Telegram** | Where you send voice notes and get asked questions | Free | In use |
+| **LinkedIn developer app** | Publishing, and post analytics once approved | Free | Not yet connected |
+| **Vercel** (Hobby) | Hosting The desk — the calendar, the bank, the library, the weekly pass | Free | Not yet deployed |
+| **GitHub** | Where the code lives, and what a rebuild is restored from | Free | Local only, no remote yet |
 
-Nothing here has a Thought Pilot account attached to it (14.3). If we stopped work tomorrow the
-system would keep running, and clause 15.3 means we will tell you at the time if anything is ever
-added to this list.
+### What changed here, and why you are being told now (15.3)
+
+**Groq and Hugging Face were added during the build and this list did not say so.** They have been
+running the drafter, the gate, the interview and the dedup embeddings, while this table named
+Anthropic and OpenAI — neither of which has ever had a key. The cost model was billing that work to
+Anthropic at $25 a month.
+
+They were added because the Anthropic key never arrived and a free tier was the only way to keep
+building. That is a defensible decision and a poor one to have made silently, which is what 15.3
+exists to prevent.
+
+It cannot happen again quietly. The system now records every service it actually calls
+(`providers_seen`) and tells you in the daily message about anything in use that is not on this
+list, naming it, what it is doing, and when it started. A test fails the build if this table and the
+list the system checks itself against ever disagree.
+
+**The consequence worth stating plainly:** the free tiers are why no draft has yet cleared all eight
+gate checks. Groq's 8,000 tokens/minute is below what a single gate run needs. The quality argument
+in this document rests on Opus doing the drafting and the gating, and Opus has not been available.
+
+### On 14.3, accurately
+
+The earlier version of this section said *"nothing here has a Thought Pilot account attached to it"*.
+That was the intention and is not yet the fact. **Every account and key above is currently Thought
+Pilot's**, in a Thought Pilot Supabase organisation, because 14.1 has not happened yet. Until it
+does, 14.3 is not met: if we stopped tomorrow the system would stop with us.
+
+Nothing in the *design* depends on us — the migration path is documented in `docs/04-handover.md`
+and has been rehearsed end to end — but the accounts have to move before that is more than true on
+paper.
 
 ---
 

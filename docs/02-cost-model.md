@@ -36,12 +36,38 @@ Anthropic pricing per million tokens: Opus 5 $5 in / $25 out, Sonnet 5 $3 / $15,
 | Claude Code triage (~700 sessions) | Haiku 4.5 → Sonnet 5 | $2 |
 | Learning loop and monthly reports | Opus 5 | $2 |
 | Transcription (~200 minutes) | Deepgram | $2 |
-| Embeddings for dedup | OpenAI | $1 |
+| Embeddings for dedup | Hugging Face `bge-m3` | $0 on the free tier |
 | Visuals (only when you send an image) | Opus 5 | $1 |
 | **Model and service subtotal** | | **~$28** |
 | Supabase Pro | | $25 |
 | Vercel, Telegram, LinkedIn, GitHub | | $0 |
+| Groq, Hugging Face (added mid-build, see 15.3) | free tiers | $0 |
 | **Total** | | **~$53** |
+
+## What is actually being spent today, which is not this (15.9)
+
+The table above is the model for the system **as specified** — Opus drafting, Opus gating, Sonnet
+interviewing. It is what to budget for and it is what we recommend.
+
+It is not what is running. No Anthropic key has ever been configured, so the build has been running
+on free tiers:
+
+| | Modelled | Actually running |
+|---|---|---|
+| Drafting | Opus 5 | `openai/gpt-oss-120b` via Groq |
+| The gate | Opus 5 | `openai/gpt-oss-120b` via Groq |
+| Interview | Sonnet 5 | Groq / Hugging Face |
+| Embeddings | OpenAI | Hugging Face `bge-m3` |
+| **Monthly** | **~$53** | **~$0** |
+
+Raising it here rather than letting the gap show up the other way round — as a bill that suddenly
+appears when the key is added, or as a quality problem nobody can explain.
+
+**Two things follow from it.** The first is that the $53 is still the right number to plan on; the
+second is that **no draft has yet cleared all eight gate checks**, and the most likely reason is that
+Groq's free tier allows 8,000 tokens a minute where one full gate run needs roughly 16,000. The
+quality argument in these documents assumes Opus, and the acceptance test in 17a is measured against
+a system that has not yet had it.
 
 ## Why the gate costs twice what the drafting does
 

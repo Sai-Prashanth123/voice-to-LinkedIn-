@@ -16,6 +16,7 @@
  */
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { noteProvider } from "../providers.ts";
 import { logEvent } from "../db.ts";
 import { enqueue } from "../jobs.ts";
 import { pushBack } from "../pushback.ts";
@@ -150,6 +151,10 @@ async function transcribeStored(
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const result = await transcribe(bytes, file.type || "audio/ogg");
+  // The provider that ANSWERED, not the one we asked first: `transcribe` falls back to Whisper when
+  // Deepgram fails, and a fallback that quietly bills a different company is exactly what 15.3 is
+  // about. Trimmed of the model suffix ("deepgram:nova-3") — the service is what Josh is told.
+  await noteProvider(db, result.provider.split(":")[0], "transcription");
   await opts.onDone(result);
   return result.text;
 }

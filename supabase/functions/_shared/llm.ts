@@ -41,6 +41,7 @@
  */
 
 import Anthropic from "npm:@anthropic-ai/sdk@0";
+import { noteProvider, type ProviderPurpose } from "./providers.ts";
 import { zodOutputFormat } from "npm:@anthropic-ai/sdk@0/helpers/zod";
 import { z } from "npm:zod@4";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
@@ -467,6 +468,9 @@ async function record(
     await db.from("llm_calls").insert({
       purpose: opts.purpose,
       model,
+      // 15.9 — which service was BILLED, as against which model was asked for. The two stopped
+      // matching the moment Groq began serving a model called "openai/gpt-oss-120b".
+      provider: provider(),
       moment_id: opts.momentId ?? null,
       draft_id: opts.draftId ?? null,
       prompt_version: opts.promptVersion ?? null,
@@ -480,6 +484,33 @@ async function record(
     });
   } catch {
     // Never let accounting failures take down real work.
+  }
+
+  // 15.3 — Josh is told at the time about a service he was not told about before. Same swallow-all
+  // rule as above: this is bookkeeping attached to real work and must not be able to break it.
+  await noteProvider(db, provider(), purposeOf(opts.purpose));
+}
+
+/** Map an internal purpose onto the plain words Josh gets told (15.3). */
+function purposeOf(purpose: string): ProviderPurpose {
+  switch (purpose) {
+    case "draft":
+      return "drafting";
+    case "gate":
+      return "gate";
+    case "interview_step":
+    case "interview_extract":
+    case "voice_guide":
+      return "interview";
+    case "triage":
+      return "triage";
+    case "learn":
+    case "monthly_report":
+      return "learning";
+    case "visual":
+      return "visual";
+    default:
+      return "drafting";
   }
 }
 

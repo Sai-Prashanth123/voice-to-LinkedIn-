@@ -20,8 +20,9 @@
  */
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { noteProvider } from "./providers.ts";
 import { getSetting, logEvent } from "./db.ts";
-import { embed, embeddingModel, sourceHash } from "./embeddings.ts";
+import { embed, embeddingModel, sourceHash, embeddingProvider } from "./embeddings.ts";
 import { callStructured, MODELS } from "./llm.ts";
 import { RetellingSchema } from "./schemas.ts";
 
@@ -145,6 +146,8 @@ async function byEmbeddings(
       : cached.embedding as number[];
   } else {
     vector = (await embed(text)).vector;
+    // 15.3 — noted where the call actually leaves the building, not where we intended it to.
+    await noteProvider(db, embeddingProvider() ?? "", "embeddings");
     await db.from("moment_embeddings").upsert({
       moment_id: momentId,
       embedding: vector as unknown as string,
