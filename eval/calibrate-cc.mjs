@@ -14,10 +14,25 @@
 import { assess, DECISION_MARKERS, findSessions, readSession } from "../cc-agent/index.mjs";
 import os from "node:os";
 import path from "node:path";
+import fsSync from "node:fs";
 
 const dir = path.join(os.homedir(), ".claude", "projects");
 const files = findSessions(dir);
-console.log(`Corpus: ${files.length} sessions\n`);
+
+// How long this corpus actually covers. The weekly rate used to be hard-coded at ~160 sessions a
+// week, which is roughly right for Josh and wrong for anyone else — on the machine this was first
+// run on it overstated every rate sixteenfold. A calibration harness that reports a confident wrong
+// number is worse than one that reports nothing.
+const times = files.map((f) => fsSync.statSync(f).mtimeMs).sort((a, b) => a - b);
+const spanWeeks = times.length > 1
+  ? Math.max((times[times.length - 1] - times[0]) / (7 * 86_400_000), 1 / 7)
+  : 1;
+const perWeek = files.length / spanWeeks;
+
+console.log(
+  `Corpus: ${files.length} sessions over ${spanWeeks.toFixed(1)} weeks ` +
+    `(${perWeek.toFixed(1)} a week)\n`,
+);
 
 let parsed = 0, enoughTurns = 0, hasVoice = 0, hasReflection = 0;
 const scores = [];
@@ -57,11 +72,27 @@ for (const [m, n] of [...markerHits.entries()].sort((a, b) => b[1] - a[1]).slice
 
 const nonZero = scores.filter((s) => s.score > 0).sort((a, b) => b.score - a.score);
 console.log(`\nScored above zero: ${nonZero.length} of ${parsed} (${pct(nonZero.length)})`);
-console.log("\nThreshold options (weekly rate assumes ~160 sessions/week):");
+console.log(
+  `\nThreshold options, against this corpus's measured rate of ${perWeek.toFixed(1)}/week:`,
+);
 for (const t of [6, 9, 12, 15, 18, 21, 25]) {
   const n = nonZero.filter((s) => s.score >= t).length;
-  const weekly = parsed > 0 ? ((n / parsed) * 160).toFixed(1) : "0";
+  const weekly = parsed > 0 ? ((n / parsed) * perWeek).toFixed(2) : "0";
   console.log(`  >=${String(t).padStart(3)}  ${String(n).padStart(4)} sessions (${pct(n)})  ~${weekly}/week`);
+}
+
+// A corpus this thin cannot choose a threshold, and saying so is the whole job. 4.4.3 makes the
+// cost asymmetric — too many candidates and Josh stops reading them, which kills the input outright
+// — so a table built on three data points is worse than no table at all.
+if (nonZero.length < 10 || parsed < 100) {
+  console.log(
+    "\nNOT ENOUGH TO CALIBRATE ON.\n" +
+      `  ${parsed} sessions, ${nonZero.length} scoring above zero. The options above are a handful\n` +
+      "  of data points wearing a table: every threshold from 6 to 12 selects the same single\n" +
+      "  session, which tells you nothing about where the bar belongs.\n" +
+      "  Run this on the machine that does the real work, over a few hundred sessions, before\n" +
+      "  trusting CC_MIN_SCORE.",
+  );
 }
 
 console.log("\nTop 10 by score:");
