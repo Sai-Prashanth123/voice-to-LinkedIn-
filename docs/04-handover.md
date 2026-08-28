@@ -108,6 +108,27 @@ The desk → /export     → idea-bank-<date>.json
 `linkedin_auth` is excluded by design — the tokens are re-issued against the new app, not moved.
 After importing, compare row counts table by table before pointing anything at the new project.
 
+### Where it runs today
+
+Recorded because it is not obvious from the code, and because two of these are due to change.
+
+| | |
+|---|---|
+| The desk | `https://app-saip00519-gmailcoms-projects.vercel.app` |
+| Vercel project | `the-desk`, on a personal Vercel account |
+| Function region | `syd1`, chosen to sit beside the Supabase project rather than an ocean away |
+| Supabase | `uzqvebxcxgmseqjhfpku`, `ap-southeast-2`, Thought Pilot organisation |
+| Sign-in | one address only, and it fails closed if that setting is missing |
+
+**The project is named `the-desk` and serves on an `app-` URL.** Vercel keeps the alias a project
+was first deployed under, so renaming it did not move the address. Harmless, and confusing if you
+do not know it — the custom domain below removes the discrepancy entirely.
+
+`desk.thought-pilot.com` is already added and verified on the project. It needs one CNAME record
+(`desk` -> `4890da21ee6ce82f.vercel-dns-017.com.`) and then three values move with it:
+`NEXT_PUBLIC_SITE_URL` on Vercel, `APP_URL` in Supabase Vault, and the redirect list in Supabase
+auth. At handover that domain becomes one of Josh's, and the same three values move again.
+
 ### 5. Point things at it
 
 ```bash

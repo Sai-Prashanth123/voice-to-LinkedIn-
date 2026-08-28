@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($f = \"C:\\\\Users\\\\saip0\\\\OneDrive\\\\Documents\\\\Content System Build Spec.html\"; $i = Get-Item $f; \"{0}  {1:N0} bytes  modified {2}\" -f $i.Name, $i.Length, $i.LastWriteTime)",
+      "mcp__plugin_supabase_supabase__execute_sql",
+      "mcp__supabase-voice-to-content__execute_sql"
+    ]
+  }
+}

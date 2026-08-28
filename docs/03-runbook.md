@@ -318,6 +318,12 @@ rewritten when none has been approved at all.
 The same scoring runs inside `worker-ops` monthly, from the same module, so the scoreboard Josh
 receives and the one you run cannot disagree.
 
+## 6c. Handing it over
+
+`docs/04-handover.md` is the sequence for moving everything into Josh's accounts (14.1, 14.3),
+written from a rehearsal rather than from these setup steps. `docs/05-walkthrough.md` is the
+running order for the recorded session 14.5 requires, and `OWNERSHIP.md` states what transfers.
+
 ## 7. Running the tests
 
 ```bash
