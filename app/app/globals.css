@@ -45,41 +45,24 @@
 
   --edge: 3px;              /* the state mark down the left of an entry */
   --ease: cubic-bezier(.16, .84, .44, 1);
+
+  color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper:     #0a0b0a;
-    --panel:     #121412;
-    --sunk:      #171a18;
-    --ink:       #f0f3f0;
-    --ink-soft:  #9aa39c;
-    --ink-faint: #6d766f;
-    --rule:      #232724;
-    --rule-firm: #38403a;
-
-    --green:      #4fbe84;
-    --green-deep: #6fd39c;
-    --green-wash: #13251b;
-    --on-green:   #06170e;
-  }
-}
-
-:root[data-theme="dark"] {
-  --paper:     #0a0b0a;
-  --panel:     #121412;
-  --sunk:      #171a18;
-  --ink:       #f0f3f0;
-  --ink-soft:  #9aa39c;
-  --ink-faint: #6d766f;
-  --rule:      #232724;
-  --rule-firm: #38403a;
-
-  --green:      #4fbe84;
-  --green-deep: #6fd39c;
-  --green-wash: #13251b;
-  --on-green:   #06170e;
-}
+/*
+ * ONE THEME, ON PURPOSE.
+ *
+ * This used to follow the operating system, so a machine set to dark rendered the whole desk on
+ * near-black. Both palettes were correct and it still read as two different products depending on
+ * whose laptop it was opened on.
+ *
+ * White is the right single choice for what this is: a proof sheet. Josh reads long prose here and
+ * judges whether it sounds like him, and that judgement should not change with the ambient theme of
+ * the machine. It is also the ground the posts themselves will be read on.
+ *
+ * color-scheme keeps the browser's own furniture — scrollbars, form controls, the autofill
+ * wash — in light too. Without it a dark-mode browser paints a dark scrollbar down a white page.
+ */
 
 *, *::before, *::after { box-sizing: border-box; }
 

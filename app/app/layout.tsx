@@ -20,10 +20,9 @@ export const viewport: Viewport = {
   // Zoom stays enabled. Josh reads prose here and may want to pinch in; disabling it to make an app
   // feel "native" trades a real accessibility need for a cosmetic one.
   maximumScale: 5,
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0b0a" },
-  ],
+  // One colour, because the app is one theme. Declaring a dark variant here would paint the phone's
+  // status bar black above a white page.
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
