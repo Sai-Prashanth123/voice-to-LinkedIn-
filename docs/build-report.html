@@ -203,9 +203,7 @@
   }
 </style>
 </head>
-<body>
-
-<!-- ══════════════════════════════ COVER ══════════════════════════════ -->
+<body><!-- ══════════════════════════════ COVER ══════════════════════════════ -->
 <div class="cover">
   <div class="cover-head">
     <span class="label">Thought Pilot &nbsp;→&nbsp; Josh Fryszer, Slingshot GTM</span>
@@ -215,10 +213,8 @@
   <h1>What has been built</h1>
 
   <p class="lede">
-    A progress report against Build Specification v2.0 of 20 August 2026 — its 17 clauses,
-    116 numbered requirements and 12 component tests. <strong>Every clause is built and deployed.</strong>
-    Nothing in the system is currently known to be broken. Nothing has been accepted either, and this
-    document is as specific about the second as the first.
+    A plain account of the content system: <strong>what you asked for, what exists today, what it
+    does, and what is not finished.</strong> Written to be read start to finish in ten minutes.
   </p>
 
   <div class="figures">
@@ -230,264 +226,215 @@
 
   <div class="two">
     <div>
-      <h3>What you can use today</h3>
+      <h3>The short version</h3>
       <p style="color:var(--ink-soft); font-size:9.6pt">
-        The Telegram bot takes voice notes, interviews you, and runs your weekly pass — type
-        <code>/</code> and it lists what it can do. The desk is live at
-        <b>the-desk-saip00519-gmailcoms-projects.vercel.app</b>, holding the idea bank, the calendar,
-        the reference library and the change proposals, with ⌘K search across everything. The
-        database runs itself on nine schedules.
+        Every clause in your specification is built and running. You can use the system today: send a
+        voice note, answer a question, approve a post. <strong>Nothing in it is currently known to be
+        broken.</strong>
       </p>
     </div>
     <div>
-      <h3>What is honestly not ready</h3>
+      <h3>And the honest half</h3>
       <p style="color:var(--ink-soft); font-size:9.6pt">
-        No draft has yet cleared the quality gate, because no paid model has been configured. LinkedIn
-        is not connected. No image has been rebuilt. Seven of fourteen reference library sections are
-        waiting on you, and the voice guide is the one that matters.
+        Nothing has been <em>accepted</em> yet. No draft has cleared the quality gate, LinkedIn is not
+        connected, and seven library sections are waiting on you. None of the twelve acceptance tests
+        has been passed — and none has been failed either.
       </p>
     </div>
   </div>
 
   <div class="cover-foot">
-    Every figure in this document was read from the live system on the date above, with test fixtures
-    excluded, and can be reproduced by running <code>node eval/acceptance.mjs</code>.
+    Contents &nbsp;·&nbsp; 1 What you asked for, clause by clause &nbsp;·&nbsp; 2 The three surfaces
+    &nbsp;·&nbsp; 3 What each one does &nbsp;·&nbsp; 4 How a post gets made &nbsp;·&nbsp; 5 The rules
+    it cannot break &nbsp;·&nbsp; 6 What is not done &nbsp;·&nbsp; 7 What we need from you
+    &nbsp;·&nbsp; 8 Ownership and cost
   </div>
 </div>
 
-<!-- ═════════════════════════════ 1 · ASKED ═════════════════════════════ -->
+<!-- ═══════════════════ 1 · THE CLAUSES, ASKED AND BUILT ═══════════════════ -->
 <section>
-  <div class="sec-head"><span class="sec-n">01</span><h2>What you asked for</h2><span class="label">Clauses 1–2</span></div>
+  <div class="sec-head"><span class="sec-n">01</span><h2>What you asked for, clause by clause</h2><span class="label">All 17</span></div>
 
   <p class="intro">
-    A system that turns things you already say — voice notes, calls, working sessions — into LinkedIn
-    posts that <strong>could only have been written by you</strong>. Three rules were never negotiable.
-    Each is now enforced by the database rather than by our good intentions, which means they hold even
-    if the code above them is wrong.
+    Your specification has seventeen clauses and 116 numbered requirements. This is every one of them,
+    what it asked for, and what exists. <strong>Built</strong> means the code is written, deployed and
+    running. <strong>Proven</strong> means it has also been driven against the live system and watched
+    working.
   </p>
 
-  <div class="part proven">
-    <div class="part-head"><h3>The lived experience test</h3><span class="clause">clause 1</span><span class="chip ok">Enforced</span></div>
-    <p>
-      <em>Could anyone else have written this? If yes, it fails.</em> Held in a locked section of your
-      reference library. The learning loop can propose changes to anything else and is
-      <strong>structurally unable to touch this</strong> — a database rule rejects the attempt.
-    </p>
-  </div>
+  <table>
+    <thead>
+      <tr><th class="n">#</th><th class="t">What you asked for</th><th>What exists</th><th class="s">State</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="n">1</td><td class="t">Posts only you could have written</td>
+        <td class="why">The lived-experience test lives in a locked section of your library. The learning loop cannot propose a change to it — a database rule refuses.</td>
+        <td class="s"><span class="chip ok">Proven</span></td>
+      </tr>
+      <tr>
+        <td class="n">2</td><td class="t">Three non-negotiable rules</td>
+        <td class="why">All three enforced by the database rather than by code: only-you, nothing invented, nothing publishes without you.</td>
+        <td class="s"><span class="chip ok">Proven</span></td>
+      </tr>
+      <tr>
+        <td class="n">3</td><td class="t">What is in scope, and what is not</td>
+        <td class="why">LinkedIn only, one person, text and rebuilt diagrams. No other network, no ghostwriting of anyone else.</td>
+        <td class="s"><span class="chip ok">Proven</span></td>
+      </tr>
+      <tr>
+        <td class="n">4</td><td class="t">Five ways material gets in</td>
+        <td class="why">Voice notes, prompted sessions, call transcripts, Claude Code sessions, typed thoughts — all into one bank. Slack is built and off by default, as you asked.</td>
+        <td class="s"><span class="chip ok">Proven</span></td>
+      </tr>
+      <tr>
+        <td class="n">5</td><td class="t">An interview that digs, then stops</td>
+        <td class="why">Asks until there is a scene, a detail and a realisation. Budgets its questions. Parks a moment rather than padding it. Never writes.</td>
+        <td class="s"><span class="chip ok">Proven</span></td>
+      </tr>
+      <tr>
+        <td class="n">6</td><td class="t">An idea bank you own and can edit</td>
+        <td class="why">28 tables. Nothing can be deleted — only killed and labelled. Moments re-open when you add to them. Full-text search across everything. Exportable in one file.</td>
+        <td class="s"><span class="chip ok">Proven</span></td>
+      </tr>
+      <tr>
+        <td class="n">7</td><td class="t">Choosing what gets written next</td>
+        <td class="why">Five-factor scoring, pillar balance, and a retelling check against everything published. Runs short and says why rather than dropping the bar.</td>
+        <td class="s"><span class="chip ok">Proven</span></td>
+      </tr>
+      <tr>
+        <td class="n">8</td><td class="t">A reference library you control</td>
+        <td class="why">Fourteen sections in plain prose, edited in a browser or by one message. Versioned, reversible, read at drafting and at checking. Seven still await your input.</td>
+        <td class="s"><span class="chip ok">Proven</span></td>
+      </tr>
+      <tr>
+        <td class="n">9</td><td class="t">Drafting, and a gate that rejects</td>
+        <td class="why">Eight independent checks, each able to reject alone. 130 checks have run and 48 rejected. It demonstrably rejects; it has never yet passed a draft.</td>
+        <td class="s"><span class="chip part">Unproven</span></td>
+      </tr>
+      <tr>
+        <td class="n">10</td><td class="t">Turning an image into your own</td>
+        <td class="why">Rebuilds the idea as a vector drawing, so it is incapable of resembling the original rather than merely told not to. No rebuild has run yet.</td>
+        <td class="s"><span class="chip part">Unproven</span></td>
+      </tr>
+      <tr>
+        <td class="n">11</td><td class="t">A calendar, and a weekly pass</td>
+        <td class="why">Drafts arrive as drafts. You edit in place and mark ready — the only thing that authorises publishing. Your edits go back into the bank automatically.</td>
+        <td class="s"><span class="chip ok">Proven</span></td>
+      </tr>
+      <tr>
+        <td class="n">12</td><td class="t">It gets better over time</td>
+        <td class="why">Measures what it wrote against what you approved — needing no LinkedIn. Asks one question a week. Proposes library changes with evidence; you decide.</td>
+        <td class="s"><span class="chip ok">Proven</span></td>
+      </tr>
+      <tr>
+        <td class="n">13</td><td class="t">It must not break quietly</td>
+        <td class="why">Silence alerts, queue warnings, errors surfaced once rather than daily, and a monthly report on itself. It also tells you if it starts using a service you were not told about.</td>
+        <td class="s"><span class="chip ok">Proven</span></td>
+      </tr>
+      <tr>
+        <td class="n">14</td><td class="t">You own it, and it runs without us</td>
+        <td class="why">Everything transfers on payment; no licence needed from us. The move into your accounts is rehearsed, not just written. The accounts have not moved yet.</td>
+        <td class="s"><span class="chip no">Outstanding</span></td>
+      </tr>
+      <tr>
+        <td class="n">15</td><td class="t">Tools, confidentiality and cost</td>
+        <td class="why">Cost confirmed at ~$53/month before the build. Every table behind access rules, one sign-in address. The system now tells you itself if it uses a service not on your list.</td>
+        <td class="s"><span class="chip ok">Proven</span></td>
+      </tr>
+      <tr>
+        <td class="n">16</td><td class="t">Decisions left to us</td>
+        <td class="why">All seven recommended with reasoning before the work: storage, the bank, orchestration, models, the calendar, the library structure, and the build order.</td>
+        <td class="s"><span class="chip ok">Proven</span></td>
+      </tr>
+      <tr>
+        <td class="n">17</td><td class="t">How we both know it is finished</td>
+        <td class="why">Twelve component tests and a finish line, computed from the live system on demand and folded into your monthly message. None passed yet; none failed.</td>
+        <td class="s"><span class="chip part">Waiting</span></td>
+      </tr>
+    </tbody>
+  </table>
 
-  <div class="part proven">
-    <div class="part-head"><h3>No fabrication</h3><span class="clause">9.4</span><span class="chip ok">Enforced</span></div>
+  <div class="callout">
+    <span class="label">Reading that table</span>
     <p>
-      Every claim, quote, number and name must trace to something you actually said. The writer emits
-      each claim with the exact source text beside it, and that is checked
-      <strong>mechanically, before any model gives an opinion</strong>. Nothing invented survives.
-    </p>
-  </div>
-
-  <div class="part proven">
-    <div class="part-head"><h3>Nothing publishes without you</h3><span class="clause">11.2</span><span class="chip ok">Enforced</span></div>
-    <p>
-      Four database constraints make an unauthorised published post <strong>impossible to store</strong>,
-      not merely unlikely. Tested adversarially: the database refuses a published post you never marked
-      ready, one with no date, and one published before you approved it.
+      <strong>Fifteen of seventeen are proven.</strong> Two are built but unproven — the gate and the
+      visuals — and both wait on the same thing, which is a model good enough to do the work. One is
+      outstanding: the accounts are still ours rather than yours, and that is the first thing to change
+      at handover.
     </p>
   </div>
 </section>
-
-<!-- ═════════════════════════════ 2 · BUILT ═════════════════════════════ -->
+<!-- ═══════════════════ 2 · THE THREE SURFACES ═══════════════════ -->
 <section class="break">
-  <div class="sec-head"><span class="sec-n">02</span><h2>What is built</h2><span class="label">The nine steps</span></div>
+  <div class="sec-head"><span class="sec-n">02</span><h2>Three surfaces, one pipeline</h2><span class="label">The whole design</span></div>
 
   <p class="intro">
-    The whole pipeline exists end to end. <strong>Proven</strong> means it has been driven against the
-    live system and watched working, not read in the code. <strong>Unproven</strong> means it is built
-    and waits on something outside our control.
+    Everything you touch is one of three things, and each exists because the other two cannot do its
+    job. <strong>The split is the whole design</strong> — once it is clear, every feature in this
+    document explains itself.
   </p>
 
-  <div class="part proven">
-    <div class="part-head"><h3>Five ways in</h3><span class="clause">clause 4</span><span class="chip ok">Proven</span></div>
-    <p>
-      Voice notes, prompted sessions, call transcripts, Claude Code sessions and typed thoughts, all
-      landing in one idea bank. Send a voice note from your phone and it is transcribed, filed and
-      answered with a question — in seconds, between other things.
-      <strong>9 inputs captured so far.</strong>
-    </p>
-  </div>
-
-  <div class="part proven">
-    <div class="part-head"><h3>The interview</h3><span class="clause">clause 5</span><span class="chip ok">Proven</span></div>
-    <p>
-      Asks until a moment has a scene, a detail and a realisation — then stops. It budgets its
-      questions, rewords prompts that never land, and <strong>parks a moment rather than padding it</strong>.
-      It never writes; that is a different job with a different prompt.
-    </p>
-  </div>
-
-  <div class="part proven">
-    <div class="part-head"><h3>The idea bank</h3><span class="clause">clause 6</span><span class="chip ok">Proven</span></div>
-    <p>
-      28 tables, 73 access rules, and <strong>no delete permission anywhere</strong> — nothing can be
-      destroyed, only killed and labelled. Moments re-open when you add to them. Editable by you without
-      a developer, and exportable in full at any moment.
-    </p>
-  </div>
-
-  <div class="part proven">
-    <div class="part-head"><h3>Choosing what gets written</h3><span class="clause">clause 7</span><span class="chip ok">Proven</span></div>
-    <p>
-      Five-factor scoring, pillar balance, and a retelling check against everything already published.
-      When it cannot fill the queue without dropping the bar it <strong>runs short and says why</strong>,
-      because fewer posts is the right answer when the material is not there.
-      <strong>46 selection runs.</strong>
-    </p>
-  </div>
-
-  <div class="part unproven">
-    <div class="part-head"><h3>Drafting and the gate</h3><span class="clause">clause 9</span><span class="chip part">Built, unproven</span></div>
-    <p>
-      Eight independent checks, each able to reject on its own — because a model asked to weigh eight
-      things at once averages across them and lets marginal work through. <strong>130 checks have run
-      and 48 rejected.</strong> The gate demonstrably rejects. What it has never done is pass a draft,
-      and section 6 explains exactly why.
-    </p>
-  </div>
-
-  <div class="part unproven">
-    <div class="part-head"><h3>Visuals</h3><span class="clause">clause 10</span><span class="chip part">Built, unproven</span></div>
-    <p>
-      Send a diagram and it rebuilds the <em>idea</em> in your brand — drawn from scratch as a vector
-      image, so it is <strong>structurally incapable of resembling the original</strong> rather than
-      merely instructed not to. Your image is stored and queued; no rebuild has run yet.
-    </p>
-  </div>
-
-  <div class="part proven">
-    <div class="part-head"><h3>The calendar</h3><span class="clause">clause 11</span><span class="chip ok">Proven</span></div>
-    <p>
-      Drafts arrive as drafts. You edit in place and mark ready, and only that authorises publishing.
-      Your edits are read back into the bank automatically, because the calendar
-      <strong>is</strong> the bank rather than a copy of it.
-    </p>
-  </div>
-
-  <div class="part proven">
-    <div class="part-head"><h3>The learning loop</h3><span class="clause">clause 12</span><span class="chip ok">Proven</span></div>
-    <p>
-      The difference between what was written and what you approved is measured
-      <strong>the moment you approve</strong> — it needs no LinkedIn and no effort from you. A one-line
-      verdict is asked on the taps you already make. Changes to the library are proposed with evidence,
-      approved only by you, and reversible.
-    </p>
-  </div>
-
-  <div class="part proven">
-    <div class="part-head"><h3>Operations</h3><span class="clause">clause 13</span><span class="chip ok">Proven</span></div>
-    <p>
-      Silence alerts, queue warnings, errors surfaced once rather than every morning, and a monthly
-      report on the system itself. It also tells you if it starts using a service you were never told
-      about. <strong>Nine schedules run without anyone starting them.</strong>
-    </p>
-  </div>
-</section>
-
-<!-- ══════════════════════════ 3 · THE PIECES ══════════════════════════ -->
-<section class="break">
-  <div class="sec-head"><span class="sec-n">03</span><h2>The pieces, and what each is for</h2><span class="label">Four deliverables</span></div>
-
-  <p class="intro">
-    Four things were built. Two you use directly, one runs quietly on your machine, and one is the
-    engine underneath. <strong>The split between the first two is deliberate and worth
-    understanding</strong>, because it decides where everything happens.
-  </p>
-
-  <div class="part proven">
-    <div class="part-head"><h3>The Telegram bot — every decision</h3><span class="chip ok">Live</span></div>
-    <p>
-      Where the system is <em>used</em>. Capture, the interview, the weekly pass, approving posts,
-      clearing names, sending images, adding a rule. <strong>Type <code>/</code> and it lists
-      everything it can do</strong> — nine commands, each described by what it does for you.
-      <code>/help</code> and <code>/status</code> answer with buttons that run the thing rather than
-      naming it, and the buttons change with what is actually waiting: an empty queue offers you a
-      session, a full one offers the review.
-    </p>
-    <p>
-      Every decision the system needs from you can be made with a tap. Nothing here requires a laptop,
-      because 12.7 says a habit that needs a second place to go will not survive.
-    </p>
-  </div>
-
-  <div class="part proven">
-    <div class="part-head"><h3>The desk — the four jobs a chat box cannot do</h3><span class="chip ok">Live</span></div>
-    <p>
-      Deliberately <em>not</em> a second copy of the bot. Clause 6.1 requires a surface that is not the
-      chat interface, and this is the small number of jobs that genuinely need a keyboard and a screen:
-      <strong>editing a post</strong>, <strong>writing the reference library</strong>,
-      <strong>finding a moment</strong>, and <strong>rolling a change back or taking your data out</strong>.
-    </p>
-    <p>
-      Six screens and an export. <strong>⌘K searches every moment</strong> — your words, the scene, the
-      detail, what they actually said — ranked, across every status, because the moment you go looking
-      for later is usually one that has already moved on. Built as proper full-text search rather than
-      pattern matching, so it finds "costs" when you type "cost" and does not return "costume".
-    </p>
-  </div>
-
-  <div class="part unproven">
-    <div class="part-head"><h3>The Claude Code agent and its installer</h3><span class="chip part">Built, not installed</span></div>
-    <p>
-      Reads your working sessions on your own machine and sends a <strong>digest of what you said and
-      decided</strong> — never code, never client material. That split is not politeness: 625 MB of
-      logs would be unaffordable to send, and 15.4 forbids putting client work into a third-party
-      context. It filters hard locally and stays silent about routine work.
-    </p>
-    <p>
-      One setup command puts it on a schedule and it never needs attention again.
-      <code>--doctor</code> checks every reason it could fail, including whether the credentials
-      actually work against the live server — <strong>because a wrong key produces silence, and a
-      quiet week is a legitimate pass here</strong>, so silence and breakage would otherwise look
-      identical. It has not been installed yet, so this input has produced nothing.
-    </p>
-  </div>
-
-  <div class="part proven">
-    <div class="part-head"><h3>The engine</h3><span class="chip ok">Live</span></div>
-    <p>
-      10 background services and 27 database migrations, running on nine schedules — the queue every
-      minute, selection every four hours, publishing every five minutes, the daily check at 8am, the
-      learning run on Monday mornings. <strong>285 model calls so far, at a total cost of
-      $0.09.</strong>
-    </p>
+  <div class="built">
+    <div class="item">
+      <h3>Telegram — every decision</h3><span class="chip ok">Live</span>
+      <p>Capture, the interview, approving, scheduling, verdicts, clearing a name, adding a rule.
+         Anything answerable with a tap, wherever you already are. Nothing here needs a laptop.</p>
+    </div>
+    <div class="item">
+      <h3>The desk — every prose job</h3><span class="chip ok">Live</span>
+      <p>Editing a post, writing the library, finding a moment, rolling a change back, exporting
+         everything. Four jobs a chat box physically cannot do, because each needs a cursor.</p>
+    </div>
+    <div class="item">
+      <h3>The reader — one input</h3><span class="chip part">Not installed</span>
+      <p>Runs on your own laptop, reads your Claude Code sessions, sends a short digest. Set up once,
+         then silent. The only piece that needs software on your machine.</p>
+    </div>
   </div>
 
   <div class="callout">
-    <span class="label">Also delivered</span>
+    <span class="label">Underneath all three</span>
     <p>
-      <strong>Six written documents</strong>, because clause 14 requires them and because you should
-      not need us to run this: the spec read clause by clause, the seven build decisions with the
-      reasoning behind each, the running cost, the operating runbook, the account handover sequence,
-      and the running order for the recorded walkthrough. Plus <strong>95 automated tests</strong> and
-      four evaluation harnesses that measure the system against its own acceptance criteria.
+      One database and ten background services on <strong>nine schedules</strong> — the queue every
+      minute, selection every four hours, publishing every five minutes, a check each morning at
+      eight, the learning run on Monday. It mines, scores, drafts, checks and reports without anyone
+      starting it.
     </p>
   </div>
 
-  <div class="callout">
-    <span class="label">If something had to be cut</span>
-    <p>
-      <strong>It would be the Claude Code reader.</strong> It is one of five ways in, it is the only
-      one needing software on your laptop, and by design it produces nothing in a quiet week. Its
-      value is that it catches the material you generate without noticing — the session where an
-      assumption turned out to be wrong. That is real "only you were in that room" material, but it is
-      a bonus input rather than a load-bearing one, and nothing else in the build depends on it.
-    </p>
+  <div class="two" style="margin-top:5mm">
+    <div>
+      <h3>Why the split is drawn there</h3>
+      <p style="color:var(--ink-soft); font-size:9.6pt">
+        Your specification says the weekly pass must happen where you already are, because
+        <em>"a separate habit will not survive"</em>. So every decision is in Telegram.
+      </p>
+      <p style="color:var(--ink-soft); font-size:9.6pt">
+        It also says the idea bank must be editable <em>"without going through the chat
+        interface"</em>. So the four jobs needing a keyboard get a screen — and nothing else does.
+      </p>
+    </div>
+    <div>
+      <h3>The rule of thumb</h3>
+      <p style="color:var(--ink-soft); font-size:9.6pt">
+        <strong>Answerable with a tap → Telegram.</strong><br>
+        <strong>Needs a cursor → the desk.</strong>
+      </p>
+      <p style="color:var(--ink-soft); font-size:9.6pt">
+        That is why the desk is only six screens. It is not a second copy of the bot; it is the small
+        residue of work that genuinely needs a keyboard.
+      </p>
+    </div>
   </div>
 </section>
 
-<!-- ══════════════════════════ 4 · WHAT EACH ONE DOES ══════════════════════════ -->
+<!-- ═══════════════════ 3 · WHAT EACH ONE DOES ═══════════════════ -->
 <section class="break">
-  <div class="sec-head"><span class="sec-n">04</span><h2>What each one does</h2><span class="label">Every feature</span></div>
+  <div class="sec-head"><span class="sec-n">03</span><h2>What each one does</h2><span class="label">Every feature</span></div>
 
   <h3 style="margin-bottom:2mm">The Telegram bot</h3>
-  <p style="color:var(--ink-soft); margin-bottom:3mm">
+  <p style="color:var(--ink-soft); margin-bottom:3mm; font-size:9.6pt">
     Type <code>/</code> and it lists everything it can do. Most of the time you will not need any of
     it — you send a voice note and it asks you a question back.
   </p>
@@ -497,7 +444,7 @@
     <tbody>
       <tr><td class="t">/review</td><td class="why">Your weekly pass. Every draft waiting, each with buttons to schedule, rewrite or reject.</td></tr>
       <tr><td class="t">/status</td><td class="why">What is waiting, in the order you can act on it. The buttons change with the numbers.</td></tr>
-      <tr><td class="t">/ask</td><td class="why">Starts a prompted session. Offers anything waiting from calls first, then falls back to questions.</td></tr>
+      <tr><td class="t">/ask</td><td class="why">Starts a session. Offers anything waiting from your calls first, then falls back to questions.</td></tr>
       <tr><td class="t">/candidates</td><td class="why">What your calls and working sessions turned up, waiting to be dug into.</td></tr>
       <tr><td class="t">/seed</td><td class="why">A long sitting — one moment straight into the next, to fill the bank in one go.</td></tr>
       <tr><td class="t">/voiceguide</td><td class="why">Records you talking, and keeps it as the source of truth for how you sound.</td></tr>
@@ -513,12 +460,21 @@
       <tr><td class="t">A voice note</td><td class="why">Stores the audio, transcribes it, files it as a moment, and replies with one question about it.</td></tr>
       <tr><td class="t">A typed thought</td><td class="why">The same, without the transcription step.</td></tr>
       <tr><td class="t">An image</td><td class="why">Asks what you are taking from it and which moment it belongs to, then rebuilds the idea in your brand.</td></tr>
-      <tr><td class="t">A reply to a draft</td><td class="why">Treated as push-back. It rewrites and sends the new version back through all eight checks.</td></tr>
+      <tr><td class="t">A reply to a draft</td><td class="why">Treated as push-back. It rewrites, and the new version goes back through all eight checks.</td></tr>
       <tr><td class="t">Anything, mid-question</td><td class="why">If the question is hours old it asks whether this is an answer or something new, rather than guessing and losing it.</td></tr>
     </tbody>
   </table>
 
-  <h3 style="margin:5mm 0 2mm">The desk — six screens</h3>
+  <div class="callout">
+    <span class="label">Why it never nags</span>
+    <p>
+      Nothing waits on you. A question can sit unanswered for a week; a moment parks rather than
+      being padded out; the weekly question stops after being asked twice.
+      <strong>The system is built so that ignoring it has no cost.</strong>
+    </p>
+  </div>
+
+  <h3 style="margin:6mm 0 2mm">The desk — six screens</h3>
   <table>
     <thead><tr><th class="t">Screen</th><th>What it is for</th></tr></thead>
     <tbody>
@@ -527,11 +483,23 @@
       <tr><td class="t">Idea bank</td><td class="why">Every moment ever captured, searchable across your words, the scene, the detail and what they said. Pin one, kill one, correct a mangled quote.</td></tr>
       <tr><td class="t">Reference library</td><td class="why">The fourteen sections that decide how it writes. Edit any of them and the next draft uses it. Roll any change back.</td></tr>
       <tr><td class="t">Proposals</td><td class="why">Changes the system wants to make, each with its evidence. You approve or reject; it never changes itself.</td></tr>
-      <tr><td class="t">Export</td><td class="why">Every table, as one file, whenever you want it.</td></tr>
+      <tr><td class="t">Export</td><td class="why">Every table, as one file, whenever you want it. No lock-in.</td></tr>
     </tbody>
   </table>
 
-  <h3 style="margin:5mm 0 2mm">The Claude Code reader</h3>
+  <p style="font-size:9.6pt">
+    <strong>Search, specifically.</strong> Built as real full-text search rather than pattern
+    matching — it finds "costs" when you type "cost", and does not return "costume". It looks across
+    every status, because the moment you go looking for later is usually one that has already moved
+    on. Press <code>Ctrl-K</code> anywhere to search or jump.
+  </p>
+
+  <h3 style="margin:6mm 0 2mm">The Claude Code reader</h3>
+  <p style="color:var(--ink-soft); margin-bottom:3mm; font-size:9.6pt">
+    Your working sessions contain real material — the bug that turned out to be an assumption, the
+    decision that changed halfway. The logs are on your laptop and nothing in the cloud can reach
+    them, so this runs locally.
+  </p>
   <table>
     <thead><tr><th class="t">Command</th><th>What it does</th></tr></thead>
     <tbody>
@@ -543,37 +511,60 @@
   </table>
 
   <div class="callout">
-    <span class="label">What the reader actually sends</span>
+    <span class="label">What it actually sends, and why --doctor exists</span>
     <p>
       A short digest of what you said and decided. <strong>Never code, never client material.</strong>
       Of 576 files on a typical machine, 535 are discarded before anything is read, and only the
-      genuinely unusual sessions survive the filter after that.
+      genuinely unusual sessions survive after that.
+    </p>
+    <p style="margin-top:2mm">
+      A wrong key produces <strong>silence</strong> — and a week that produces nothing is a legitimate
+      pass here, so a broken setup and a quiet week look identical from outside. Checking the
+      credentials against the real server is the only way to tell them apart.
     </p>
   </div>
 </section>
-
-<!-- ══════════════════════════ 5 · HOW A POST GETS MADE ══════════════════════════ -->
+<!-- ═══════════════════ 4 · HOW A POST GETS MADE ═══════════════════ -->
 <section class="break">
-  <div class="sec-head"><span class="sec-n">05</span><h2>How a post actually gets made</h2><span class="label">Nine steps</span></div>
+  <div class="sec-head"><span class="sec-n">04</span><h2>How a post actually gets made</h2><span class="label">Nine steps</span></div>
 
   <p class="intro">
     The order is fixed and every step can stop. <strong>Nothing skips ahead</strong> — in particular
     nothing is ever drafted from a transcript or a session log without interviewing you about it
-    first.
+    first, because a recording captures what was said and not what you made of it.
   </p>
 
   <table>
     <thead><tr><th class="n">#</th><th class="t">Step</th><th class="s">Who</th><th>What happens</th></tr></thead>
     <tbody>
-      <tr><td class="n">01</td><td class="t">Something arrives</td><td class="s">You</td><td class="why">A voice note, a typed thought, a call transcript, a Claude Code session, or a Slack thread if you turn it on. All five land in the same idea bank.</td></tr>
+      <tr><td class="n">01</td><td class="t">Something arrives</td><td class="s"><span class="chip no">You</span></td><td class="why">A voice note, a typed thought, a call transcript, a Claude Code session, or a Slack thread if you turn it on. All five land in the same idea bank.</td></tr>
       <tr><td class="n">02</td><td class="t">It asks you about it</td><td class="s">Automatic</td><td class="why">Until the moment has a scene, a detail and a realisation. Then it stops. If it cannot get there, the moment parks rather than being padded out.</td></tr>
       <tr><td class="n">03</td><td class="t">It picks what to write</td><td class="s">Automatic</td><td class="why">Scored on five factors, balanced across your pillars, checked against everything published so a story is never retold. If the bar cannot be met it writes fewer and says why.</td></tr>
-      <tr><td class="n">04</td><td class="t">It writes a draft</td><td class="s">Automatic</td><td class="why">Reading only your bank entry and your library. It never browses and never researches, and emits every factual claim with its source text beside it.</td></tr>
+      <tr><td class="n">04</td><td class="t">It writes a draft</td><td class="s">Automatic</td><td class="why">Reading only your bank entry and your library. It never browses and never researches, and it emits every factual claim with its source text beside it.</td></tr>
       <tr><td class="n">05</td><td class="t">Eight checks</td><td class="s">Automatic</td><td class="why">Could anyone else have written this · does every claim trace to something you said · is a client identifiable · are all names cleared · does it sound like you · does the hook earn the next line · is it aimed at someone · does it use banned phrasing. Each can reject on its own.</td></tr>
       <tr><td class="n">06</td><td class="t">It reaches your calendar</td><td class="s">Automatic</td><td class="why">As a draft, never live, with its image attached if you sent one.</td></tr>
-      <tr><td class="n">07</td><td class="t">You approve it</td><td class="s">You</td><td class="why">A tap in Telegram or an edit in the calendar. This is the only thing that authorises publishing, and the database refuses to store a published post without it.</td></tr>
+      <tr><td class="n">07</td><td class="t">You approve it</td><td class="s"><span class="chip no">You</span></td><td class="why">A tap in Telegram or an edit in the calendar. This is the only thing that authorises publishing, and the database refuses to store a published post without it.</td></tr>
       <tr><td class="n">08</td><td class="t">It publishes</td><td class="s">Automatic</td><td class="why">To LinkedIn, on the date you set. Never before, and never anything you did not approve.</td></tr>
       <tr><td class="n">09</td><td class="t">It learns</td><td class="s">Automatic</td><td class="why">What it wrote against what you approved, the numbers after seven days, and one question a week about whether a post started a conversation. It proposes library changes with evidence; you decide.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════════════ 5 · THE RULES ═══════════════════ -->
+<section>
+  <div class="sec-head"><span class="sec-n">05</span><h2>The three rules it cannot break</h2><span class="label">Held by the database</span></div>
+
+  <p class="intro">
+    Not policies the code tries to follow — <strong>constraints the database will not let it
+    violate</strong>, which means they hold even if the code above them is wrong.
+  </p>
+
+  <table>
+    <thead><tr><th class="t">Rule</th><th>How it is held</th></tr></thead>
+    <tbody>
+      <tr><td class="t">Only you could have written it</td><td class="why">Kept in a locked section of your library. The learning loop is structurally unable to propose a change to it — a database rule rejects the attempt.</td></tr>
+      <tr><td class="t">Nothing invented</td><td class="why">Every claim carries its source text and is verified mechanically, before any model gives an opinion. Missing detail stays missing, and the draft works without it.</td></tr>
+      <tr><td class="t">Nothing publishes without you</td><td class="why">Four constraints make an unauthorised published post impossible to store. Tested by trying: the database refuses all three ways of doing it.</td></tr>
     </tbody>
   </table>
 
@@ -581,14 +572,14 @@
     <span class="label">And one thing that is never tunable</span>
     <p>
       The learning loop can change how it writes — hooks, structure, pillars, timing. It can never
-      loosen the lived-experience test or the no-fabrication rule, whatever the engagement numbers
-      say. <strong>A system optimising freely against LinkedIn engagement finds its way to engagement
+      loosen the two rules above, whatever the engagement numbers say.
+      <strong>A system optimising freely against LinkedIn engagement finds its way to engagement
       bait</strong>, and that is the one outcome that would make the whole thing worthless.
     </p>
   </div>
 </section>
 
-<!-- ══════════════════════════ 4 · NOT BUILT ══════════════════════════ -->
+<!-- ═══════════════════ 6 · WHAT IS NOT DONE ═══════════════════ -->
 <section class="break">
   <div class="sec-head"><span class="sec-n">06</span><h2>What is not done</h2><span class="label">Stated plainly</span></div>
 
@@ -602,76 +593,80 @@
       <tr><th class="n">#</th><th class="t">Test</th><th class="s">Waiting on</th><th>Where it stands</th></tr>
     </thead>
     <tbody>
-      <tr><td class="n">01</td><td class="t">Raw capture</td><td class="s">You</td><td>1 of 20 voice notes sent. The mechanism is proven; the volume is not there.</td></tr>
-      <tr><td class="n">02</td><td class="t">Prompted session</td><td class="s">You</td><td>3 of 5 sessions run.</td></tr>
-      <tr><td class="n">03</td><td class="t">Call transcripts</td><td class="s">You, then 2 weeks</td><td>Needs a call recorder chosen, then two weeks of calls.</td></tr>
-      <tr><td class="n">04</td><td class="t">Claude Code</td><td class="s">One install</td><td>The agent has never run. One command starts a two-week clock.</td></tr>
-      <tr><td class="n">05</td><td class="t">Interview</td><td class="s">You</td><td>1 of 2 answered moments reached depth. Five more were asked and never answered — which measures nothing about the interview.</td></tr>
-      <tr><td class="n">06</td><td class="t">Fabrication</td><td class="s">A paid model</td><td>Needs 10 drafts through the gate for you to audit. There are none.</td></tr>
-      <tr><td class="n">07</td><td class="t">Names</td><td class="s">A paid model</td><td>Same. Four client names are on file and correctly held back.</td></tr>
-      <tr><td class="n">08</td><td class="t">The gate</td><td class="s">A paid model</td><td>Run for real: 6 of 80 checks completed before the free model hit its limit. Not a failure — it never got to read them.</td></tr>
-      <tr><td class="n">09</td><td class="t">Selection</td><td class="s">4 weeks</td><td>46 runs so far. Needs four weeks of elapsed running.</td></tr>
-      <tr><td class="n">10</td><td class="t">Visuals</td><td class="s">A paid model</td><td>Needs a model that can see pictures. Your image is stored and queued.</td></tr>
-      <tr><td class="n">11</td><td class="t">Calendar</td><td class="s">LinkedIn</td><td>Zero exceptions, but the four-week window has not begun. The guarantee itself is proven.</td></tr>
-      <tr><td class="n">12</td><td class="t">Learning loop</td><td class="s">LinkedIn, 1 month</td><td>The mechanism runs. Nothing has published for it to learn from.</td></tr>
-      <tr class="finish"><td class="n">17a</td><td class="t">The finish line</td><td class="s">All of the above</td><td>Five of the last six drafts needing only light editing. No draft has been approved yet, so there is nothing to measure — reported as unmeasurable rather than as zero.</td></tr>
+      <tr><td class="n">01</td><td class="t">Raw capture</td><td class="s">You</td><td class="why">1 of 20 voice notes sent. The mechanism is proven; the volume is not there.</td></tr>
+      <tr><td class="n">02</td><td class="t">Prompted session</td><td class="s">You</td><td class="why">3 of 5 sessions run.</td></tr>
+      <tr><td class="n">03</td><td class="t">Call transcripts</td><td class="s">You, then 2 weeks</td><td class="why">Needs a call recorder chosen, then two weeks of calls running through.</td></tr>
+      <tr><td class="n">04</td><td class="t">Claude Code</td><td class="s">One install</td><td class="why">The reader has never run. One command starts a two-week clock.</td></tr>
+      <tr><td class="n">05</td><td class="t">Interview</td><td class="s">You</td><td class="why">1 of 2 answered moments reached depth. Five more were asked and never answered — which measures nothing about the interview.</td></tr>
+      <tr><td class="n">06</td><td class="t">Fabrication</td><td class="s">Claude Code</td><td class="why">Needs 10 drafts through the gate for you to audit. There are none.</td></tr>
+      <tr><td class="n">07</td><td class="t">Names</td><td class="s">Claude Code</td><td class="why">Same. Four client names are on file and correctly held back.</td></tr>
+      <tr><td class="n">08</td><td class="t">The gate</td><td class="s">Claude Code</td><td class="why">Run for real: 6 of 80 checks completed before the free model hit its limit. Not a failure — it never got to read them.</td></tr>
+      <tr><td class="n">09</td><td class="t">Selection</td><td class="s">4 weeks</td><td class="why">46 runs so far. Needs four weeks of elapsed running.</td></tr>
+      <tr><td class="n">10</td><td class="t">Visuals</td><td class="s">Claude Code</td><td class="why">Needs a model that can see pictures. Your image is stored and queued.</td></tr>
+      <tr><td class="n">11</td><td class="t">Calendar</td><td class="s">LinkedIn</td><td class="why">Zero exceptions, but the four-week window has not begun. The guarantee itself is proven.</td></tr>
+      <tr><td class="n">12</td><td class="t">Learning loop</td><td class="s">LinkedIn, 1 month</td><td class="why">The mechanism runs. Nothing has published for it to learn from.</td></tr>
+      <tr class="finish"><td class="n">17a</td><td class="t">The finish line</td><td class="s">All of the above</td><td class="why">Five of the last six drafts needing only light editing. No draft has been approved yet, so there is nothing to measure — reported as unmeasurable rather than as zero.</td></tr>
     </tbody>
   </table>
 
   <div class="callout">
     <span class="label">The one thing that unblocks the most</span>
     <p>
-      <strong>A paid model key.</strong> The build has been running on free tiers, which allow 8,000
-      words a minute where a single quality check needs roughly 16,000. That one fact blocks four
-      component tests and the finish line itself.
+      <strong>A model good enough to write and to judge.</strong> The build has been running on free
+      tiers, which allow 8,000 words a minute where a single quality check needs roughly 16,000. That
+      one fact blocks four component tests and the finish line itself.
     </p>
-    <p>
-      It is worth being precise about what this is <em>not</em>: the gate is not broken. Reading its
+    <p style="margin-top:2mm">
+      <strong>The intended route is Claude Code</strong> rather than buying API credits — you already
+      have it, and there is already a small agent running on your machine on a schedule that could
+      carry the drafting and the checks. <em>This is not built yet.</em> It is the next substantial
+      piece of work, and it is what those four rows are waiting on.
+    </p>
+    <p style="margin-top:2mm">
+      Worth being precise about what this is <em>not</em>: the gate is not broken. Reading its
       rejections shows it correctly catching genuine invention — phrases the free model added that you
       never said. <strong>The safety mechanism works; the writer beneath it is the cheap one.</strong>
-      This is already inside the $53 a month confirmed in the cost document.
     </p>
   </div>
 </section>
-
-<!-- ═══════════════════════════ 5 · FROM YOU ═══════════════════════════ -->
+<!-- ═══════════════════ 7 · WHAT WE NEED FROM YOU ═══════════════════ -->
 <section>
   <div class="sec-head"><span class="sec-n">07</span><h2>What we need from you</h2><span class="label">The critical path</span></div>
 
   <p class="intro">
-    Seven of the fourteen reference library sections are waiting on you, and they are the ones that
-    cannot be guessed without putting words in your mouth.
+    Seven of the fourteen library sections are waiting on you, and they are the ones that cannot be
+    guessed without putting words in your mouth.
   </p>
 
   <div class="part missing">
     <div class="part-head"><h3>The voice guide</h3><span class="clause">8.1, 8.2</span><span class="chip no">Blocking</span></div>
     <p>
       A recording of you talking at length, in your own words — <strong>never your old posts</strong>,
-      which you have said have drifted. The entire quality argument rests on this, and it has no date
-      against it. The system has already written you a first draft to react to, which is a far easier
-      thing to answer than a blank page. It needs about 400 words of you speaking first.
+      which you have said have drifted. The whole quality argument rests on this and it has no date
+      against it. The system has already written a first draft from what it has, so you are reacting
+      to something rather than facing a blank page. It needs about 400 words of you speaking first.
     </p>
   </div>
 
   <div class="part missing">
     <div class="part-head"><h3>Pillars, audience, gate rules, visual brand, reference posts</h3><span class="clause">clause 8</span><span class="chip no">Waiting</span></div>
     <p>
-      Each section explains what belongs in it and why we did not draft it for you. Editable from The
-      desk in a browser, or from Telegram with a single message — a rule can be added in under a minute,
-      because that is how it will actually get maintained.
+      Each section explains what belongs in it and why we did not draft it for you. Editable in a
+      browser, or from Telegram with a single message — a rule can be added in under a minute, because
+      that is how it will actually get maintained.
     </p>
   </div>
 
   <div class="part missing">
-    <div class="part-head"><h3>Connect LinkedIn</h3><span class="clause">clause 11, 12.1</span><span class="chip no">Waiting</span></div>
+    <div class="part-head"><h3>Connect LinkedIn</h3><span class="clause">11, 12.1</span><span class="chip no">Waiting</span></div>
     <p>
-      Posting is self-serve and needs no approval. Post analytics sits behind a review that takes time,
-      so it is worth starting early. This begins the four-week clocks on two component tests.
+      Posting is self-serve and needs no approval. Post analytics sits behind a review that takes
+      time, so it is worth starting early. This begins the four-week clocks on two component tests.
     </p>
   </div>
 
   <div class="part missing">
-    <div class="part-head"><h3>Answer what is already asked, and keep sending</h3><span class="clause">clauses 4, 5</span><span class="chip no">Waiting</span></div>
+    <div class="part-head"><h3>Answer what is already asked, and keep sending</h3><span class="clause">4, 5</span><span class="chip no">Waiting</span></div>
     <p>
       Five moments are sitting asked and unanswered. Beyond those: nineteen more voice notes, two more
       sessions, and a decision on which call recorder you use.
@@ -688,41 +683,40 @@
   </div>
 </section>
 
-<!-- ══════════════════════════ 6 · OWNERSHIP ══════════════════════════ -->
+<!-- ═══════════════════ 8 · OWNERSHIP AND COST ═══════════════════ -->
 <section class="break">
   <div class="sec-head"><span class="sec-n">08</span><h2>Ownership, cost and handover</h2><span class="label">Clauses 14–15</span></div>
 
   <div class="two">
     <div>
       <h3>It becomes yours</h3>
-      <p style="color:var(--ink-soft)">
+      <p style="color:var(--ink-soft); font-size:9.6pt">
         All code, prompts, configuration and documentation transfer to you on payment, with no ongoing
         licence from us. Every third-party component is permissively licensed and listed by name, so
         <em>"no licence required"</em> is checkable rather than asserted.
       </p>
       <h3 style="margin-top:4mm">It runs without us</h3>
-      <p style="color:var(--ink-soft)">
+      <p style="color:var(--ink-soft); font-size:9.6pt">
         Nothing in the design depends on Thought Pilot. The accounts currently do, which is
-        <strong>the one clause not yet met</strong> — everything runs today in our Supabase
-        organisation, on our keys. The move into your accounts has been rehearsed rather than
-        described: all 26 migrations were applied to an empty database to prove the sequence works.
+        <strong>the one clause not yet met</strong>. The move into your accounts has been rehearsed
+        rather than described: all 27 database migrations were applied to an empty database to prove
+        the sequence works.
       </p>
     </div>
     <div>
       <h3>What it costs</h3>
-      <p style="color:var(--ink-soft)">
-        <strong>$45–70 a month, typically $53</strong> — against the roughly $50 you expected. Confirmed
-        in writing before the build, itemised line by line, with three levers if you want it firmly
-        under $50.
+      <p style="color:var(--ink-soft); font-size:9.6pt">
+        <strong>$45–70 a month, typically $53</strong> — against the roughly $50 you expected.
+        Confirmed in writing before the build and itemised line by line.
       </p>
-      <p style="color:var(--ink-soft)">
-        Today it is running at close to zero, on free tiers, which is exactly why the gate has not been
-        cleared. Two decisions cost money and we would not economise on either: the eight-check gate at
-        about $6, and database backups at $25.
+      <p style="color:var(--ink-soft); font-size:9.6pt">
+        Today it runs at close to zero on free tiers, which is exactly why the gate has not been
+        cleared. Routing the work through Claude Code instead of buying API credits would keep it
+        near zero — that is the plan, and it is not built yet.
       </p>
-      <h3 style="margin-top:4mm">You will be told before a bill</h3>
-      <p style="color:var(--ink-soft)">
-        The system now watches which services it actually uses and tells you in the daily message the
+      <h3 style="margin-top:4mm">You are told before a bill</h3>
+      <p style="color:var(--ink-soft); font-size:9.6pt">
+        The system watches which services it actually uses and tells you in the daily message the
         first time it touches one that is not on your list.
       </p>
     </div>
@@ -731,22 +725,18 @@
   <div class="callout">
     <span class="label">Where it runs today</span>
     <p>
-      <b>The desk</b> is at <code>the-desk-saip00519-gmailcoms-projects.vercel.app</code>, hosted free,
-      running in Sydney beside the database so a page load does not cross an ocean. Sign-in is
-      restricted to one address and the door is locked by default rather than open by default.
-    </p>
-    <p style="margin-top:2mm">
-      The database is in Sydney on Supabase; the Telegram bot needs no hosting of its own. All of it
-      is currently in <b>Thought Pilot accounts</b>, which is the one clause not yet met and the
-      first thing to change at handover.
+      <b>The desk</b> is hosted free and runs in Sydney beside the database, so a page load does not
+      cross an ocean. Sign-in is restricted to one address, and the door is locked by default rather
+      than open by default. The database is in Sydney; the Telegram bot needs no hosting of its own.
+      All of it is currently in <b>Thought Pilot accounts</b> — the first thing to change at handover.
     </p>
   </div>
 
   <div class="callout">
     <span class="label">Two things worth raising directly</span>
     <p>
-      <strong>Two services were added mid-build without telling you.</strong> Groq and Hugging Face have
-      been running the writer, the gate and the interview on free tiers while the paid key was not
+      <strong>Two services were added mid-build without telling you.</strong> Groq and Hugging Face
+      have been running the writer, the gate and the interview on free tiers while no paid key was
       configured, and the tool list you hold named neither. That was a defensible decision made
       silently, which is not good enough. Both are now on the list, and the system was changed so it
       cannot happen quietly again.
@@ -760,10 +750,39 @@
   </div>
 </section>
 
+<!-- ═══════════════════ 9 · WHAT COMES NEXT ═══════════════════ -->
+<section>
+  <div class="sec-head"><span class="sec-n">09</span><h2>What comes next</h2><span class="label">Planned, not built</span></div>
+
+  <p class="intro">
+    Two pieces of work are already scoped. Neither is in your specification, and neither is built —
+    they are here so nothing arrives as a surprise.
+  </p>
+
+  <div class="part missing">
+    <div class="part-head"><h3>Drafting and checking through Claude Code</h3><span class="chip no">Planned</span></div>
+    <p>
+      Instead of buying model credits, the drafting and the eight checks would run through the Claude
+      Code subscription you already have, driven by the same local agent that already reads your
+      sessions on a schedule. <strong>This is what unblocks four of the twelve acceptance tests and
+      the finish line</strong>, and it is the next substantial piece of work.
+    </p>
+  </div>
+
+  <div class="part missing">
+    <div class="part-head"><h3>A connector for the system itself</h3><span class="chip no">Planned</span></div>
+    <p>
+      A small server that lets Claude Code — or any similar tool — read the idea bank, check where
+      things stand and run the system directly, without opening the app or the database. Useful for
+      you and for whoever maintains this after handover, and the natural companion to the item above.
+    </p>
+  </div>
+</section>
+
 <footer>
   Build Specification v2.0 · 20 August 2026 · prepared by Josh Fryszer, Slingshot GTM, for Thought
-  Pilot. This report covers work to 31 August 2026. Figures are read from the live system with test
-  fixtures excluded and are reproducible on demand.
+  Pilot. This report covers work to 31 August 2026. Every figure was read from the live system with
+  test fixtures excluded, and is reproducible on demand.
 </footer>
 
 </body>
