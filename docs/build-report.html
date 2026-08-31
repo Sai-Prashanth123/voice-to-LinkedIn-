@@ -209,7 +209,7 @@
 <div class="cover">
   <div class="cover-head">
     <span class="label">Thought Pilot &nbsp;→&nbsp; Josh Fryszer, Slingshot GTM</span>
-    <span class="label">27 August 2026</span>
+    <span class="label">31 August 2026</span>
   </div>
 
   <h1>What has been built</h1>
@@ -224,7 +224,7 @@
   <div class="figures">
     <div class="fig"><span class="fig-n">17</span><span class="fig-k">clauses built<br>and audited</span></div>
     <div class="fig"><span class="fig-n">116</span><span class="fig-k">numbered<br>requirements</span></div>
-    <div class="fig"><span class="fig-n">84</span><span class="fig-k">automated tests<br>passing</span></div>
+    <div class="fig"><span class="fig-n">95</span><span class="fig-k">automated tests<br>passing</span></div>
     <div class="fig"><span class="fig-n">0/12</span><span class="fig-k">acceptance tests<br>met yet</span></div>
   </div>
 
@@ -232,9 +232,11 @@
     <div>
       <h3>What you can use today</h3>
       <p style="color:var(--ink-soft); font-size:9.6pt">
-        The Telegram bot takes voice notes, interviews you, and runs your weekly pass. The web app —
-        The desk — is live and holds the idea bank, the calendar, the reference library and the
-        change proposals. The database runs itself on nine schedules.
+        The Telegram bot takes voice notes, interviews you, and runs your weekly pass — type
+        <code>/</code> and it lists what it can do. The desk is live at
+        <b>the-desk-saip00519-gmailcoms-projects.vercel.app</b>, holding the idea bank, the calendar,
+        the reference library and the change proposals, with ⌘K search across everything. The
+        database runs itself on nine schedules.
       </p>
     </div>
     <div>
@@ -336,7 +338,7 @@
       Five-factor scoring, pillar balance, and a retelling check against everything already published.
       When it cannot fill the queue without dropping the bar it <strong>runs short and says why</strong>,
       because fewer posts is the right answer when the material is not there.
-      <strong>45 selection runs.</strong>
+      <strong>46 selection runs.</strong>
     </p>
   </div>
 
@@ -390,60 +392,92 @@
 
 <!-- ══════════════════════════ 3 · THE PIECES ══════════════════════════ -->
 <section class="break">
-  <div class="sec-head"><span class="sec-n">03</span><h2>The pieces, and where they run</h2><span class="label">Four deliverables</span></div>
+  <div class="sec-head"><span class="sec-n">03</span><h2>The pieces, and what each is for</h2><span class="label">Four deliverables</span></div>
 
   <p class="intro">
-    Four things were built. Two you use directly, one runs on your machine, and one is the engine
-    underneath.
+    Four things were built. Two you use directly, one runs quietly on your machine, and one is the
+    engine underneath. <strong>The split between the first two is deliberate and worth
+    understanding</strong>, because it decides where everything happens.
   </p>
 
   <div class="part proven">
-    <div class="part-head"><h3>The Telegram bot</h3><span class="chip ok">Live</span></div>
+    <div class="part-head"><h3>The Telegram bot — every decision</h3><span class="chip ok">Live</span></div>
     <p>
       Where the system is <em>used</em>. Capture, the interview, the weekly pass, approving posts,
-      clearing names, sending images, adding a rule. <strong>15 commands and 19 buttons</strong>, all on
-      your phone. Every decision the system needs from you can be made with a tap; nothing requires a
-      laptop.
+      clearing names, sending images, adding a rule. <strong>Type <code>/</code> and it lists
+      everything it can do</strong> — nine commands, each described by what it does for you.
+      <code>/help</code> and <code>/status</code> answer with buttons that run the thing rather than
+      naming it, and the buttons change with what is actually waiting: an empty queue offers you a
+      session, a full one offers the review.
+    </p>
+    <p>
+      Every decision the system needs from you can be made with a tap. Nothing here requires a laptop,
+      because 12.7 says a habit that needs a second place to go will not survive.
     </p>
   </div>
 
   <div class="part proven">
-    <div class="part-head"><h3>The desk — the web app</h3><span class="chip ok">Live</span></div>
+    <div class="part-head"><h3>The desk — the four jobs a chat box cannot do</h3><span class="chip ok">Live</span></div>
     <p>
-      Where prose gets <em>edited</em>, which a chat box cannot do. Five screens: this week, the
-      calendar, the idea bank, the reference library, and change proposals — plus a one-click export of
-      everything. <strong>Deployed and reachable.</strong> Sign-in is restricted to a single address,
-      and the door is locked by default rather than open by default.
+      Deliberately <em>not</em> a second copy of the bot. Clause 6.1 requires a surface that is not the
+      chat interface, and this is the small number of jobs that genuinely need a keyboard and a screen:
+      <strong>editing a post</strong>, <strong>writing the reference library</strong>,
+      <strong>finding a moment</strong>, and <strong>rolling a change back or taking your data out</strong>.
+    </p>
+    <p>
+      Six screens and an export. <strong>⌘K searches every moment</strong> — your words, the scene, the
+      detail, what they actually said — ranked, across every status, because the moment you go looking
+      for later is usually one that has already moved on. Built as proper full-text search rather than
+      pattern matching, so it finds "costs" when you type "cost" and does not return "costume".
     </p>
   </div>
 
   <div class="part unproven">
-    <div class="part-head"><h3>The Claude Code agent and installer</h3><span class="chip part">Built, not installed</span></div>
+    <div class="part-head"><h3>The Claude Code agent and its installer</h3><span class="chip part">Built, not installed</span></div>
     <p>
       Reads your working sessions on your own machine and sends a <strong>digest of what you said and
-      decided</strong> — never code, never client material. One setup command puts it on a schedule
-      (Windows, macOS and Linux all supported) and it never needs attention again. It has not been
-      installed yet, so this input has produced nothing.
+      decided</strong> — never code, never client material. That split is not politeness: 625 MB of
+      logs would be unaffordable to send, and 15.4 forbids putting client work into a third-party
+      context. It filters hard locally and stays silent about routine work.
+    </p>
+    <p>
+      One setup command puts it on a schedule and it never needs attention again.
+      <code>--doctor</code> checks every reason it could fail, including whether the credentials
+      actually work against the live server — <strong>because a wrong key produces silence, and a
+      quiet week is a legitimate pass here</strong>, so silence and breakage would otherwise look
+      identical. It has not been installed yet, so this input has produced nothing.
     </p>
   </div>
 
   <div class="part proven">
     <div class="part-head"><h3>The engine</h3><span class="chip ok">Live</span></div>
     <p>
-      10 background services and 26 database migrations, on nine schedules — the queue every minute,
-      selection every four hours, publishing every five minutes, the daily check at 8am, the learning
-      run on Monday mornings. <strong>285 model calls made so far, at a total cost of $0.09.</strong>
+      10 background services and 27 database migrations, running on nine schedules — the queue every
+      minute, selection every four hours, publishing every five minutes, the daily check at 8am, the
+      learning run on Monday mornings. <strong>285 model calls so far, at a total cost of
+      $0.09.</strong>
     </p>
   </div>
 
   <div class="callout">
     <span class="label">Also delivered</span>
     <p>
-      <strong>Six written documents</strong>, because clause 14 requires them and because you should not
-      need us to run this: how the spec was read clause by clause, the seven build decisions with the
-      reasoning behind each, the running cost, the operating runbook, the account handover sequence, and
-      the running order for the recorded walkthrough. Plus <strong>84 automated tests</strong> and four
-      evaluation harnesses that measure the system against its own acceptance criteria.
+      <strong>Six written documents</strong>, because clause 14 requires them and because you should
+      not need us to run this: the spec read clause by clause, the seven build decisions with the
+      reasoning behind each, the running cost, the operating runbook, the account handover sequence,
+      and the running order for the recorded walkthrough. Plus <strong>95 automated tests</strong> and
+      four evaluation harnesses that measure the system against its own acceptance criteria.
+    </p>
+  </div>
+
+  <div class="callout">
+    <span class="label">If something had to be cut</span>
+    <p>
+      <strong>It would be the Claude Code reader.</strong> It is one of five ways in, it is the only
+      one needing software on your laptop, and by design it produces nothing in a quiet week. Its
+      value is that it catches the material you generate without noticing — the session where an
+      assumption turned out to be wrong. That is real "only you were in that room" material, but it is
+      a bonus input rather than a load-bearing one, and nothing else in the build depends on it.
     </p>
   </div>
 </section>
@@ -470,7 +504,7 @@
       <tr><td class="n">06</td><td class="t">Fabrication</td><td class="s">A paid model</td><td>Needs 10 drafts through the gate for you to audit. There are none.</td></tr>
       <tr><td class="n">07</td><td class="t">Names</td><td class="s">A paid model</td><td>Same. Four client names are on file and correctly held back.</td></tr>
       <tr><td class="n">08</td><td class="t">The gate</td><td class="s">A paid model</td><td>Run for real: 6 of 80 checks completed before the free model hit its limit. Not a failure — it never got to read them.</td></tr>
-      <tr><td class="n">09</td><td class="t">Selection</td><td class="s">4 weeks</td><td>45 runs so far. Needs four weeks of elapsed running.</td></tr>
+      <tr><td class="n">09</td><td class="t">Selection</td><td class="s">4 weeks</td><td>46 runs so far. Needs four weeks of elapsed running.</td></tr>
       <tr><td class="n">10</td><td class="t">Visuals</td><td class="s">A paid model</td><td>Needs a model that can see pictures. Your image is stored and queued.</td></tr>
       <tr><td class="n">11</td><td class="t">Calendar</td><td class="s">LinkedIn</td><td>Zero exceptions, but the four-week window has not begun. The guarantee itself is proven.</td></tr>
       <tr><td class="n">12</td><td class="t">Learning loop</td><td class="s">LinkedIn, 1 month</td><td>The mechanism runs. Nothing has published for it to learn from.</td></tr>
@@ -589,6 +623,20 @@
   </div>
 
   <div class="callout">
+    <span class="label">Where it runs today</span>
+    <p>
+      <b>The desk</b> is at <code>the-desk-saip00519-gmailcoms-projects.vercel.app</code>, hosted free,
+      running in Sydney beside the database so a page load does not cross an ocean. Sign-in is
+      restricted to one address and the door is locked by default rather than open by default.
+    </p>
+    <p style="margin-top:2mm">
+      The database is in Sydney on Supabase; the Telegram bot needs no hosting of its own. All of it
+      is currently in <b>Thought Pilot accounts</b>, which is the one clause not yet met and the
+      first thing to change at handover.
+    </p>
+  </div>
+
+  <div class="callout">
     <span class="label">Two things worth raising directly</span>
     <p>
       <strong>Two services were added mid-build without telling you.</strong> Groq and Hugging Face have
@@ -608,7 +656,7 @@
 
 <footer>
   Build Specification v2.0 · 20 August 2026 · prepared by Josh Fryszer, Slingshot GTM, for Thought
-  Pilot. This report covers work to 27 August 2026. Figures are read from the live system with test
+  Pilot. This report covers work to 31 August 2026. Figures are read from the live system with test
   fixtures excluded and are reproducible on demand.
 </footer>
 
