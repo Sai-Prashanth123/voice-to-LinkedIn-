@@ -101,7 +101,11 @@
 
   /* ── sections ──────────────────────────────────────────────────────── */
 
-  section { page-break-inside: auto; margin-bottom: 9mm; }
+  /* One section per page. Each is a self-contained answer, and a reader should never be unsure
+     whether a section has ended. The trade is dead space at the foot of a short page, so the
+     spacing below is tightened to keep pages reasonably full rather than airy. */
+  section { break-before: page; page-break-before: always; margin-bottom: 0; }
+  section:first-of-type { break-before: auto; page-break-before: auto; }
 
   /* No forced breaks between sections. Five of them left half-empty pages that read as the end of
      the document. Content flows; only the things that look broken when split are protected. */
@@ -113,7 +117,7 @@
   .sec-head {
     display: flex; align-items: baseline; gap: 3mm;
     border-bottom: 1pt solid var(--ink);
-    padding-bottom: 1.8mm; margin-bottom: 4mm;
+    padding-bottom: 1.8mm; margin-bottom: 3.2mm;
   }
   .sec-head .label { margin-left: auto; }
   .sec-n {
@@ -121,7 +125,7 @@
     color: var(--green); letter-spacing: .1em;
   }
 
-  .intro { max-width: 15cm; margin-bottom: 5mm; color: var(--ink-soft); }
+  .intro { max-width: 15cm; margin-bottom: 3.5mm; color: var(--ink-soft); }
   .intro strong { color: var(--ink); }
 
   /* ── component blocks ──────────────────────────────────────────────── */
@@ -193,8 +197,8 @@
   .callout {
     border-left: 2.5pt solid var(--green);
     background: var(--sunk);
-    padding: 3.5mm 4mm;
-    margin: 4mm 0;
+    padding: 3.2mm 4mm;
+    margin: 3.5mm 0;
     break-inside: auto;
   }
   .callout .label { color: var(--green); display: block; margin-bottom: 1.5mm; }
@@ -209,7 +213,8 @@
 
   footer {
     border-top: .75pt solid var(--rule-firm);
-    padding-top: 3mm; margin-top: 8mm;
+    padding-top: 2.5mm; margin-top: 5mm;
+    break-before: avoid; page-break-before: avoid;
     font-size: 8.5pt; color: var(--ink-faint);
   }
 </style>
@@ -255,10 +260,10 @@
   </div>
 
   <div class="cover-foot">
-    Contents &nbsp;·&nbsp; 1 What you asked for, clause by clause &nbsp;·&nbsp; 2 The three surfaces
-    &nbsp;·&nbsp; 3 What each one does &nbsp;·&nbsp; 4 How a post gets made &nbsp;·&nbsp; 5 The rules
-    it cannot break &nbsp;·&nbsp; 6 What is not done &nbsp;·&nbsp; 7 What we need from you
-    &nbsp;·&nbsp; 8 What comes next
+    <b>Contents</b> &nbsp;·&nbsp; 1 What you asked for, clause by clause &nbsp;·&nbsp; 2 The three
+    surfaces &nbsp;·&nbsp; 3 What each one does &nbsp;·&nbsp; 4 What else was built &nbsp;·&nbsp;
+    5 How a post gets made &nbsp;·&nbsp; 6 The rules it cannot break &nbsp;·&nbsp; 7 What is not
+    done &nbsp;·&nbsp; 8 What we need from you &nbsp;·&nbsp; 9 What comes next
   </div>
 </div>
 
@@ -534,9 +539,93 @@
     </p>
   </div>
 </section>
-<!-- ═══════════════════ 4 · HOW A POST GETS MADE ═══════════════════ -->
+<!-- ═══════════════════ 4 · WHAT ELSE WAS BUILT ═══════════════════ -->
 <section>
-  <div class="sec-head"><span class="sec-n">04</span><h2>How a post actually gets made</h2><span class="label">Nine steps</span></div>
+  <div class="sec-head"><span class="sec-n">04</span><h2>What else was built</h2><span class="label">The part you never see</span></div>
+
+  <p class="intro">
+    Most of the work is not a feature. It is the machinery that keeps the features honest when nobody
+    is watching — <strong>and it is the majority of what was built.</strong> This section exists
+    because none of it appears anywhere else in this document.
+  </p>
+
+  <div class="part proven">
+    <div class="part-head"><h3>A database that refuses bad states</h3><span class="chip ok">Proven</span></div>
+    <p>
+      28 tables, 73 access rules, 31 constraints. <strong>No delete permission exists anywhere</strong>,
+      so nothing you have said can be destroyed by any code path — only killed and labelled. Every
+      table is behind row-level access, so a query cannot return material you are not entitled to even
+      if the code asks for it.
+    </p>
+  </div>
+
+  <div class="part proven">
+    <div class="part-head"><h3>A queue that survives failure</h3><span class="chip ok">Proven</span></div>
+    <p>
+      Every piece of work is a job. A job that dies half-way becomes claimable again rather than being
+      lost, retries back off rather than hammering, and a genuine failure is separated from a
+      temporary one — a rate limit gets forty patient attempts, a real error gets five. This is why a
+      dropped connection at 3am does not cost you a voice note.
+    </p>
+  </div>
+
+  <div class="part proven">
+    <div class="part-head"><h3>The retelling check</h3><span class="chip ok">Proven</span></div>
+    <p>
+      Every published post is indexed by meaning, not by words, so the system can tell that a new
+      draft is the same story told differently. The thresholds were <em>measured</em> against your
+      material rather than guessed — and when they were inherited from elsewhere they would have
+      blocked nothing while appearing to work.
+    </p>
+  </div>
+
+  <div class="part proven">
+    <div class="part-head"><h3>It notices its own drift</h3><span class="chip ok">Proven</span></div>
+    <p>
+      The system records every outside service it actually calls and tells you the first time it uses
+      one that is not on your list. A test also fails the build if the tool list you hold and the list
+      the system checks itself against ever disagree. <strong>Both exist because that drift already
+      happened once.</strong>
+    </p>
+  </div>
+
+  <div class="part proven">
+    <div class="part-head"><h3>95 automated tests, and four measuring harnesses</h3><span class="chip ok">Proven</span></div>
+    <p>
+      The tests pin the things that would fail silently: that your own underscores and asterisks
+      survive formatting, that an unmeasured acceptance test reports as unmeasurable rather than as
+      zero, that every button offered maps to an action. The harnesses measure the system against your
+      own acceptance criteria and can be re-run at any time — the scorecard in section 07 is generated,
+      not typed.
+    </p>
+  </div>
+
+  <div class="part proven">
+    <div class="part-head"><h3>Six documents, and a rehearsed handover</h3><span class="chip ok">Proven</span></div>
+    <p>
+      The specification read clause by clause, the seven build decisions with their reasoning, the
+      running cost, an operating runbook, the sequence for moving everything into your accounts, and
+      the running order for the recorded walkthrough. The account move is
+      <strong>rehearsed rather than described</strong>: all 27 database migrations were applied to an
+      empty database to prove the sequence works before anyone depends on it.
+    </p>
+  </div>
+
+  <div class="callout">
+    <span class="label">Why this matters more than it sounds</span>
+    <p>
+      Four times during this build a control was found that <em>looked</em> like it worked and did
+      nothing — a button that reverted a post and recorded no reason, a rollback that silently matched
+      no rows, a skip that was never read, a scheduler entry nobody ever created. Each was found by
+      driving the live system rather than by reading the code.
+      <strong>The machinery above is what makes the next one visible.</strong>
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════════ 5 · HOW A POST GETS MADE ═══════════════════ -->
+<section>
+  <div class="sec-head"><span class="sec-n">05</span><h2>How a post actually gets made</h2><span class="label">Nine steps</span></div>
 
   <p class="intro">
     The order is fixed and every step can stop. <strong>Nothing skips ahead</strong> — in particular
@@ -560,9 +649,9 @@
   </table>
 </section>
 
-<!-- ═══════════════════ 5 · THE RULES ═══════════════════ -->
+<!-- ═══════════════════ 6 · THE RULES ═══════════════════ -->
 <section>
-  <div class="sec-head"><span class="sec-n">05</span><h2>The three rules it cannot break</h2><span class="label">Held by the database</span></div>
+  <div class="sec-head"><span class="sec-n">06</span><h2>The three rules it cannot break</h2><span class="label">Held by the database</span></div>
 
   <p class="intro">
     Not policies the code tries to follow — <strong>constraints the database will not let it
@@ -589,9 +678,9 @@
   </div>
 </section>
 
-<!-- ═══════════════════ 6 · WHAT IS NOT DONE ═══════════════════ -->
+<!-- ═══════════════════ 7 · WHAT IS NOT DONE ═══════════════════ -->
 <section>
-  <div class="sec-head"><span class="sec-n">06</span><h2>What is not done</h2><span class="label">Stated plainly</span></div>
+  <div class="sec-head"><span class="sec-n">07</span><h2>What is not done</h2><span class="label">Stated plainly</span></div>
 
   <p class="intro">
     Twelve component tests decide whether this is finished. <strong>None has been passed and none has
@@ -639,9 +728,9 @@
     </p>
   </div>
 </section>
-<!-- ═══════════════════ 7 · WHAT WE NEED FROM YOU ═══════════════════ -->
+<!-- ═══════════════════ 8 · WHAT WE NEED FROM YOU ═══════════════════ -->
 <section>
-  <div class="sec-head"><span class="sec-n">07</span><h2>What we need from you</h2><span class="label">The critical path</span></div>
+  <div class="sec-head"><span class="sec-n">08</span><h2>What we need from you</h2><span class="label">The critical path</span></div>
 
   <p class="intro">
     Seven of the fourteen library sections are waiting on you, and they are the ones that cannot be
@@ -693,9 +782,9 @@
   </div>
 </section>
 
-<!-- ═══════════════════ 8 · WHAT COMES NEXT ═══════════════════ -->
+<!-- ═══════════════════ 9 · WHAT COMES NEXT ═══════════════════ -->
 <section>
-  <div class="sec-head"><span class="sec-n">08</span><h2>What comes next</h2><span class="label">Planned, not built</span></div>
+  <div class="sec-head"><span class="sec-n">09</span><h2>What comes next</h2><span class="label">Planned, not built</span></div>
 
   <p class="intro">
     Two pieces of work are already scoped. Neither is in your specification, and neither is built —
