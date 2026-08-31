@@ -97,6 +97,32 @@ export default async function WeeklyPass() {
 
   return (
     <main>
+      {/* ── Where everything stands ───────────────────────────────────────
+          Built from counts this page already fetches, and placed at the top of the surface Josh
+          already opens rather than on an overview page of its own. 12.7 rules out a second place to
+          go for the weekly question, and the reasoning holds for a summary too: a dashboard he has
+          to remember to visit is a dashboard he does not visit.
+
+          Each figure links to the thing it counts, so it is a way in rather than a readout. */}
+      <section className="overview" aria-label="Where everything stands">
+        <a className="ov" href="#drafts">
+          <span className="ov-n">{(drafts ?? []).length}</span>
+          <span className="ov-k">{(drafts ?? []).length === 1 ? "draft waiting" : "drafts waiting"}</span>
+        </a>
+        <a className="ov" href="/calendar">
+          <span className="ov-n">{(scheduled ?? []).length}</span>
+          <span className="ov-k">going out</span>
+        </a>
+        <a className="ov" href="/bank?status=mined">
+          <span className="ov-n">{minedCount ?? 0}</span>
+          <span className="ov-k">ready to write</span>
+        </a>
+        <a className="ov" href="/proposals">
+          <span className="ov-n">{(proposals ?? []).length}</span>
+          <span className="ov-k">{(proposals ?? []).length === 1 ? "proposal" : "proposals"}</span>
+        </a>
+      </section>
+
       {/* ── 00 · What the system wants to change (12.9 / 12.10) ───────────
           Above everything, because it is the only thing here that changes how every future post
           gets written — and because a proposal Josh never sees is one he never approves. It sits
@@ -199,7 +225,7 @@ export default async function WeeklyPass() {
       {/* ── 02 · Drafts waiting ──────────────────────────────────────────── */}
       <section className="step">
         <div className="step-head">
-          <span className="step-no">02</span>
+          <span className="step-no" id="drafts">02</span>
           <h2>Drafts waiting on you</h2>
         </div>
         <p className="step-note">

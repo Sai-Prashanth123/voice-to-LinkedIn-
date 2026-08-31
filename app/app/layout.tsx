@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import "./globals.css";
+import { CommandPalette } from "./command-palette";
 
 export const metadata: Metadata = {
   title: "The desk",
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/library">Library</Link>
             <Link href="/proposals">Proposals</Link>
           </nav>
+          <CommandPalette />
         </header>
         {children}
       </body>

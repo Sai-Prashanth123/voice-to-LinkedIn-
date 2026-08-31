@@ -28,6 +28,8 @@ import path from "node:path";
 import readline from "node:readline/promises";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { findSessions } from "./index.mjs";
+import { blank, c, done, failed, hint, no, ok, step, title, warn } from "./ui.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const AGENT = path.join(HERE, "index.mjs");
@@ -198,15 +200,207 @@ function status() {
   }
 }
 
+/* ── Doctor ───────────────────────────────────────────────────────────────── */
+
+/**
+ * Every reason this can fail to work, checked in the order it would fail.
+ *
+ * The failure this exists to prevent is the one that already happened once: the agent was built,
+ * calibrated and documented, nothing ran it, and the input produced nothing for weeks while looking
+ * finished. A silent input is indistinguishable from a quiet week — 4.4.2 says a week that produces
+ * nothing is a PASS — so the only way to tell them apart is to check the plumbing directly.
+ *
+ * Returns true when everything is in place, so setup can use the same checks rather than repeating
+ * them differently.
+ */
+async function doctor({ quiet = false } = {}) {
+  const say = { ok: quiet ? () => {} : ok, no, warn, hint };
+  let healthy = true;
+
+  // 1. Node. The agent uses top-level await and native fetch.
+  const major = Number(process.versions.node.split(".")[0]);
+  if (major >= 18) say.ok(`Node ${process.versions.node}`);
+  else {
+    healthy = false;
+    no(`Node ${process.versions.node}`);
+    hint("The agent needs Node 18 or newer for fetch and top-level await.");
+  }
+
+  // 2. The agent itself.
+  if (fs.existsSync(AGENT)) say.ok("Agent present", path.basename(AGENT));
+  else {
+    healthy = false;
+    no("Agent missing");
+    hint(`Expected it at ${AGENT}`);
+  }
+
+  // 3. Something to read. Zero sessions is not a failure — it is a machine that has not been used
+  //    for this work yet — but it is worth saying out loud rather than discovering in a fortnight.
+  const logDir = path.join(os.homedir(), ".claude", "projects");
+  if (!fs.existsSync(logDir)) {
+    warn("No Claude Code logs on this machine");
+    hint(`Looked in ${logDir}
+` +
+      "Nothing to read yet. Install it on the machine where the real work happens.");
+  } else {
+    const sessions = findSessions(logDir);
+    if (sessions.length === 0) {
+      warn("Claude Code logs found, but no sessions in them");
+    } else {
+      say.ok(`${sessions.length} sessions to read`, logDir.replace(os.homedir(), "~"));
+    }
+  }
+
+  // 4. Credentials.
+  const env = { ...readEnvFile(), ...process.env };
+  const haveUrl = Boolean(env.CONTENT_SYSTEM_URL);
+  const haveKey = Boolean(env.CONTENT_SYSTEM_KEY);
+  if (haveUrl && haveKey) say.ok("Credentials present", path.basename(ENV_FILE));
+  else {
+    healthy = false;
+    no("Credentials missing");
+    hint(`Missing: ${[!haveUrl && "CONTENT_SYSTEM_URL", !haveKey && "CONTENT_SYSTEM_KEY"]
+      .filter(Boolean).join(", ")}
+Run this without arguments and it will ask for them.`);
+  }
+
+  // 5. Do they actually work? A wrong key is the failure that produces silence rather than an error,
+  //    so it is checked against the real endpoint rather than assumed from the file being present.
+  if (haveUrl && haveKey) {
+    const target = `${String(env.CONTENT_SYSTEM_URL).replace(/\/$/, "")}/worker-triage`;
+    try {
+      const res = await fetch(target, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${env.CONTENT_SYSTEM_KEY}`,
+        },
+        // An empty batch: reaches the real endpoint with the real key and files nothing.
+        body: JSON.stringify({ source: "claude_code", sessions: [] }),
+      });
+      if (res.ok) say.ok("Reached the server", `${res.status}`);
+      else if (res.status === 401 || res.status === 403) {
+        healthy = false;
+        no(`Server rejected the key`, `${res.status}`);
+        hint("CONTENT_SYSTEM_KEY is wrong. It is the service_role key from Project Settings → API.");
+      } else {
+        warn(`Server answered ${res.status}`);
+        hint("Reachable, but not happy. The schedule will still run; check the URL.");
+      }
+    } catch (err) {
+      healthy = false;
+      no("Could not reach the server");
+      hint(`${target}
+${err.message}`);
+    }
+  }
+
+  // 6. Is it actually scheduled? The whole point of 4.4.1.
+  if (isScheduled()) say.ok("Scheduled", `daily at ${RUN_AT}`);
+  else {
+    healthy = false;
+    no("Not scheduled");
+    hint("Run this without arguments to set it up.");
+  }
+
+  return healthy;
+}
+
+/** Quiet true/false, so both the doctor and the installer can ask without printing. */
+function isScheduled() {
+  try {
+    if (process.platform === "win32") {
+      execFileSync("schtasks", ["/Query", "/TN", TASK_NAME], { stdio: "ignore" });
+    } else if (process.platform === "darwin") {
+      execFileSync("launchctl", ["list", "com.thoughtpilot.cc-agent"], { stdio: "ignore" });
+    } else {
+      execFileSync("systemctl", ["--user", "is-enabled", "cc-agent.timer"], { stdio: "ignore" });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /* ── Main ─────────────────────────────────────────────────────────────────── */
 
-if (arg === "--uninstall") { uninstall(); process.exit(0); }
-if (arg === "--status") { status(); process.exit(0); }
+/* ── Main ─────────────────────────────────────────────────────────────────── */
 
-console.log("cc-agent — scheduling the Claude Code reader (4.4.1)\n");
+const USAGE = `
+  node cc-agent/install.mjs              set it up
+  node cc-agent/install.mjs --doctor     check every reason it could fail
+  node cc-agent/install.mjs --status     is it scheduled, and when did it last run
+  node cc-agent/install.mjs --uninstall  stop it; the agent and its history stay
+`;
+
+if (arg === "--help" || arg === "-h") {
+  title("cc-agent", "reads your Claude Code sessions");
+  console.log(USAGE);
+  process.exit(0);
+}
+
+if (arg === "--uninstall") {
+  title("cc-agent", "removing the schedule");
+  uninstall();
+  process.exit(0);
+}
+
+if (arg === "--doctor") {
+  title("cc-agent", "checking every reason this could fail");
+  blank();
+  const healthy = await doctor();
+  if (healthy) done("Everything is in place.");
+  else failed("Fix the above, then run it again.");
+  process.exit(healthy ? 0 : 1);
+}
+
+if (arg === "--status") {
+  title("cc-agent", "where it stands");
+  blank();
+  await doctor();
+  blank();
+  // The raw scheduler output underneath, for the case where the summary above is not enough.
+  console.log(c.grey("  From the scheduler itself:"));
+  blank();
+  status();
+  process.exit(0);
+}
+
+/* ── Setup ────────────────────────────────────────────────────────────────── */
+
+title("cc-agent", "reads your Claude Code sessions (4.4)");
+blank();
+
+// Preflight. The same checks the doctor runs, so setup cannot pass on something the doctor would
+// later flag — and so a missing prerequisite is named before anything is written to disk.
+const major = Number(process.versions.node.split(".")[0]);
+if (major < 18) {
+  no(`Node ${process.versions.node}`);
+  hint("The agent needs Node 18 or newer. Nothing has been changed.");
+  process.exit(1);
+}
+ok(`Node ${process.versions.node}`);
+
+const logDir = path.join(os.homedir(), ".claude", "projects");
+if (fs.existsSync(logDir)) {
+  const found = findSessions(logDir);
+  if (found.length > 0) ok(`${found.length} sessions to read`, logDir.replace(os.homedir(), "~"));
+  else warn("No sessions yet — it will pick them up as you work");
+} else {
+  // Not fatal: the schedule is still worth creating on a machine about to do the work.
+  warn("No Claude Code logs on this machine yet");
+  hint(`Looked in ${logDir}`);
+}
 
 const env = await ensureCredentials();
+ok("Credentials ready", path.basename(ENV_FILE));
+
+blank();
+step("Setting it up");
+blank();
+
 const runner = writeRunner();
+ok("Runner written", "keeps the key out of the task definition");
 
 let where;
 try {
@@ -215,32 +409,37 @@ try {
     : process.platform === "darwin"
     ? installMac(runner)
     : installLinux(runner);
+  ok("Scheduled", where);
 } catch (err) {
-  console.error(`\nCould not create the schedule: ${err.message}`);
-  console.error("Run this from a normal terminal (not an editor's console) and try again.");
+  no("Could not create the schedule");
+  hint(`${err.message}\nRun this from a normal terminal rather than an editor's console.`);
   process.exit(1);
 }
 
-console.log(`\nScheduled: ${where}\n`);
-
 // Prove the wiring rather than declaring it. A dry run reads the real corpus and sends nothing, so
 // a wrong URL or key shows up now instead of silently producing nothing for a fortnight.
-console.log("Checking it actually works — reading your sessions, sending nothing:\n");
+blank();
+step("Checking it works — reading your sessions, sending nothing");
+blank();
 try {
   execFileSync(process.execPath, [AGENT, "--dry-run"], {
     stdio: "inherit",
     env: { ...process.env, ...env },
   });
+  blank();
+  ok("Dry run completed");
 } catch {
-  console.error("\nThe dry run failed. The schedule is in place, but fix the above before trusting it.");
+  blank();
+  no("The dry run failed");
+  hint("The schedule is in place, but fix the above before trusting it.\n" +
+    "`--doctor` will tell you which part is wrong.");
   process.exit(1);
 }
 
-console.log(
-  `\nDone. It runs daily at ${RUN_AT}.\n\n` +
-    `Before trusting the threshold, run:  node eval/calibrate-cc.mjs\n` +
-    `4.4.3 is explicit that ten candidates a day is worse than none — the default bar was set\n` +
-    `against a corpus that is not yours.\n\n` +
-    `  --status     is it scheduled, when did it last run\n` +
-    `  --uninstall  stop it\n`,
-);
+done(`Done. It runs daily at ${RUN_AT} and needs nothing from you.`);
+
+console.log(`  ${c.bold("One thing worth doing first")}`);
+console.log(`  ${c.grey("Run")} node eval/calibrate-cc.mjs ${c.grey("before trusting the threshold.")}`);
+console.log(`  ${c.grey("4.4.3 is explicit that ten candidates a day is worse than none, and the")}`);
+console.log(`  ${c.grey("default bar was set against a corpus that is not yours.")}`);
+console.log(USAGE);

@@ -35,21 +35,33 @@ type Material = Record<(typeof MATERIAL_FIELDS)[number][0], string | null>;
 export default async function Bank({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; q?: string }>;
 }) {
   const params = await searchParams;
   const status = params.status ?? "mined";
+  const q = (params.q ?? "").trim();
   const db = await supabaseServer();
 
+  const COLUMNS =
+    "id, ref, source, status, pillar, audience, strength, depth_reached, pinned, killed, not_before, parked_reason, notes, captured_at, time_sensitive, decays_at, last_score, last_score_reasons, last_scored_at, material(the_moment, the_detail, the_realisation, the_lesson, their_actual_words), moment_names(id, name, kind, cleared)";
+
+  // A search looks ACROSS every status. Searching inside the current tab would hide the moment being
+  // looked for whenever it had moved on — and a moment that has been drafted is exactly the one you
+  // go looking for later.
+  const searchIds = q
+    ? ((await db.rpc("search_moments", { q, limit_to: 50 })).data ?? [])
+      .map((r: { moment_id: number }) => r.moment_id)
+    : null;
+
   const [{ data: moments }, { data: pillarSection }] = await Promise.all([
-    db
-      .from("moments")
-      .select(
-        "id, ref, source, status, pillar, audience, strength, depth_reached, pinned, killed, not_before, parked_reason, notes, captured_at, time_sensitive, decays_at, last_score, last_score_reasons, last_scored_at, material(the_moment, the_detail, the_realisation, the_lesson, their_actual_words), moment_names(id, name, kind, cleared)",
-      )
-      .eq("status", status)
-      .order("captured_at", { ascending: false })
-      .limit(50),
+    searchIds
+      ? db.from("moments").select(COLUMNS).in("id", searchIds.length ? searchIds : [-1])
+      : db
+        .from("moments")
+        .select(COLUMNS)
+        .eq("status", status)
+        .order("captured_at", { ascending: false })
+        .limit(50),
     db.from("library_sections").select("body").eq("key", "pillars").maybeSingle(),
   ]);
 
@@ -77,7 +89,29 @@ export default async function Bank({
           <h2>Idea bank</h2>
         </div>
 
-        <div className="row" style={{ marginBottom: "1.5rem" }}>
+        {/* A plain GET form, so search works with JavaScript off and every result is a real URL
+            Josh can bookmark or send himself. The palette is the fast path; this is the browsing one. */}
+        <form className="row bank-search" method="get" action="/bank">
+          <input
+            type="search"
+            name="q"
+            defaultValue={q}
+            placeholder="Search everything — a phrase, a name, something they said"
+            aria-label="Search the idea bank"
+          />
+          <button type="submit" className="primary">Search</button>
+          {q && <a className="btn" href={`/bank?status=${status}`}>Clear</a>}
+        </form>
+
+        {q && (
+          <p className="step-note">
+            {(moments ?? []).length === 0
+              ? `Nothing matched "${q}". Nothing is ever deleted, so try a word he actually said.`
+              : `${(moments ?? []).length} ${(moments ?? []).length === 1 ? "match" : "matches"} for "${q}", across every status.`}
+          </p>
+        )}
+
+        <div className="row" style={{ marginBottom: "1.5rem", opacity: q ? 0.45 : 1 }}>
           {statuses.map(([key, label]) => (
             <a
               key={key}
