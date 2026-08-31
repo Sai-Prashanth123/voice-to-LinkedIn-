@@ -102,7 +102,13 @@
   /* ── sections ──────────────────────────────────────────────────────── */
 
   section { page-break-inside: auto; margin-bottom: 9mm; }
-  section.break { page-break-before: always; }
+
+  /* No forced breaks between sections. Five of them left half-empty pages that read as the end of
+     the document. Content flows; only the things that look broken when split are protected. */
+  .sec-head { break-after: avoid; page-break-after: avoid; }
+  h3 { break-after: avoid; page-break-after: avoid; }
+  table { break-inside: auto; }
+  thead { break-inside: avoid; break-after: avoid; }
 
   .sec-head {
     display: flex; align-items: baseline; gap: 3mm;
@@ -135,7 +141,7 @@
     display: flex; align-items: baseline; gap: 3mm;
     margin-bottom: 1.5mm;
   }
-  .part-head h3 { flex: 1; }
+  .part-head h3 { flex: 1; min-width: 0; }
   .part p { font-size: 9.4pt; color: var(--ink-soft); }
   .part p strong { color: var(--ink); }
 
@@ -176,6 +182,10 @@
   td.n { font-family: var(--mono); font-size: 8pt; color: var(--ink-faint); width: 8mm; }
   td.t { font-weight: 600; width: 34mm; }
   td.s { width: 26mm; }
+  /* The explanation column: the bulk of every table, so it is set softer than the labels
+     beside it and given room to wrap. */
+  td.why { color: var(--ink-soft); min-width: 40mm; }
+
   tr.finish td { border-top: 1pt solid var(--ink); border-bottom: none; background: var(--sunk); }
 
   /* ── callout ───────────────────────────────────────────────────────── */
@@ -185,7 +195,7 @@
     background: var(--sunk);
     padding: 3.5mm 4mm;
     margin: 4mm 0;
-    page-break-inside: avoid;
+    break-inside: auto;
   }
   .callout .label { color: var(--green); display: block; margin-bottom: 1.5mm; }
 
@@ -194,7 +204,8 @@
   li::marker { color: var(--ink-faint); }
 
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 7mm; }
-  .two > div { page-break-inside: avoid; }
+  /* Deliberately allowed to split. Protecting a tall block just moves the gap. */
+  .two > div { break-inside: auto; }
 
   footer {
     border-top: .75pt solid var(--rule-firm);
@@ -247,7 +258,7 @@
     Contents &nbsp;·&nbsp; 1 What you asked for, clause by clause &nbsp;·&nbsp; 2 The three surfaces
     &nbsp;·&nbsp; 3 What each one does &nbsp;·&nbsp; 4 How a post gets made &nbsp;·&nbsp; 5 The rules
     it cannot break &nbsp;·&nbsp; 6 What is not done &nbsp;·&nbsp; 7 What we need from you
-    &nbsp;·&nbsp; 8 Ownership and cost
+    &nbsp;·&nbsp; 8 What comes next
   </div>
 </div>
 
@@ -366,7 +377,7 @@
   </div>
 </section>
 <!-- ═══════════════════ 2 · THE THREE SURFACES ═══════════════════ -->
-<section class="break">
+<section>
   <div class="sec-head"><span class="sec-n">02</span><h2>Three surfaces, one pipeline</h2><span class="label">The whole design</span></div>
 
   <p class="intro">
@@ -375,24 +386,23 @@
     document explains itself.
   </p>
 
-  <div class="built">
-    <div class="item">
-      <h3>Telegram — every decision</h3><span class="chip ok">Live</span>
-      <p>Capture, the interview, approving, scheduling, verdicts, clearing a name, adding a rule.
-         Anything answerable with a tap, wherever you already are. Nothing here needs a laptop.</p>
-    </div>
-    <div class="item">
-      <h3>The desk — every prose job</h3><span class="chip ok">Live</span>
-      <p>Editing a post, writing the library, finding a moment, rolling a change back, exporting
-         everything. Four jobs a chat box physically cannot do, because each needs a cursor.</p>
-    </div>
-    <div class="item">
-      <h3>The reader — one input</h3><span class="chip part">Not installed</span>
-      <p>Runs on your own laptop, reads your Claude Code sessions, sends a short digest. Set up once,
-         then silent. The only piece that needs software on your machine.</p>
-    </div>
+  <div class="part proven">
+    <div class="part-head"><h3>Telegram — every decision</h3><span class="chip ok">Live</span></div>
+    <p>Capture, the interview, approving, scheduling, verdicts, clearing a name, adding a rule.
+       Anything answerable with a tap, wherever you already are. Nothing here needs a laptop.</p>
   </div>
 
+  <div class="part proven">
+    <div class="part-head"><h3>The desk — every prose job</h3><span class="chip ok">Live</span></div>
+    <p>Editing a post, writing the library, finding a moment, rolling a change back, exporting
+       everything. Four jobs a chat box physically cannot do, because each needs a cursor.</p>
+  </div>
+
+  <div class="part unproven">
+    <div class="part-head"><h3>The reader — one input</h3><span class="chip part">Not installed</span></div>
+    <p>Runs on your own laptop, reads your Claude Code sessions, sends a short digest. Set up once,
+       then silent. The only piece that needs software on your machine.</p>
+  </div>
   <div class="callout">
     <span class="label">Underneath all three</span>
     <p>
@@ -430,7 +440,7 @@
 </section>
 
 <!-- ═══════════════════ 3 · WHAT EACH ONE DOES ═══════════════════ -->
-<section class="break">
+<section>
   <div class="sec-head"><span class="sec-n">03</span><h2>What each one does</h2><span class="label">Every feature</span></div>
 
   <h3 style="margin-bottom:2mm">The Telegram bot</h3>
@@ -525,7 +535,7 @@
   </div>
 </section>
 <!-- ═══════════════════ 4 · HOW A POST GETS MADE ═══════════════════ -->
-<section class="break">
+<section>
   <div class="sec-head"><span class="sec-n">04</span><h2>How a post actually gets made</h2><span class="label">Nine steps</span></div>
 
   <p class="intro">
@@ -580,7 +590,7 @@
 </section>
 
 <!-- ═══════════════════ 6 · WHAT IS NOT DONE ═══════════════════ -->
-<section class="break">
+<section>
   <div class="sec-head"><span class="sec-n">06</span><h2>What is not done</h2><span class="label">Stated plainly</span></div>
 
   <p class="intro">
@@ -683,76 +693,9 @@
   </div>
 </section>
 
-<!-- ═══════════════════ 8 · OWNERSHIP AND COST ═══════════════════ -->
-<section class="break">
-  <div class="sec-head"><span class="sec-n">08</span><h2>Ownership, cost and handover</h2><span class="label">Clauses 14–15</span></div>
-
-  <div class="two">
-    <div>
-      <h3>It becomes yours</h3>
-      <p style="color:var(--ink-soft); font-size:9.6pt">
-        All code, prompts, configuration and documentation transfer to you on payment, with no ongoing
-        licence from us. Every third-party component is permissively licensed and listed by name, so
-        <em>"no licence required"</em> is checkable rather than asserted.
-      </p>
-      <h3 style="margin-top:4mm">It runs without us</h3>
-      <p style="color:var(--ink-soft); font-size:9.6pt">
-        Nothing in the design depends on Thought Pilot. The accounts currently do, which is
-        <strong>the one clause not yet met</strong>. The move into your accounts has been rehearsed
-        rather than described: all 27 database migrations were applied to an empty database to prove
-        the sequence works.
-      </p>
-    </div>
-    <div>
-      <h3>What it costs</h3>
-      <p style="color:var(--ink-soft); font-size:9.6pt">
-        <strong>$45–70 a month, typically $53</strong> — against the roughly $50 you expected.
-        Confirmed in writing before the build and itemised line by line.
-      </p>
-      <p style="color:var(--ink-soft); font-size:9.6pt">
-        Today it runs at close to zero on free tiers, which is exactly why the gate has not been
-        cleared. Routing the work through Claude Code instead of buying API credits would keep it
-        near zero — that is the plan, and it is not built yet.
-      </p>
-      <h3 style="margin-top:4mm">You are told before a bill</h3>
-      <p style="color:var(--ink-soft); font-size:9.6pt">
-        The system watches which services it actually uses and tells you in the daily message the
-        first time it touches one that is not on your list.
-      </p>
-    </div>
-  </div>
-
-  <div class="callout">
-    <span class="label">Where it runs today</span>
-    <p>
-      <b>The desk</b> is hosted free and runs in Sydney beside the database, so a page load does not
-      cross an ocean. Sign-in is restricted to one address, and the door is locked by default rather
-      than open by default. The database is in Sydney; the Telegram bot needs no hosting of its own.
-      All of it is currently in <b>Thought Pilot accounts</b> — the first thing to change at handover.
-    </p>
-  </div>
-
-  <div class="callout">
-    <span class="label">Two things worth raising directly</span>
-    <p>
-      <strong>Two services were added mid-build without telling you.</strong> Groq and Hugging Face
-      have been running the writer, the gate and the interview on free tiers while no paid key was
-      configured, and the tool list you hold named neither. That was a defensible decision made
-      silently, which is not good enough. Both are now on the list, and the system was changed so it
-      cannot happen quietly again.
-    </p>
-    <p style="margin-top:2mm">
-      <strong>Sign-in was open when it should have been closed.</strong> The single-address restriction
-      had a fault that let anyone signed in reach the app if the setting was missing — and the setting
-      had never been filled in. Found while deploying, fixed before the app went public, and no real
-      client material has ever been in the system. Development keys will be rotated before any is.
-    </p>
-  </div>
-</section>
-
-<!-- ═══════════════════ 9 · WHAT COMES NEXT ═══════════════════ -->
+<!-- ═══════════════════ 8 · WHAT COMES NEXT ═══════════════════ -->
 <section>
-  <div class="sec-head"><span class="sec-n">09</span><h2>What comes next</h2><span class="label">Planned, not built</span></div>
+  <div class="sec-head"><span class="sec-n">08</span><h2>What comes next</h2><span class="label">Planned, not built</span></div>
 
   <p class="intro">
     Two pieces of work are already scoped. Neither is in your specification, and neither is built —
