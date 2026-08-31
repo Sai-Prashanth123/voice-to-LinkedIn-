@@ -26,14 +26,16 @@ import { appendTurn, lastQuestionAt, loadSession } from "../_shared/session.ts";
 import {
   answerCallback,
   downloadFile,
-  HELP_TEXT,
   isAuthorised,
   joshChatId,
   parseCommand,
+  registerCommands,
   replaceMessage,
   sendMessage,
+  sendRich,
   type TelegramUpdate,
 } from "../_shared/telegram.ts";
+import { helpMessage, picture, ruleHelp, statusMessage } from "../_shared/home.ts";
 import {
   dayButtons,
   holdPost,
@@ -917,6 +919,27 @@ async function handleTap(
       return;
     }
 
+    // A tap on the help or status menu. Routed through handleCommand so a tap and a typed command
+    // cannot drift apart — there is one implementation of "review", not two.
+    case "menu": {
+      if (action.go === "rule") {
+        await sendRich(chatId, ruleHelp());
+        return;
+      }
+      const map: Record<string, string> = {
+        review: "review",
+        status: "status",
+        ask: "interview_me",
+        candidates: "candidates",
+        voiceguide: "voiceguide",
+        seed: "seed",
+        help: "help",
+      };
+      const kind = map[action.go];
+      if (kind) await handleCommand(db, chatId, kind);
+      return;
+    }
+
     case "proposal": {
       const result = await decideProposal(db, action.proposalId, action.approve);
 
@@ -1248,9 +1271,17 @@ async function startVisual(
 
 async function handleCommand(db: SupabaseClient, chatId: number, kind: string): Promise<void> {
   switch (kind) {
-    case "help":
-      await sendMessage(chatId, HELP_TEXT);
+    case "help": {
+      // Registered here rather than in a setup script, because a setup script is a thing someone has
+      // to remember to run. Idempotent, one request, and not awaited — the help message must not wait
+      // on it, and a missing menu is cosmetic.
+      registerCommands();
+
+      const p = await picture(db);
+      const help = helpMessage(p);
+      await sendRich(chatId, help.html, help.buttons);
       return;
+    }
 
     case "interview_me": {
       // 4.3.4 — "When Josh next opens a session, the system must raise waiting candidates and run
@@ -1312,17 +1343,9 @@ async function handleCommand(db: SupabaseClient, chatId: number, kind: string): 
     }
 
     case "status": {
-      const [{ count: queued }, { count: drafts }, { count: parked }] = await Promise.all([
-        db.from("moments").select("*", { count: "exact", head: true }).in("status", ["mined", "queued"]),
-        db.from("posts").select("*", { count: "exact", head: true }).eq("status", "draft"),
-        db.from("moments").select("*", { count: "exact", head: true }).eq("status", "parked"),
-      ]);
-      await sendMessage(
-        chatId,
-        `${drafts ?? 0} drafts waiting in the calendar.\n` +
-          `${queued ?? 0} mined moments ready to write.\n` +
-          `${parked ?? 0} parked, kept for later.`,
-      );
+      const p = await picture(db);
+      const st = statusMessage(p);
+      await sendRich(chatId, st.html, st.buttons);
       return;
     }
 

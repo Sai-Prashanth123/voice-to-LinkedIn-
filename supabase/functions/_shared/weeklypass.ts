@@ -66,6 +66,8 @@ export type Action =
   | { kind: "proposal"; proposalId: number; approve: boolean }
   /* 12.4 — declining to leave a verdict. An explicit "nothing" beats a question left hanging. */
   | { kind: "noverdict" }
+  /* A tap on the help menu. Runs the command rather than describing it. */
+  | { kind: "menu"; go: string }
   /* 10.2 — the third question: which moment the image goes with. */
   | { kind: "imgmoment"; momentId: number }
   | { kind: "imgpick" }
@@ -80,6 +82,8 @@ export function parseAction(data: string | undefined): Action {
   if (verb === "prompt") return { kind: "prompted" };
   if (verb === "imgpick") return { kind: "imgpick" };
   if (verb === "nv") return { kind: "noverdict" };
+  // menu:review, menu:ask, ... — the second segment is the command to run.
+  if (verb === "menu") return { kind: "menu", go: a ?? "" };
   if (verb === "vgy") return { kind: "voiceguide", keep: true };
   if (verb === "vgn") return { kind: "voiceguide", keep: false };
 

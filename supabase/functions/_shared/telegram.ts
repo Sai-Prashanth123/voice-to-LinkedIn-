@@ -73,14 +73,26 @@ export async function sendMessage(
   text: string,
   buttons?: Button[][],
 ): Promise<number> {
+  // Deliberately plain text: Markdown parsing fails on stray underscores and asterisks in Josh's own
+  // words, and a failed send is worse than an unformatted one. `sendRich` is the opt-in for messages
+  // we author ourselves and escape.
+  return await send(chatId, text, buttons);
+}
+
+/** The one implementation both send paths share, so they cannot drift on truncation or buttons. */
+async function send(
+  chatId: number,
+  text: string,
+  buttons?: Button[][],
+  parseMode?: "HTML",
+): Promise<number> {
   const body: Record<string, unknown> = {
     chat_id: chatId,
     // Telegram rejects messages over 4096 characters outright, which would lose a long draft.
     text: text.length > 4096 ? `${text.slice(0, 4090)}\n[…]` : text,
-    // Deliberately plain text: Markdown parsing fails on stray underscores and asterisks in
-    // Josh's own words, and a failed send is worse than an unformatted one.
     disable_web_page_preview: true,
   };
+  if (parseMode) body.parse_mode = parseMode;
 
   if (buttons?.length) {
     body.reply_markup = {
@@ -98,6 +110,49 @@ export async function sendMessage(
   if (!res.ok) throw new Error(`telegram sendMessage failed: ${res.status} ${await res.text()}`);
   const result = await res.json();
   return result?.result?.message_id ?? 0;
+}
+
+/**
+ * HTML-escape anything that is not ours.
+ *
+ * Telegram HTML mode needs exactly three characters escaped, which is why it is safe where Markdown
+ * is not: Markdown breaks on stray underscores and asterisks, and those appear constantly in real
+ * writing. A draft containing "3 < 5" would silently fail to send otherwise.
+ *
+ * EVERY piece of Josh's own text passed to sendRich must go through this. His words are the one
+ * thing in the system guaranteed not to be written for a parser.
+ */
+export function esc(text: string): string {
+  return (text ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
+ * A formatted message. Separate from `sendMessage` on purpose.
+ *
+ * Forty call sites pass Josh's raw words straight through, and switching them all to a parse mode
+ * would mean one unescaped angle bracket in a draft loses the message. So formatting is opt-in: a
+ * caller that wants bold headers uses this and escapes its inputs, and everything else keeps the
+ * plain-text guarantee it was written with.
+ *
+ * FALLS BACK RATHER THAN FAILING. If Telegram rejects the markup, the tags are stripped and it is
+ * sent as plain text. An ugly message beats a missing one — the whole reason the original code
+ * avoided Markdown.
+ */
+export async function sendRich(
+  chatId: number,
+  html: string,
+  buttons?: Button[][],
+): Promise<number> {
+  try {
+    return await send(chatId, html, buttons, "HTML");
+  } catch {
+    const plain = html.replace(/<[^>]+>/g, "")
+      .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+    return await send(chatId, plain, buttons);
+  }
 }
 
 /**
@@ -236,20 +291,54 @@ export function parseCommand(text: string | undefined): Command {
   }
 }
 
-export const HELP_TEXT =
-  `Send me anything, any time.
+/* HELP_TEXT lived here. Replaced by helpMessage() in home.ts: a wall of text listing commands
+   asks Josh to read nine verbs and then type one, where a button does it in a tap. */
 
-A voice note or a typed thought is all it takes — I will ask you about it afterwards, whenever you
-have a minute. You do not need to finish the conversation in one go.
+/**
+ * THE COMMAND MENU (setMyCommands).
+ *
+ * Typing "/" in Telegram used to show nothing at all, so every command had to be memorised or dug
+ * out of a wall of help text. That is the single clearest signal of an unfinished bot, and it is one
+ * API call to fix.
+ *
+ * Registered here rather than in a setup script because a setup script is a thing someone has to
+ * remember to run — the same reasoning that put the cc-agent scheduler behind an installer. This is
+ * idempotent and costs one request, so it can simply happen.
+ *
+ * The descriptions are what Josh reads while deciding what to tap, so they say what the command DOES
+ * for him, not what it is called.
+ */
+export const COMMAND_MENU: { command: string; description: string }[] = [
+  { command: "review", description: "This week's drafts — approve or schedule them" },
+  { command: "status", description: "Where everything stands right now" },
+  { command: "ask", description: "Run me through some questions" },
+  { command: "candidates", description: "What's waiting from calls and Claude Code" },
+  { command: "seed", description: "A long sitting — fill the bank in one go" },
+  { command: "voiceguide", description: "Talk, and I keep how you sound" },
+  { command: "rule", description: "Add a rule, e.g. /rule never say journey" },
+  { command: "stop", description: "End this session, keeping everything" },
+  { command: "help", description: "Everything I can do" },
+];
 
-  /review      this week's drafts — approve or schedule them here
-  /ask         run me through some questions
-  /candidates  show what is waiting from calls and Claude Code
-  /seed        a long sitting, one moment straight into the next, to fill the bank
-  /voiceguide  talk, and I keep it as the source for how you sound
-  /rule        add a rule to the library, e.g. /rule never use the word journey
-  /status      how the queue is looking
-  /stop        end the current session, keeping everything so far
-
-Send me an image or a diagram and I will ask what you want taken from it, then rebuild it in your
-brand.`;
+/**
+ * Publish the menu and the ☰ button beside the message box.
+ *
+ * Never throws. This is polish, and polish must not be able to take down a capture — the rule that
+ * governs `answerCallback` and the provider recording governs this too.
+ */
+export async function registerCommands(): Promise<void> {
+  try {
+    await fetch(`https://api.telegram.org/bot${token()}/setMyCommands`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commands: COMMAND_MENU }),
+    });
+    await fetch(`https://api.telegram.org/bot${token()}/setChatMenuButton`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ menu_button: { type: "commands" } }),
+    });
+  } catch {
+    // Silent by design. A missing menu is a worse-looking bot, not a broken one.
+  }
+}
