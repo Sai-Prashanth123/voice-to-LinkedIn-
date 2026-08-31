@@ -348,7 +348,7 @@
       Eight independent checks, each able to reject on its own — because a model asked to weigh eight
       things at once averages across them and lets marginal work through. <strong>130 checks have run
       and 48 rejected.</strong> The gate demonstrably rejects. What it has never done is pass a draft,
-      and section 4 explains exactly why.
+      and section 6 explains exactly why.
     </p>
   </div>
 
@@ -482,9 +482,115 @@
   </div>
 </section>
 
+<!-- ══════════════════════════ 4 · WHAT EACH ONE DOES ══════════════════════════ -->
+<section class="break">
+  <div class="sec-head"><span class="sec-n">04</span><h2>What each one does</h2><span class="label">Every feature</span></div>
+
+  <h3 style="margin-bottom:2mm">The Telegram bot</h3>
+  <p style="color:var(--ink-soft); margin-bottom:3mm">
+    Type <code>/</code> and it lists everything it can do. Most of the time you will not need any of
+    it — you send a voice note and it asks you a question back.
+  </p>
+
+  <table>
+    <thead><tr><th class="t">Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="t">/review</td><td class="why">Your weekly pass. Every draft waiting, each with buttons to schedule, rewrite or reject.</td></tr>
+      <tr><td class="t">/status</td><td class="why">What is waiting, in the order you can act on it. The buttons change with the numbers.</td></tr>
+      <tr><td class="t">/ask</td><td class="why">Starts a prompted session. Offers anything waiting from calls first, then falls back to questions.</td></tr>
+      <tr><td class="t">/candidates</td><td class="why">What your calls and working sessions turned up, waiting to be dug into.</td></tr>
+      <tr><td class="t">/seed</td><td class="why">A long sitting — one moment straight into the next, to fill the bank in one go.</td></tr>
+      <tr><td class="t">/voiceguide</td><td class="why">Records you talking, and keeps it as the source of truth for how you sound.</td></tr>
+      <tr><td class="t">/rule</td><td class="why">Adds a rule in one message. Applies to the very next draft — nothing to deploy.</td></tr>
+      <tr><td class="t">/stop</td><td class="why">Ends the session. Everything captured so far is kept.</td></tr>
+      <tr><td class="t">/help</td><td class="why">What is waiting, then buttons that run things rather than naming them.</td></tr>
+    </tbody>
+  </table>
+
+  <table>
+    <thead><tr><th class="t">You send</th><th>It does</th></tr></thead>
+    <tbody>
+      <tr><td class="t">A voice note</td><td class="why">Stores the audio, transcribes it, files it as a moment, and replies with one question about it.</td></tr>
+      <tr><td class="t">A typed thought</td><td class="why">The same, without the transcription step.</td></tr>
+      <tr><td class="t">An image</td><td class="why">Asks what you are taking from it and which moment it belongs to, then rebuilds the idea in your brand.</td></tr>
+      <tr><td class="t">A reply to a draft</td><td class="why">Treated as push-back. It rewrites and sends the new version back through all eight checks.</td></tr>
+      <tr><td class="t">Anything, mid-question</td><td class="why">If the question is hours old it asks whether this is an answer or something new, rather than guessing and losing it.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="margin:5mm 0 2mm">The desk — six screens</h3>
+  <table>
+    <thead><tr><th class="t">Screen</th><th>What it is for</th></tr></thead>
+    <tbody>
+      <tr><td class="t">This week</td><td class="why">Drafts waiting, the one conversation question, a verdict box on each. Opens with four figures showing where everything stands.</td></tr>
+      <tr><td class="t">Calendar</td><td class="why">Four weeks of what is going out. Edit in place and mark ready — the only thing that authorises publishing.</td></tr>
+      <tr><td class="t">Idea bank</td><td class="why">Every moment ever captured, searchable across your words, the scene, the detail and what they said. Pin one, kill one, correct a mangled quote.</td></tr>
+      <tr><td class="t">Reference library</td><td class="why">The fourteen sections that decide how it writes. Edit any of them and the next draft uses it. Roll any change back.</td></tr>
+      <tr><td class="t">Proposals</td><td class="why">Changes the system wants to make, each with its evidence. You approve or reject; it never changes itself.</td></tr>
+      <tr><td class="t">Export</td><td class="why">Every table, as one file, whenever you want it.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="margin:5mm 0 2mm">The Claude Code reader</h3>
+  <table>
+    <thead><tr><th class="t">Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="t">install</td><td class="why">Checks everything, asks for credentials once, schedules it daily, then proves it works with a dry run.</td></tr>
+      <tr><td class="t">--doctor</td><td class="why">Checks every reason it could fail, including whether the credentials actually work against the live server.</td></tr>
+      <tr><td class="t">--status</td><td class="why">Is it scheduled, and when did it last run.</td></tr>
+      <tr><td class="t">--uninstall</td><td class="why">Stops it. The agent and everything it has sent stay.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <span class="label">What the reader actually sends</span>
+    <p>
+      A short digest of what you said and decided. <strong>Never code, never client material.</strong>
+      Of 576 files on a typical machine, 535 are discarded before anything is read, and only the
+      genuinely unusual sessions survive the filter after that.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════════════════ 5 · HOW A POST GETS MADE ══════════════════════════ -->
+<section class="break">
+  <div class="sec-head"><span class="sec-n">05</span><h2>How a post actually gets made</h2><span class="label">Nine steps</span></div>
+
+  <p class="intro">
+    The order is fixed and every step can stop. <strong>Nothing skips ahead</strong> — in particular
+    nothing is ever drafted from a transcript or a session log without interviewing you about it
+    first.
+  </p>
+
+  <table>
+    <thead><tr><th class="n">#</th><th class="t">Step</th><th class="s">Who</th><th>What happens</th></tr></thead>
+    <tbody>
+      <tr><td class="n">01</td><td class="t">Something arrives</td><td class="s">You</td><td class="why">A voice note, a typed thought, a call transcript, a Claude Code session, or a Slack thread if you turn it on. All five land in the same idea bank.</td></tr>
+      <tr><td class="n">02</td><td class="t">It asks you about it</td><td class="s">Automatic</td><td class="why">Until the moment has a scene, a detail and a realisation. Then it stops. If it cannot get there, the moment parks rather than being padded out.</td></tr>
+      <tr><td class="n">03</td><td class="t">It picks what to write</td><td class="s">Automatic</td><td class="why">Scored on five factors, balanced across your pillars, checked against everything published so a story is never retold. If the bar cannot be met it writes fewer and says why.</td></tr>
+      <tr><td class="n">04</td><td class="t">It writes a draft</td><td class="s">Automatic</td><td class="why">Reading only your bank entry and your library. It never browses and never researches, and emits every factual claim with its source text beside it.</td></tr>
+      <tr><td class="n">05</td><td class="t">Eight checks</td><td class="s">Automatic</td><td class="why">Could anyone else have written this · does every claim trace to something you said · is a client identifiable · are all names cleared · does it sound like you · does the hook earn the next line · is it aimed at someone · does it use banned phrasing. Each can reject on its own.</td></tr>
+      <tr><td class="n">06</td><td class="t">It reaches your calendar</td><td class="s">Automatic</td><td class="why">As a draft, never live, with its image attached if you sent one.</td></tr>
+      <tr><td class="n">07</td><td class="t">You approve it</td><td class="s">You</td><td class="why">A tap in Telegram or an edit in the calendar. This is the only thing that authorises publishing, and the database refuses to store a published post without it.</td></tr>
+      <tr><td class="n">08</td><td class="t">It publishes</td><td class="s">Automatic</td><td class="why">To LinkedIn, on the date you set. Never before, and never anything you did not approve.</td></tr>
+      <tr><td class="n">09</td><td class="t">It learns</td><td class="s">Automatic</td><td class="why">What it wrote against what you approved, the numbers after seven days, and one question a week about whether a post started a conversation. It proposes library changes with evidence; you decide.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <span class="label">And one thing that is never tunable</span>
+    <p>
+      The learning loop can change how it writes — hooks, structure, pillars, timing. It can never
+      loosen the lived-experience test or the no-fabrication rule, whatever the engagement numbers
+      say. <strong>A system optimising freely against LinkedIn engagement finds its way to engagement
+      bait</strong>, and that is the one outcome that would make the whole thing worthless.
+    </p>
+  </div>
+</section>
+
 <!-- ══════════════════════════ 4 · NOT BUILT ══════════════════════════ -->
 <section class="break">
-  <div class="sec-head"><span class="sec-n">04</span><h2>What is not done</h2><span class="label">Stated plainly</span></div>
+  <div class="sec-head"><span class="sec-n">06</span><h2>What is not done</h2><span class="label">Stated plainly</span></div>
 
   <p class="intro">
     Twelve component tests decide whether this is finished. <strong>None has been passed and none has
@@ -530,7 +636,7 @@
 
 <!-- ═══════════════════════════ 5 · FROM YOU ═══════════════════════════ -->
 <section>
-  <div class="sec-head"><span class="sec-n">05</span><h2>What we need from you</h2><span class="label">The critical path</span></div>
+  <div class="sec-head"><span class="sec-n">07</span><h2>What we need from you</h2><span class="label">The critical path</span></div>
 
   <p class="intro">
     Seven of the fourteen reference library sections are waiting on you, and they are the ones that
@@ -584,7 +690,7 @@
 
 <!-- ══════════════════════════ 6 · OWNERSHIP ══════════════════════════ -->
 <section class="break">
-  <div class="sec-head"><span class="sec-n">06</span><h2>Ownership, cost and handover</h2><span class="label">Clauses 14–15</span></div>
+  <div class="sec-head"><span class="sec-n">08</span><h2>Ownership, cost and handover</h2><span class="label">Clauses 14–15</span></div>
 
   <div class="two">
     <div>
