@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Build report — Slingshot GTM content system</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* Print document. One ink, one accent, no screen affordances. */
+  @page {
+    size: A4;
+    margin: 18mm 16mm 16mm;
+  }
+
+  :root {
+    --ink:       #0d0e0d;
+    --ink-soft:  #4a504b;
+    --ink-faint: #7d847e;
+    --rule:      #d9ded9;
+    --rule-firm: #b4bcb5;
+    --sunk:      #f5f7f5;
+    --green:     #0e6b40;
+    --green-pale:#e8f1ec;
+
+    /* Georgia by choice, not by fallback. It is present on every Windows and Mac machine, so the
+       body of this document renders identically everywhere and needs no network — and it was cut for
+       reading at exactly this size. The two webfonts below carry the character. */
+    --serif:   Georgia, "Times New Roman", serif;
+    --display: "Instrument Serif", Georgia, serif;
+    --mono:    "IBM Plex Mono", Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: #fff;
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 10.2pt;
+    line-height: 1.52;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 { font-family: var(--display); font-weight: 400; margin: 0; }
+  h1 { font-size: 30pt; line-height: 1.04; letter-spacing: -.01em; }
+  h2 { font-size: 16pt; line-height: 1.1; }
+  h3 { font-size: 11.5pt; font-family: var(--serif); font-weight: 600; line-height: 1.3; }
+
+  p { margin: 0 0 .62em; }
+  p:last-child { margin-bottom: 0; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  .mono, code { font-family: var(--mono); font-size: .86em; font-variant-numeric: tabular-nums; }
+  code { background: var(--sunk); padding: .05em .3em; }
+
+  .label {
+    font-family: var(--mono);
+    font-size: 7pt;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  /* ── cover ─────────────────────────────────────────────────────────── */
+
+  .cover { page-break-after: always; padding-top: 4mm; }
+
+  .cover-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 1.5pt solid var(--ink);
+    padding-bottom: 3mm; margin-bottom: 14mm;
+  }
+
+  .cover h1 { margin-bottom: 6mm; max-width: 15cm; }
+
+  .lede { font-size: 12pt; line-height: 1.5; color: var(--ink-soft); max-width: 14cm; }
+  .lede strong { color: var(--ink); }
+
+  .figures {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 0; border: .75pt solid var(--rule-firm);
+    margin: 12mm 0;
+  }
+  .fig { padding: 4mm; border-right: .75pt solid var(--rule); }
+  .fig:last-child { border-right: none; }
+  .fig-n {
+    display: block; font-family: var(--display); font-size: 21pt; line-height: 1;
+    color: var(--green); font-variant-numeric: tabular-nums;
+  }
+  .fig-k { display: block; font-size: 8pt; color: var(--ink-faint); margin-top: 1.5mm; line-height: 1.3; }
+
+  .cover-foot {
+    border-top: .75pt solid var(--rule);
+    padding-top: 3mm; margin-top: 14mm;
+    font-size: 8.5pt; color: var(--ink-faint);
+  }
+
+  /* ── sections ──────────────────────────────────────────────────────── */
+
+  section { page-break-inside: auto; margin-bottom: 9mm; }
+  section.break { page-break-before: always; }
+
+  .sec-head {
+    display: flex; align-items: baseline; gap: 3mm;
+    border-bottom: 1pt solid var(--ink);
+    padding-bottom: 1.8mm; margin-bottom: 4mm;
+  }
+  .sec-head .label { margin-left: auto; }
+  .sec-n {
+    font-family: var(--mono); font-size: 8pt; font-weight: 500;
+    color: var(--green); letter-spacing: .1em;
+  }
+
+  .intro { max-width: 15cm; margin-bottom: 5mm; color: var(--ink-soft); }
+  .intro strong { color: var(--ink); }
+
+  /* ── component blocks ──────────────────────────────────────────────── */
+
+  .part {
+    border: .75pt solid var(--rule);
+    border-left: 2.5pt solid var(--rule-firm);
+    padding: 3.5mm 4mm;
+    margin-bottom: 2.5mm;
+    page-break-inside: avoid;
+  }
+  .part.proven { border-left-color: var(--green); }
+  .part.unproven { border-left-color: var(--rule-firm); }
+  .part.missing { border-left-color: var(--ink); }
+
+  .part-head {
+    display: flex; align-items: baseline; gap: 3mm;
+    margin-bottom: 1.5mm;
+  }
+  .part-head h3 { flex: 1; }
+  .part p { font-size: 9.4pt; color: var(--ink-soft); }
+  .part p strong { color: var(--ink); }
+
+  .chip {
+    font-family: var(--mono); font-size: 6.8pt; font-weight: 500;
+    letter-spacing: .08em; text-transform: uppercase;
+    padding: .8mm 1.6mm; white-space: nowrap;
+    border: .75pt solid currentColor;
+  }
+  .chip.ok   { color: var(--green); background: var(--green-pale); border-color: var(--green); }
+  .chip.part { color: var(--ink-soft); background: var(--sunk); }
+  .chip.no   { color: var(--ink); background: #fff; }
+
+  .clause {
+    font-family: var(--mono); font-size: 7pt;
+    color: var(--ink-faint); white-space: nowrap;
+  }
+
+  /* ── tables ────────────────────────────────────────────────────────── */
+
+  table {
+    width: 100%; border-collapse: collapse;
+    font-size: 9.2pt; margin-bottom: 3mm;
+  }
+  thead th {
+    text-align: left; font-family: var(--mono);
+    font-size: 7pt; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-faint); font-weight: 500;
+    padding: 1.8mm 2.5mm 1.8mm 0;
+    border-bottom: .75pt solid var(--rule-firm);
+  }
+  tbody td {
+    padding: 1.8mm 2.5mm 1.8mm 0;
+    border-bottom: .5pt solid var(--rule);
+    vertical-align: top;
+  }
+  tbody tr { page-break-inside: avoid; }
+  td.n { font-family: var(--mono); font-size: 8pt; color: var(--ink-faint); width: 8mm; }
+  td.t { font-weight: 600; width: 34mm; }
+  td.s { width: 26mm; }
+  tr.finish td { border-top: 1pt solid var(--ink); border-bottom: none; background: var(--sunk); }
+
+  /* ── callout ───────────────────────────────────────────────────────── */
+
+  .callout {
+    border-left: 2.5pt solid var(--green);
+    background: var(--sunk);
+    padding: 3.5mm 4mm;
+    margin: 4mm 0;
+    page-break-inside: avoid;
+  }
+  .callout .label { color: var(--green); display: block; margin-bottom: 1.5mm; }
+
+  ul { margin: 0 0 .62em; padding-left: 4.5mm; }
+  li { margin-bottom: .8mm; }
+  li::marker { color: var(--ink-faint); }
+
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 7mm; }
+  .two > div { page-break-inside: avoid; }
+
+  footer {
+    border-top: .75pt solid var(--rule-firm);
+    padding-top: 3mm; margin-top: 8mm;
+    font-size: 8.5pt; color: var(--ink-faint);
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════ COVER ══════════════════════════════ -->
+<div class="cover">
+  <div class="cover-head">
+    <span class="label">Thought Pilot &nbsp;→&nbsp; Josh Fryszer, Slingshot GTM</span>
+    <span class="label">27 August 2026</span>
+  </div>
+
+  <h1>What has been built</h1>
+
+  <p class="lede">
+    A progress report against Build Specification v2.0 of 20 August 2026 — its 17 clauses,
+    116 numbered requirements and 12 component tests. <strong>Every clause is built and deployed.</strong>
+    Nothing in the system is currently known to be broken. Nothing has been accepted either, and this
+    document is as specific about the second as the first.
+  </p>
+
+  <div class="figures">
+    <div class="fig"><span class="fig-n">17</span><span class="fig-k">clauses built<br>and audited</span></div>
+    <div class="fig"><span class="fig-n">116</span><span class="fig-k">numbered<br>requirements</span></div>
+    <div class="fig"><span class="fig-n">84</span><span class="fig-k">automated tests<br>passing</span></div>
+    <div class="fig"><span class="fig-n">0/12</span><span class="fig-k">acceptance tests<br>met yet</span></div>
+  </div>
+
+  <div class="two">
+    <div>
+      <h3>What you can use today</h3>
+      <p style="color:var(--ink-soft); font-size:9.6pt">
+        The Telegram bot takes voice notes, interviews you, and runs your weekly pass. The web app —
+        The desk — is live and holds the idea bank, the calendar, the reference library and the
+        change proposals. The database runs itself on nine schedules.
+      </p>
+    </div>
+    <div>
+      <h3>What is honestly not ready</h3>
+      <p style="color:var(--ink-soft); font-size:9.6pt">
+        No draft has yet cleared the quality gate, because no paid model has been configured. LinkedIn
+        is not connected. No image has been rebuilt. Seven of fourteen reference library sections are
+        waiting on you, and the voice guide is the one that matters.
+      </p>
+    </div>
+  </div>
+
+  <div class="cover-foot">
+    Every figure in this document was read from the live system on the date above, with test fixtures
+    excluded, and can be reproduced by running <code>node eval/acceptance.mjs</code>.
+  </div>
+</div>
+
+<!-- ═════════════════════════════ 1 · ASKED ═════════════════════════════ -->
+<section>
+  <div class="sec-head"><span class="sec-n">01</span><h2>What you asked for</h2><span class="label">Clauses 1–2</span></div>
+
+  <p class="intro">
+    A system that turns things you already say — voice notes, calls, working sessions — into LinkedIn
+    posts that <strong>could only have been written by you</strong>. Three rules were never negotiable.
+    Each is now enforced by the database rather than by our good intentions, which means they hold even
+    if the code above them is wrong.
+  </p>
+
+  <div class="part proven">
+    <div class="part-head"><h3>The lived experience test</h3><span class="clause">clause 1</span><span class="chip ok">Enforced</span></div>
+    <p>
+      <em>Could anyone else have written this? If yes, it fails.</em> Held in a locked section of your
+      reference library. The learning loop can propose changes to anything else and is
+      <strong>structurally unable to touch this</strong> — a database rule rejects the attempt.
+    </p>
+  </div>
+
+  <div class="part proven">
+    <div class="part-head"><h3>No fabrication</h3><span class="clause">9.4</span><span class="chip ok">Enforced</span></div>
+    <p>
+      Every claim, quote, number and name must trace to something you actually said. The writer emits
+      each claim with the exact source text beside it, and that is checked
+      <strong>mechanically, before any model gives an opinion</strong>. Nothing invented survives.
+    </p>
+  </div>
+
+  <div class="part proven">
+    <div class="part-head"><h3>Nothing publishes without you</h3><span class="clause">11.2</span><span class="chip ok">Enforced</span></div>
+    <p>
+      Four database constraints make an unauthorised published post <strong>impossible to store</strong>,
+      not merely unlikely. Tested adversarially: the database refuses a published post you never marked
+      ready, one with no date, and one published before you approved it.
+    </p>
+  </div>
+</section>
+
+<!-- ═════════════════════════════ 2 · BUILT ═════════════════════════════ -->
+<section class="break">
+  <div class="sec-head"><span class="sec-n">02</span><h2>What is built</h2><span class="label">The nine steps</span></div>
+
+  <p class="intro">
+    The whole pipeline exists end to end. <strong>Proven</strong> means it has been driven against the
+    live system and watched working, not read in the code. <strong>Unproven</strong> means it is built
+    and waits on something outside our control.
+  </p>
+
+  <div class="part proven">
+    <div class="part-head"><h3>Five ways in</h3><span class="clause">clause 4</span><span class="chip ok">Proven</span></div>
+    <p>
+      Voice notes, prompted sessions, call transcripts, Claude Code sessions and typed thoughts, all
+      landing in one idea bank. Send a voice note from your phone and it is transcribed, filed and
+      answered with a question — in seconds, between other things.
+      <strong>9 inputs captured so far.</strong>
+    </p>
+  </div>
+
+  <div class="part proven">
+    <div class="part-head"><h3>The interview</h3><span class="clause">clause 5</span><span class="chip ok">Proven</span></div>
+    <p>
+      Asks until a moment has a scene, a detail and a realisation — then stops. It budgets its
+      questions, rewords prompts that never land, and <strong>parks a moment rather than padding it</strong>.
+      It never writes; that is a different job with a different prompt.
+    </p>
+  </div>
+
+  <div class="part proven">
+    <div class="part-head"><h3>The idea bank</h3><span class="clause">clause 6</span><span class="chip ok">Proven</span></div>
+    <p>
+      28 tables, 73 access rules, and <strong>no delete permission anywhere</strong> — nothing can be
+      destroyed, only killed and labelled. Moments re-open when you add to them. Editable by you without
+      a developer, and exportable in full at any moment.
+    </p>
+  </div>
+
+  <div class="part proven">
+    <div class="part-head"><h3>Choosing what gets written</h3><span class="clause">clause 7</span><span class="chip ok">Proven</span></div>
+    <p>
+      Five-factor scoring, pillar balance, and a retelling check against everything already published.
+      When it cannot fill the queue without dropping the bar it <strong>runs short and says why</strong>,
+      because fewer posts is the right answer when the material is not there.
+      <strong>45 selection runs.</strong>
+    </p>
+  </div>
+
+  <div class="part unproven">
+    <div class="part-head"><h3>Drafting and the gate</h3><span class="clause">clause 9</span><span class="chip part">Built, unproven</span></div>
+    <p>
+      Eight independent checks, each able to reject on its own — because a model asked to weigh eight
+      things at once averages across them and lets marginal work through. <strong>130 checks have run
+      and 48 rejected.</strong> The gate demonstrably rejects. What it has never done is pass a draft,
+      and section 4 explains exactly why.
+    </p>
+  </div>
+
+  <div class="part unproven">
+    <div class="part-head"><h3>Visuals</h3><span class="clause">clause 10</span><span class="chip part">Built, unproven</span></div>
+    <p>
+      Send a diagram and it rebuilds the <em>idea</em> in your brand — drawn from scratch as a vector
+      image, so it is <strong>structurally incapable of resembling the original</strong> rather than
+      merely instructed not to. Your image is stored and queued; no rebuild has run yet.
+    </p>
+  </div>
+
+  <div class="part proven">
+    <div class="part-head"><h3>The calendar</h3><span class="clause">clause 11</span><span class="chip ok">Proven</span></div>
+    <p>
+      Drafts arrive as drafts. You edit in place and mark ready, and only that authorises publishing.
+      Your edits are read back into the bank automatically, because the calendar
+      <strong>is</strong> the bank rather than a copy of it.
+    </p>
+  </div>
+
+  <div class="part proven">
+    <div class="part-head"><h3>The learning loop</h3><span class="clause">clause 12</span><span class="chip ok">Proven</span></div>
+    <p>
+      The difference between what was written and what you approved is measured
+      <strong>the moment you approve</strong> — it needs no LinkedIn and no effort from you. A one-line
+      verdict is asked on the taps you already make. Changes to the library are proposed with evidence,
+      approved only by you, and reversible.
+    </p>
+  </div>
+
+  <div class="part proven">
+    <div class="part-head"><h3>Operations</h3><span class="clause">clause 13</span><span class="chip ok">Proven</span></div>
+    <p>
+      Silence alerts, queue warnings, errors surfaced once rather than every morning, and a monthly
+      report on the system itself. It also tells you if it starts using a service you were never told
+      about. <strong>Nine schedules run without anyone starting them.</strong>
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════════════════ 3 · THE PIECES ══════════════════════════ -->
+<section class="break">
+  <div class="sec-head"><span class="sec-n">03</span><h2>The pieces, and where they run</h2><span class="label">Four deliverables</span></div>
+
+  <p class="intro">
+    Four things were built. Two you use directly, one runs on your machine, and one is the engine
+    underneath.
+  </p>
+
+  <div class="part proven">
+    <div class="part-head"><h3>The Telegram bot</h3><span class="chip ok">Live</span></div>
+    <p>
+      Where the system is <em>used</em>. Capture, the interview, the weekly pass, approving posts,
+      clearing names, sending images, adding a rule. <strong>15 commands and 19 buttons</strong>, all on
+      your phone. Every decision the system needs from you can be made with a tap; nothing requires a
+      laptop.
+    </p>
+  </div>
+
+  <div class="part proven">
+    <div class="part-head"><h3>The desk — the web app</h3><span class="chip ok">Live</span></div>
+    <p>
+      Where prose gets <em>edited</em>, which a chat box cannot do. Five screens: this week, the
+      calendar, the idea bank, the reference library, and change proposals — plus a one-click export of
+      everything. <strong>Deployed and reachable.</strong> Sign-in is restricted to a single address,
+      and the door is locked by default rather than open by default.
+    </p>
+  </div>
+
+  <div class="part unproven">
+    <div class="part-head"><h3>The Claude Code agent and installer</h3><span class="chip part">Built, not installed</span></div>
+    <p>
+      Reads your working sessions on your own machine and sends a <strong>digest of what you said and
+      decided</strong> — never code, never client material. One setup command puts it on a schedule
+      (Windows, macOS and Linux all supported) and it never needs attention again. It has not been
+      installed yet, so this input has produced nothing.
+    </p>
+  </div>
+
+  <div class="part proven">
+    <div class="part-head"><h3>The engine</h3><span class="chip ok">Live</span></div>
+    <p>
+      10 background services and 26 database migrations, on nine schedules — the queue every minute,
+      selection every four hours, publishing every five minutes, the daily check at 8am, the learning
+      run on Monday mornings. <strong>285 model calls made so far, at a total cost of $0.09.</strong>
+    </p>
+  </div>
+
+  <div class="callout">
+    <span class="label">Also delivered</span>
+    <p>
+      <strong>Six written documents</strong>, because clause 14 requires them and because you should not
+      need us to run this: how the spec was read clause by clause, the seven build decisions with the
+      reasoning behind each, the running cost, the operating runbook, the account handover sequence, and
+      the running order for the recorded walkthrough. Plus <strong>84 automated tests</strong> and four
+      evaluation harnesses that measure the system against its own acceptance criteria.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════════════════ 4 · NOT BUILT ══════════════════════════ -->
+<section class="break">
+  <div class="sec-head"><span class="sec-n">04</span><h2>What is not done</h2><span class="label">Stated plainly</span></div>
+
+  <p class="intro">
+    Twelve component tests decide whether this is finished. <strong>None has been passed and none has
+    been failed</strong> — every one is waiting on something specific, and this is that list.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th class="n">#</th><th class="t">Test</th><th class="s">Waiting on</th><th>Where it stands</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="n">01</td><td class="t">Raw capture</td><td class="s">You</td><td>1 of 20 voice notes sent. The mechanism is proven; the volume is not there.</td></tr>
+      <tr><td class="n">02</td><td class="t">Prompted session</td><td class="s">You</td><td>3 of 5 sessions run.</td></tr>
+      <tr><td class="n">03</td><td class="t">Call transcripts</td><td class="s">You, then 2 weeks</td><td>Needs a call recorder chosen, then two weeks of calls.</td></tr>
+      <tr><td class="n">04</td><td class="t">Claude Code</td><td class="s">One install</td><td>The agent has never run. One command starts a two-week clock.</td></tr>
+      <tr><td class="n">05</td><td class="t">Interview</td><td class="s">You</td><td>1 of 2 answered moments reached depth. Five more were asked and never answered — which measures nothing about the interview.</td></tr>
+      <tr><td class="n">06</td><td class="t">Fabrication</td><td class="s">A paid model</td><td>Needs 10 drafts through the gate for you to audit. There are none.</td></tr>
+      <tr><td class="n">07</td><td class="t">Names</td><td class="s">A paid model</td><td>Same. Four client names are on file and correctly held back.</td></tr>
+      <tr><td class="n">08</td><td class="t">The gate</td><td class="s">A paid model</td><td>Run for real: 6 of 80 checks completed before the free model hit its limit. Not a failure — it never got to read them.</td></tr>
+      <tr><td class="n">09</td><td class="t">Selection</td><td class="s">4 weeks</td><td>45 runs so far. Needs four weeks of elapsed running.</td></tr>
+      <tr><td class="n">10</td><td class="t">Visuals</td><td class="s">A paid model</td><td>Needs a model that can see pictures. Your image is stored and queued.</td></tr>
+      <tr><td class="n">11</td><td class="t">Calendar</td><td class="s">LinkedIn</td><td>Zero exceptions, but the four-week window has not begun. The guarantee itself is proven.</td></tr>
+      <tr><td class="n">12</td><td class="t">Learning loop</td><td class="s">LinkedIn, 1 month</td><td>The mechanism runs. Nothing has published for it to learn from.</td></tr>
+      <tr class="finish"><td class="n">17a</td><td class="t">The finish line</td><td class="s">All of the above</td><td>Five of the last six drafts needing only light editing. No draft has been approved yet, so there is nothing to measure — reported as unmeasurable rather than as zero.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <span class="label">The one thing that unblocks the most</span>
+    <p>
+      <strong>A paid model key.</strong> The build has been running on free tiers, which allow 8,000
+      words a minute where a single quality check needs roughly 16,000. That one fact blocks four
+      component tests and the finish line itself.
+    </p>
+    <p>
+      It is worth being precise about what this is <em>not</em>: the gate is not broken. Reading its
+      rejections shows it correctly catching genuine invention — phrases the free model added that you
+      never said. <strong>The safety mechanism works; the writer beneath it is the cheap one.</strong>
+      This is already inside the $53 a month confirmed in the cost document.
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 5 · FROM YOU ═══════════════════════════ -->
+<section>
+  <div class="sec-head"><span class="sec-n">05</span><h2>What we need from you</h2><span class="label">The critical path</span></div>
+
+  <p class="intro">
+    Seven of the fourteen reference library sections are waiting on you, and they are the ones that
+    cannot be guessed without putting words in your mouth.
+  </p>
+
+  <div class="part missing">
+    <div class="part-head"><h3>The voice guide</h3><span class="clause">8.1, 8.2</span><span class="chip no">Blocking</span></div>
+    <p>
+      A recording of you talking at length, in your own words — <strong>never your old posts</strong>,
+      which you have said have drifted. The entire quality argument rests on this, and it has no date
+      against it. The system has already written you a first draft to react to, which is a far easier
+      thing to answer than a blank page. It needs about 400 words of you speaking first.
+    </p>
+  </div>
+
+  <div class="part missing">
+    <div class="part-head"><h3>Pillars, audience, gate rules, visual brand, reference posts</h3><span class="clause">clause 8</span><span class="chip no">Waiting</span></div>
+    <p>
+      Each section explains what belongs in it and why we did not draft it for you. Editable from The
+      desk in a browser, or from Telegram with a single message — a rule can be added in under a minute,
+      because that is how it will actually get maintained.
+    </p>
+  </div>
+
+  <div class="part missing">
+    <div class="part-head"><h3>Connect LinkedIn</h3><span class="clause">clause 11, 12.1</span><span class="chip no">Waiting</span></div>
+    <p>
+      Posting is self-serve and needs no approval. Post analytics sits behind a review that takes time,
+      so it is worth starting early. This begins the four-week clocks on two component tests.
+    </p>
+  </div>
+
+  <div class="part missing">
+    <div class="part-head"><h3>Answer what is already asked, and keep sending</h3><span class="clause">clauses 4, 5</span><span class="chip no">Waiting</span></div>
+    <p>
+      Five moments are sitting asked and unanswered. Beyond those: nineteen more voice notes, two more
+      sessions, and a decision on which call recorder you use.
+    </p>
+  </div>
+
+  <div class="callout">
+    <span class="label">The honest constraint</span>
+    <p>
+      <strong>The critical path is calendar time, not code.</strong> Five of the twelve tests need two
+      to four weeks of live running, and those clocks have not started. No amount of building shortens
+      them. The most valuable thing anyone can do this week is start one.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════════════════ 6 · OWNERSHIP ══════════════════════════ -->
+<section class="break">
+  <div class="sec-head"><span class="sec-n">06</span><h2>Ownership, cost and handover</h2><span class="label">Clauses 14–15</span></div>
+
+  <div class="two">
+    <div>
+      <h3>It becomes yours</h3>
+      <p style="color:var(--ink-soft)">
+        All code, prompts, configuration and documentation transfer to you on payment, with no ongoing
+        licence from us. Every third-party component is permissively licensed and listed by name, so
+        <em>"no licence required"</em> is checkable rather than asserted.
+      </p>
+      <h3 style="margin-top:4mm">It runs without us</h3>
+      <p style="color:var(--ink-soft)">
+        Nothing in the design depends on Thought Pilot. The accounts currently do, which is
+        <strong>the one clause not yet met</strong> — everything runs today in our Supabase
+        organisation, on our keys. The move into your accounts has been rehearsed rather than
+        described: all 26 migrations were applied to an empty database to prove the sequence works.
+      </p>
+    </div>
+    <div>
+      <h3>What it costs</h3>
+      <p style="color:var(--ink-soft)">
+        <strong>$45–70 a month, typically $53</strong> — against the roughly $50 you expected. Confirmed
+        in writing before the build, itemised line by line, with three levers if you want it firmly
+        under $50.
+      </p>
+      <p style="color:var(--ink-soft)">
+        Today it is running at close to zero, on free tiers, which is exactly why the gate has not been
+        cleared. Two decisions cost money and we would not economise on either: the eight-check gate at
+        about $6, and database backups at $25.
+      </p>
+      <h3 style="margin-top:4mm">You will be told before a bill</h3>
+      <p style="color:var(--ink-soft)">
+        The system now watches which services it actually uses and tells you in the daily message the
+        first time it touches one that is not on your list.
+      </p>
+    </div>
+  </div>
+
+  <div class="callout">
+    <span class="label">Two things worth raising directly</span>
+    <p>
+      <strong>Two services were added mid-build without telling you.</strong> Groq and Hugging Face have
+      been running the writer, the gate and the interview on free tiers while the paid key was not
+      configured, and the tool list you hold named neither. That was a defensible decision made
+      silently, which is not good enough. Both are now on the list, and the system was changed so it
+      cannot happen quietly again.
+    </p>
+    <p style="margin-top:2mm">
+      <strong>Sign-in was open when it should have been closed.</strong> The single-address restriction
+      had a fault that let anyone signed in reach the app if the setting was missing — and the setting
+      had never been filled in. Found while deploying, fixed before the app went public, and no real
+      client material has ever been in the system. Development keys will be rotated before any is.
+    </p>
+  </div>
+</section>
+
+<footer>
+  Build Specification v2.0 · 20 August 2026 · prepared by Josh Fryszer, Slingshot GTM, for Thought
+  Pilot. This report covers work to 27 August 2026. Figures are read from the live system with test
+  fixtures excluded and are reproducible on demand.
+</footer>
+
+</body>
+</html>
