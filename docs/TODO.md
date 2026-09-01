@@ -29,7 +29,7 @@ Tick when done **and** verified against the live system.
 - [x] 2.4 Add it to the installer's schedule
 - [x] 2.5 Mark Claude Code drafts in the database
 - [x] 2.6 Run one moment end to end: idea → draft → eight checks — **done, draft 33, 8/8**
-- [ ] 2.7 Read the rejections and tweak the skills
+- [x] 2.7 Read the rejections and tweak the skills — **found a check that judged nothing**
 
 > **Where Gemini gets to, measured.** A single draft now clears all eight checks in one run —
 > the first time that has happened, and something Groq never managed. Acceptance test 8 needs

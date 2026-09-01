@@ -1494,3 +1494,59 @@ more than it first appears:
 The build order will be driven by two things the spec makes unavoidable: the components whose acceptance
 tests need weeks of elapsed observation must go live early, and the interview must come first because the
 seeding session depends on it and everything downstream tunes against what the seeding session produces.
+
+---
+
+## Task 2.7 — the fifth control that looked like it worked and did nothing
+
+Reading the gate's own rejections, with fixtures separated from real drafts, produced one number
+that did not fit:
+
+| Check | Fixtures rejected | Real drafts rejected |
+|---|---|---|
+| `anyone_else` | **6 of 6** | 2 of 13 |
+| `claims_trace` | 5 of 5 | 12 of 16 |
+| `aimed_at_someone` | 3 of 5 | 8 of 13 |
+| `voice_guide` | **0 of 5** | **0 of 13** |
+
+The fixtures are written to be deliberately generic — acceptance test 8 requires at least nine of
+ten to be rejected. `anyone_else` caught every one. `voice_guide` passed every one, and has never
+failed anything in eighteen runs.
+
+**It was not being lenient. It had nothing to judge against.**
+
+### Two different answers to "is this section filled in?"
+
+Seven of the fourteen library sections are not blank. They contain prose explaining what Josh should
+put there and why we did not guess it for him — *"FOR JOSH. Not drafted, because guessing at what
+you write about would put words in your mouth."* is 462 characters.
+
+`loadLibrary` decided a section was supplied by testing `body.length > 0`. So all seven counted as
+supplied, and **the drafter and the gate were handed six sections of instructions addressed to
+somebody else and told they were the standard.** The acceptance harness already knew better — it
+strips `DELIBERATELY EMPTY` before deciding whether the voice guide exists — so the system held two
+answers to the same question and they disagreed. Nothing compared them.
+
+`isSupplied()` in `views.ts` is now the single answer. `STARTER` sections stay supplied: Thought
+Pilot wrote them to be used, and a draft written against them is written against something real.
+
+### What changed, and what deliberately did not
+
+A check whose section is empty is now recorded as **NOT JUDGED**, with `model = 'none'` and a reason
+that says so, before any model is called. It still passes — blocking a draft over a section Josh was
+never required to supply first would punish him for a gap he has already been told about.
+
+What changed is that the pass is no longer indistinguishable from an earned one. A green verdict
+with no reason reads identically everywhere `gate_runs` is shown: the draft record, the desk,
+`list_drafts`. The scorecard has warned about this since clause 17 was built, but that warning lived
+in a report nobody reads per draft.
+
+`aimed_at_someone` was deliberately **not** listed as section-dependent, though it reads the audience
+section. It also reads the audience recorded against the moment, and `GATE_USER` already handles a
+missing one on purpose — so it can still judge a post on its own terms. The tempting rule ("it reads
+a section, so list it") would have switched off a check that works.
+
+### The one this does not fix
+
+`voice_guide` becomes a real check the moment Josh records ~400 words of himself talking. Until
+then it is an honest gap rather than a silent pass — which is an improvement, not a substitute.

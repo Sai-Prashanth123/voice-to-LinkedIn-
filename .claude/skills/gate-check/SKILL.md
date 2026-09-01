@@ -62,6 +62,19 @@ softened:
   Plausibility is irrelevant. **If it is not in the source, it is fabricated** — including a detail
   that makes the story better.
 
+## A check with nothing to judge against
+
+Some checks read one library section. If that section is empty, the system records the check as
+**NOT JUDGED** before you are asked, and it will not appear in your list. You will not have to
+decide what to do about it.
+
+This matters because it was getting decided the wrong way silently. `voice_guide` had failed **0
+times out of 18** — including all five drafts written to be deliberately generic, which
+`anyone_else` caught 6 out of 6. It was not being lenient; the voice guide section is still the
+placeholder, so there was nothing to compare a draft to and everything looked compliant.
+
+**If a check does appear in your list, it has a real basis. Judge it.**
+
 ## After the eight
 
 `record_gate_verdict` tells you how many remain and what has failed so far. When all eight are in:

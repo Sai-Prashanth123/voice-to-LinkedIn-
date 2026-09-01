@@ -61,6 +61,34 @@ export const VIEWS: Record<LibraryViewName, readonly string[]> = {
   visual: VISUAL_SECTIONS,
 };
 
+/**
+ * Whether a section holds content, or is still a placeholder addressed to Josh.
+ *
+ * WHY THIS IS NOT `body.length > 0`
+ *
+ * It was, and that was wrong in a way nothing surfaced. Seven of the fourteen sections are not
+ * blank — they contain prose explaining what Josh should put there and why we did not guess it for
+ * him. "FOR JOSH. Not drafted, because guessing at what you write about would put words in your
+ * mouth." is 462 characters, so a length test calls it supplied, and the drafter is handed six
+ * sections of instructions written to somebody else and told they are the standard.
+ *
+ * The acceptance harness already knew better — it strips DELIBERATELY EMPTY before deciding whether
+ * the voice guide exists — so the system held two different answers to "is this section filled in?"
+ * and they disagreed. This is the one both now use.
+ *
+ * STARTER sections are supplied. Thought Pilot wrote them as a working starting point, Josh is
+ * invited to cut what he does not recognise, and a draft written against them is written against
+ * something real.
+ */
+export function isSupplied(body: string | null | undefined): boolean {
+  const text = (body ?? "").trim();
+  if (!text) return false;
+  // Both markers appear at the head of the section, under its title.
+  if (/DELIBERATELY EMPTY/.test(text)) return false;
+  if (/^#[^\n]*\n+\s*FOR JOSH\b/.test(text)) return false;
+  return true;
+}
+
 export interface SectionRow {
   key: string;
   title: string;
@@ -84,7 +112,9 @@ export function renderLibrary(rows: SectionRow[], view: LibraryViewName): {
 
   for (const row of rows) {
     if (!wanted.has(row.key)) continue;
-    const body = (row.body ?? "").trim();
+    // A placeholder is recorded as absent, so every caller asking "is this filled in?" gets the
+    // same answer, and the prompt shows the gap rather than the note explaining the gap.
+    const body = isSupplied(row.body) ? (row.body ?? "").trim() : "";
     sections[row.key] = body;
     parts.push(
       body.length > 0

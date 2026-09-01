@@ -33,6 +33,45 @@ import { retryOrPark } from "./draft.ts";
 const NEEDS_SOURCE = new Set(["claims_trace", "anyone_else", "identifiable"]);
 
 /**
+ * Checks that judge a draft against one library section, and cannot judge anything without it.
+ *
+ * Stated explicitly rather than matched by name. The two happen to share a spelling today, and a
+ * lookup that relied on that would silently stop working the first time a check or a section was
+ * renamed — by passing every draft, which is the direction that does not get noticed.
+ *
+ * Only genuine dependencies belong here. `aimed_at_someone` reads the audience section but also the
+ * audience recorded against the moment, and GATE_USER already handles a missing one deliberately,
+ * so it can still judge a post on its own terms and is not listed.
+ */
+const CHECK_NEEDS_SECTION: Record<string, string> = {
+  voice_guide: "voice_guide",
+  banned_phrases: "banned_phrases",
+};
+
+/**
+ * Which of these checks cannot be judged, because the section they read is empty.
+ *
+ * Pulled out and exported so it can be tested without a database. The behaviour it guards is the
+ * kind that fails silently: get it wrong in one direction and a real check is skipped, get it wrong
+ * in the other and every draft is blocked on a section Josh was never required to fill in first.
+ */
+export function unjudgeableChecks<T extends { key: string }>(
+  checks: T[],
+  sections: Record<string, string>,
+): T[] {
+  return checks.filter((c) => {
+    const section = CHECK_NEEDS_SECTION[c.key];
+    return Boolean(section) && !(sections[section] ?? "").trim();
+  });
+}
+
+export const notJudged = (section: string) =>
+  `NOT JUDGED — the "${section}" section of the reference library is empty, so there was nothing ` +
+  `to judge this draft against. Recorded as passed so a section Josh has not supplied cannot ` +
+  `block a draft, but this is an absence of evidence rather than evidence of quality. It becomes ` +
+  `a real check the moment that section is filled in.`;
+
+/**
  * Run `fn` over `items` with at most `limit` in flight.
  *
  * Promise.all was fine until a provider with a per-minute token budget arrived and eight concurrent
@@ -96,7 +135,44 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
     .eq("draft_id", draftId);
 
   const already = new Map((done ?? []).map((r) => [r.check_key, r]));
-  const remaining = GATE_CHECKS.filter((c) => !already.has(c.key));
+  let remaining = GATE_CHECKS.filter((c) => !already.has(c.key));
+
+  // A CHECK WITH NO BASIS IS RECORDED AS UNJUDGED, NOT AS A PASS.
+  //
+  // Measured across every run to date: voice_guide has failed 0 times out of 18, including all five
+  // deliberately generic drafts that acceptance test 8 exists to have rejected. anyone_else caught
+  // 6 of those 6. The difference is not that the check is lenient — it is that the section it
+  // judges against is the placeholder Josh has not replaced, so there is nothing to compare a draft
+  // to and every draft looks compliant.
+  //
+  // It still passes, because blocking a draft for a section Josh has not supplied would punish him
+  // for a gap he has already been told about. What changes is that the row now says so. A green
+  // verdict with no reason is indistinguishable from an earned one everywhere gate_runs is read —
+  // the draft record, the desk, list_drafts — and that is exactly the kind of control that looks
+  // like it works and does nothing.
+  //
+  // The scorecard has warned about this since clause 17 was built. The warning lived in a report
+  // nobody reads per draft; this puts it where the verdict is.
+  const unjudgeable = unjudgeableChecks(remaining, library.sections);
+
+  if (unjudgeable.length > 0) {
+    remaining = remaining.filter((c) => !unjudgeable.includes(c));
+    const rows = unjudgeable.map((c) => ({
+      draft_id: draftId,
+      check_key: c.key,
+      passed: true,
+      reason: notJudged(CHECK_NEEDS_SECTION[c.key]),
+      model: "none",
+    }));
+    await db.from("gate_runs").insert(rows);
+    for (const row of rows) {
+      already.set(row.check_key, {
+        check_key: row.check_key,
+        passed: true,
+        reason: row.reason,
+      });
+    }
+  }
 
   // Concurrency is a provider property, and now it is actually asked for rather than decided here.
   // This used to compare provider() against the
