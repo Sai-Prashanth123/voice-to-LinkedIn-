@@ -28,8 +28,14 @@ Tick when done **and** verified against the live system.
 - [x] 2.3 Build the pull loop in `cc-agent/work.mjs`
 - [x] 2.4 Add it to the installer's schedule
 - [x] 2.5 Mark Claude Code drafts in the database
-- [ ] 2.6 Run one moment end to end: idea → draft → eight checks
+- [x] 2.6 Run one moment end to end: idea → draft → eight checks — **done, draft 33, 8/8**
 - [ ] 2.7 Read the rejections and tweak the skills
+
+> **Where Gemini gets to, measured.** A single draft now clears all eight checks in one run —
+> the first time that has happened, and something Groq never managed. Acceptance test 8 needs
+> **80** checks, and the free tier limits requests per minute, so the queue backs off and grinds
+> rather than finishing. The queue is behaving correctly; the tier is the ceiling. Test 8 needs
+> either a paid tier or a run spread across hours.
 
 ## Phase 3 — Josh (start now, runs alongside)
 - [ ] 3.1 Record the voice guide — ~400 words
