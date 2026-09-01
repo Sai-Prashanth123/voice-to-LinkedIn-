@@ -4,7 +4,7 @@ Plain task list. Detail for each is in `06-roadmap.md`.
 Tick when done **and** verified against the live system.
 
 ## Phase 1 — MCP connector
-- [ ] 1.1 Create the `mcp-server/` package
+- [x] 1.1 Create the `mcp-server/` package
 - [ ] 1.2 Add the read tools (moments, library, drafts, scoreboard)
 - [ ] 1.3 Add the write tools (create draft, record verdict, propose change)
 - [ ] 1.4 Add a scoped database role — no delete rights

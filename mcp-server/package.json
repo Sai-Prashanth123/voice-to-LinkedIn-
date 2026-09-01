@@ -1,0 +1,17 @@
+{
+  "name": "content-system-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server exposing the content system to Claude Code.",
+  "bin": { "content-system-mcp": "./index.mjs" },
+  "scripts": {
+    "start": "node index.mjs",
+    "check": "node index.mjs --check",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.22.0"
+  },
+  "engines": { "node": ">=20" }
+}

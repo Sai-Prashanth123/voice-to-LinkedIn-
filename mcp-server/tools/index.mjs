@@ -1,0 +1,31 @@
+/**
+ * The tool registry.
+ *
+ * One flat list, so registration is a loop rather than a place to forget a tool. Each entry is
+ * { name, config, handler } where config is the MCP tool config (title, description, inputSchema)
+ * and handler receives (args, { db }).
+ *
+ * Handlers return a plain value. Turning that into MCP's content envelope, and turning a thrown
+ * error into a readable message rather than a transport failure, both happen once in index.mjs —
+ * a handler that has to remember to do either is a handler that will eventually forget.
+ *
+ *   health      — this file's neighbour, and the only tool that needs no schema
+ *   read tools  — task 1.2, tools/read.mjs
+ *   write tools — task 1.3, tools/write.mjs
+ */
+
+import { health } from "./health.mjs";
+import { readTools } from "./read.mjs";
+import { writeTools } from "./write.mjs";
+
+export const tools = [...health, ...readTools, ...writeTools];
+
+/** Guards against two tools claiming the same name, which registers silently and shadows one. */
+export function assertUniqueNames(list = tools) {
+  const seen = new Set();
+  for (const t of list) {
+    if (seen.has(t.name)) throw new Error(`Two tools are both named "${t.name}"`);
+    seen.add(t.name);
+  }
+  return list;
+}

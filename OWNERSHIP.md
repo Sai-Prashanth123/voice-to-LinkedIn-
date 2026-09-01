@@ -18,6 +18,7 @@ Everything in this repository, on payment:
   vendor's method rather than a deliverable, and 14.2 does not carve them out
 - The web app (`app/`)
 - The scheduled uploader (`cc-agent/`)
+- The MCP server that exposes the system to Claude Code (`mcp-server/`)
 - The documentation, the evaluation harnesses and the tests (`docs/`, `eval/`)
 
 Thought Pilot retains no licence, no royalty, and no right to be told how it is used or changed.
@@ -33,6 +34,7 @@ permissively licensed and none of them is Thought Pilot's:
 | `react`, `react-dom` | MIT |
 | `@supabase/supabase-js`, `@supabase/ssr` | MIT |
 | `typescript`, `@types/*` | Apache-2.0 / MIT |
+| `@modelcontextprotocol/sdk` | MIT |
 | `@resvg/resvg-wasm` (SVG rasterising, clause 10) | MPL-2.0 |
 | Deno standard library, via `npm:` and `jsr:` specifiers | MIT |
 
