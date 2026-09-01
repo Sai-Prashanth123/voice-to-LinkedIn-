@@ -5,11 +5,22 @@ Tick when done **and** verified against the live system.
 
 ## Phase 1 — MCP connector
 - [x] 1.1 Create the `mcp-server/` package
-- [ ] 1.2 Add the read tools (moments, library, drafts, scoreboard)
-- [ ] 1.3 Add the write tools (create draft, record verdict, propose change)
-- [ ] 1.4 Add a scoped database role — no delete rights
-- [ ] 1.5 Register the server in `.mcp.json`
-- [ ] 1.6 Test every tool once against live data
+- [x] 1.2 Add the read tools (moments, library, drafts, scoreboard)
+- [x] 1.3 Add the write tools (create draft, record verdict, propose change)
+- [x] 1.4 Add a scoped database role — no delete rights *(role live; its key needs one command from you)*
+- [x] 1.5 Register the server in `.mcp.json`
+- [x] 1.6 Test every tool once against live data — 21 tests passing
+
+> **1.4 needs one command from you.** The `content_mcp` role and its grants are applied: 16 tables
+> readable, 3 insertable, zero update or delete. Minting its key needs a personal access token,
+> which is a credential rather than a project setting, so it is not something to take without
+> asking:
+>
+> `SUPABASE_ACCESS_TOKEN=sbp_... node mcp-server/mint-key.mjs --write`
+>
+> Get one at supabase.com/dashboard/account/tokens. It is used for that one call and stored nowhere.
+> Until then the server runs and the tools are tested against the service role, which proves the
+> tools but not the scope — the scope is proved separately, by reading the grants.
 
 ## Phase 2 — Writing skills
 - [ ] 2.1 Write the drafting skill

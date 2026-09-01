@@ -8,6 +8,11 @@ create role anon;
 create role authenticated;
 create role service_role;
 
+-- PostgREST connects as this one and switches into whichever role a request's key names. It was
+-- missing until 0028 needed it, because nothing before then granted a role to it.
+create role authenticator noinherit login password 'shim';
+grant anon, authenticated, service_role to authenticator;
+
 -- Supabase keeps extensions here; 0008 relocates `vector` into it.
 create schema if not exists extensions;
 

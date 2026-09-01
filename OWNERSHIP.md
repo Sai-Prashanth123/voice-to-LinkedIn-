@@ -34,7 +34,7 @@ permissively licensed and none of them is Thought Pilot's:
 | `react`, `react-dom` | MIT |
 | `@supabase/supabase-js`, `@supabase/ssr` | MIT |
 | `typescript`, `@types/*` | Apache-2.0 / MIT |
-| `@modelcontextprotocol/sdk` | MIT |
+| `@modelcontextprotocol/sdk`, `zod` | MIT |
 | `@resvg/resvg-wasm` (SVG rasterising, clause 10) | MPL-2.0 |
 | Deno standard library, via `npm:` and `jsr:` specifiers | MIT |
 

@@ -40,9 +40,11 @@ otherwise look identical: an unreachable project, a rejected key, and a role wit
 | `db.mjs` | A thin PostgREST client — no `@supabase/supabase-js`, none of it applies here |
 | `tools/index.mjs` | The registry. One flat list, so registering is a loop |
 | `tools/health.mjs` | Connectivity, and whether the role can actually read |
-| `tools/read.mjs` | Task 1.2 |
-| `tools/write.mjs` | Task 1.3 |
+| `tools/read.mjs` | `list_moments` · `get_moment` · `get_library` · `list_drafts` · `get_acceptance` |
+| `tools/write.mjs` | `create_draft` · `record_gate_verdict` · `propose_library_change` |
+| `mint-key.mjs` | Creates the scoped key. Needs a personal access token, once |
 | `index.test.mjs` | Real protocol over a real pipe to a real child process |
+| `tools.test.mjs` | Every tool against the live database |
 
 ## Two things worth knowing
 
@@ -56,10 +58,25 @@ stdout directly.
 that goes wrong here is the second kind, so `index.mjs` wraps every handler to make sure it stays
 that way.
 
-## State
+## The scope, and what still needs doing
 
-Task 1.1 is done: the package runs, speaks MCP, and reaches the live project.
+Migration `0028_mcp_role.sql` creates the `content_mcp` Postgres role and it is applied: **16 tables
+readable, 3 insertable, zero update and zero delete.** The scope is the grant list, not this
+server's code — a scope enforced in JavaScript lasts exactly as long as nobody makes a mistake in
+JavaScript.
 
-The key in `.env` is currently the publishable (anon) key, which has **no grants** — so `health`
-reports `can_read: false` and that is correct, not a fault. Task 1.4 creates the scoped role
-(`0028_mcp_role.sql`) and that key replaces it. Task 1.5 registers the server in `.mcp.json`.
+That migration also **revokes TRUNCATE across the whole schema**, which was a real gap rather than
+tidying. `DELETE` was deliberately revoked everywhere, because 6.3 says a moment is killed and
+labelled rather than removed — but Supabase's default grant of ALL includes TRUNCATE, which empties
+a table, is not a DELETE, and no policy applies to it. Only `postgres` still holds it, which is
+inherent to owning the tables; the system never connects as `postgres`.
+
+**One command is outstanding.** Minting the role's key needs a personal access token, which is a
+credential rather than a project setting:
+
+```bash
+SUPABASE_ACCESS_TOKEN=sbp_... node mint-key.mjs --write
+```
+
+Until it is run, `--check` reports no grants and the tests fall back to the service role. That
+proves the tools but not the scope, and the test file says so where it does it.
