@@ -31,6 +31,12 @@ Tick when done **and** verified against the live system.
 - [x] 2.6 Run one moment end to end: idea → draft → eight checks — **done, draft 33, 8/8**
 - [x] 2.7 Read the rejections and tweak the skills — **found a check that judged nothing**
 
+> **The free tier ceiling, measured exactly.** Every Gemini 3.x *flash* model allows **20 requests
+> per day** (quotaId ). Eight checks per draft
+> means one draft costs 40% of a day. Only  has real headroom, so all three tiers now
+> point at it — which runs the pipeline for free but is **not** a result acceptance test 8 can be
+> reported against.
+>
 > **Where Gemini gets to, measured.** A single draft now clears all eight checks in one run —
 > the first time that has happened, and something Groq never managed. Acceptance test 8 needs
 > **80** checks, and the free tier limits requests per minute, so the queue backs off and grinds
@@ -48,7 +54,7 @@ Tick when done **and** verified against the live system.
 
 ## Phase 4 — Testing
 - [x] 4.1 Build the soak script — `node eval/soak.mjs`
-- [~] 4.2 Push 10+ drafts through the gate — queued and grinding; free tier is the ceiling
+- [~] 4.2 Push 10+ drafts through the gate — grinding through; 9 of 20 fixtures rejected so far
 - [x] 4.3 Read every rejection — `--reasons`, and the split is now automatic
 - [x] 4.4 Run the image rebuild for the first time — **done**: visuals row 1, SVG + rendered PNG in storage
 - [ ] 4.5 Re-run the scoreboard

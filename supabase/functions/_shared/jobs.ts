@@ -13,7 +13,7 @@
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { admin, logEvent } from "./db.ts";
-import { budgetRemaining, estimatedCost, exceedsProviderCeiling } from "./llm.ts";
+import { budgetRemaining, estimatedCost, exceedsProviderCeiling, pacing } from "./llm.ts";
 import { loadSecrets, secret } from "./secrets.ts";
 import type { Job } from "./types.ts";
 
@@ -45,10 +45,23 @@ export async function runWorker(opts: RunOptions, handler: Handler): Promise<Res
   await loadSecrets(db);
   const results: { id: number; ok: boolean; error?: string }[] = [];
 
+  // HOW MANY JOBS MAY RUN AT ONCE IS A PROVIDER QUESTION, NOT A CONSTANT.
+  //
+  // The gate paces itself - it knows to space eight checks out on a throttled provider. What it
+  // could not know is that three copies of it were running in the same tick. Batch 3, two checks
+  // in flight each, seven seconds apart came to roughly fifty requests a minute against a free
+  // tier allowing about ten, so every job 429d, backed off, and the queue ground without
+  // finishing. The per-job pacing looked correct in isolation and was wrong in aggregate.
+  //
+  // A provider that asks to be spaced out gets one job at a time. Slower, and it actually
+  // completes.
+  const paced = opts.paced === false ? { spacingMs: 0 } : pacing();
+  const batch = paced.spacingMs > 0 ? 1 : (opts.batch ?? 3);
+
   const { data, error } = await db.rpc("claim_jobs", {
     p_worker: opts.name,
     p_types: opts.types,
-    p_limit: opts.batch ?? 3,
+    p_limit: batch,
   });
 
   if (error) {

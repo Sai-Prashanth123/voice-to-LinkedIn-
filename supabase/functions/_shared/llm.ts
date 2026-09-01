@@ -110,18 +110,44 @@ const HF_MODELS: Record<Role, string> = {
 const GEMINI_MODELS: Record<Role, string> = {
   // Deliberately pinned rather than the -latest aliases: 8.4 records which model wrote each draft,
   // and an alias makes that record mean something different next month.
-  STRONG: "gemini-3.5-flash",
-  MID: "gemini-3.5-flash",
+  //
+  // NOT gemini-3.5-flash, which was the obvious choice and is unusable here. Its free tier allows
+  // twenty requests A DAY — read from the quota violation itself, not guessed:
+  //
+  //   quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier, quotaValue: 20
+  //
+  // Eight checks per draft means one draft costs 40% of a day. Acceptance test 8 needs eighty
+  // checks, so it could not complete inside four days of quota however slowly it was paced — and
+  // pacing was the first two things tried, because a 429 reads as a rate limit until you open the
+  // body and find the word "Day".
+  //
+  // gemini-3-flash-preview was tried next and carries the SAME 20-a-day cap. So does every 3.x
+  // flash model checked. On this tier the only model with real daily headroom is flash-lite, which
+  // has answered every request made of it across the whole session, including images.
+  //
+  // SO ALL THREE TIERS ARE THE SAME MODEL, AND THAT IS NOT A DESIGN — IT IS A FREE TIER.
+  //
+  // Read the warning at the top of this file before drawing any conclusion from a gate run made
+  // here. flash-lite is the cheapest model Google offers, and clause 9b's whole point is that
+  // "could anyone else have written this?" is the hardest judgement in the system. A gate that
+  // passes under flash-lite says nothing about whether it passes under Claude, and an acceptance
+  // test 8 result measured here is NOT the contractual result.
+  //
+  // What it does buy is a pipeline that actually runs end to end for free: eighty checks complete,
+  // plumbing bugs surface, and the rejection reasons are real enough to tune the library against.
+  // The moment a paid tier or an Anthropic key exists, STRONG and MID move back up and nothing
+  // else in the system changes, because callers ask for a role.
+  STRONG: "gemini-3.1-flash-lite",
+  MID: "gemini-3.1-flash-lite",
   CHEAP: "gemini-3.1-flash-lite",
 };
 
 /**
  * A free-tier quirk worth writing down, because it took three wrong guesses to find.
  *
- * On this tier gemini-3.5-flash answers text and returns 429 for anything containing an image —
- * at 2,000, 8,000 and 16,000 max_tokens alike, seconds after a plain text call to the same model
- * succeeded. So it is not request size, and it is not the account being out of quota. Image
- * requests have their own allowance on this model and it is effectively zero.
+ * On this tier the flash models return 429 for anything containing an image, where the same
+ * model answers the identical request as text — at 2,000, 8,000 and 16,000 max_tokens alike. So
+ * it is not request size. Image requests have their own allowance and it is effectively zero.
  *
  * gemini-3.1-flash-lite answers the same image request at 16,000 tokens without complaint.
  *
@@ -146,6 +172,7 @@ const PRICING: Record<string, { in: number; out: number }> = {
   "meta-llama/Llama-3.3-70B-Instruct": { in: 0.1, out: 0.25 },
   // Free tier at the time of writing. Listed so the monthly cost line stays arithmetic
   // rather than a special case, and so it is not zero by accident if the tier changes.
+  "gemini-3-flash-preview": { in: 0, out: 0 },
   "gemini-3.5-flash": { in: 0, out: 0 },
   "gemini-3.1-flash-lite": { in: 0, out: 0 },
 };
@@ -366,6 +393,8 @@ export interface CompatProvider {
   vision: boolean;
   /** Model to use when a request contains an image, if the role model cannot. Usually null. */
   visionModel: string | null;
+  /** Floor on the completion budget, for providers whose models think before they answer. */
+  minCompletionTokens?: number;
 }
 
 export const COMPAT: Record<"groq" | "huggingface" | "gemini", CompatProvider> = {
@@ -397,14 +426,18 @@ export const COMPAT: Record<"groq" | "huggingface" | "gemini", CompatProvider> =
     keyName: "GEMINI_API_KEY",
     models: GEMINI_MODELS,
     tpmBudget: null,
-    // Measured: eight concurrent gate checks return 429 immediately. The free tier limits
-    // requests per minute, not tokens, so the fix is spacing rather than smaller completions.
-    maxConcurrent: 2,
+    // Measured: the free tier allows roughly ten requests a minute, and counts them across the
+    // whole account rather than per job. One in flight, seven seconds apart, sits just under it.
+    // Two at a time tripped the limit as soon as the dispatcher ran more than one job.
+    maxConcurrent: 1,
     spacingMs: 7000,
     // Measured against the compat endpoint with a solid red image: it answered "Red".
     vision: true,
     // Free-tier accommodation, see modelFor(). Remove it the moment billing is on.
     visionModel: "gemini-3.1-flash-lite",
+    // Measured: 2,874 tokens for one gate-sized verdict, almost all of it reasoning before the
+    // two fields that were actually asked for.
+    minCompletionTokens: 6000,
   },
 };
 
@@ -422,10 +455,19 @@ function clampCompletion(
   messages: unknown,
   wanted: number,
 ): number {
-  if (p.tpmBudget === null) return wanted;
+  // A THINKING MODEL SPENDS THE BUDGET BEFORE IT ANSWERS.
+  //
+  // Gemini 3.x reasons first and bills that reasoning as completion tokens. The gate asks for
+  // 1,600, which is generous for a two-field verdict and nowhere near enough for a model that
+  // used 2,874 on a gate-sized prompt in testing. What comes back is a truncated string, and the
+  // caller records "Unterminated string in JSON" — which reads as a model that cannot follow a
+  // schema rather than one that was cut off mid-thought. That misreading has cost time twice.
+  const floor = Math.max(wanted, p.minCompletionTokens ?? 0);
+
+  if (p.tpmBudget === null) return floor;
   const chars = system.length + JSON.stringify(messages).length;
   const promptTokens = Math.ceil(chars / 3.5);
-  return Math.max(256, Math.min(wanted, p.tpmBudget - promptTokens));
+  return Math.max(256, Math.min(floor, p.tpmBudget - promptTokens));
 }
 
 /**

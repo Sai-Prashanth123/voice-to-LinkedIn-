@@ -31,12 +31,18 @@ const call = (messages: any[], model = "STRONG") =>
   ({ model, system: "", messages, purpose: "test" } as never);
 
 test("an image request goes to the vision model", () => {
-  assert.equal(modelFor(COMPAT.gemini, call([IMAGE])), "gemini-3.1-flash-lite");
+  assert.equal(modelFor(COMPAT.gemini, call([IMAGE])), COMPAT.gemini.visionModel);
+
+  // Deliberately NOT asserting that the vision model differs from the role model. It did when
+  // STRONG was a full flash model that returns 429 for images; it does not now that the free
+  // tier's daily cap has pushed every tier down to flash-lite, which sees images itself. The
+  // routing is what must hold — whether it currently changes anything is a fact about the tier.
+  assert.ok(COMPAT.gemini.visionModel, "the swap is declared, so it still works if STRONG moves up");
 });
 
 test("a text request keeps the role model — the swap must not leak", () => {
-  assert.equal(modelFor(COMPAT.gemini, call([TEXT])), "gemini-3.5-flash");
-  assert.equal(modelFor(COMPAT.gemini, call([TEXT_BLOCKS])), "gemini-3.5-flash");
+  assert.equal(modelFor(COMPAT.gemini, call([TEXT])), COMPAT.gemini.models.STRONG);
+  assert.equal(modelFor(COMPAT.gemini, call([TEXT_BLOCKS])), COMPAT.gemini.models.STRONG);
 });
 
 test("the swap is scoped to the provider that needs it", () => {
