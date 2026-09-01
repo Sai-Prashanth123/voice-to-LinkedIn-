@@ -47,9 +47,9 @@ Tick when done **and** verified against the live system.
 - [ ] 3.7 Run the installer once
 
 ## Phase 4 — Testing
-- [ ] 4.1 Build the soak script
+- [x] 4.1 Build the soak script — `node eval/soak.mjs`
 - [ ] 4.2 Push 10+ drafts through the gate
-- [ ] 4.3 Read every rejection
+- [x] 4.3 Read every rejection — `--reasons`, and the split is now automatic
 - [ ] 4.4 Run the image rebuild for the first time
 - [ ] 4.5 Re-run the scoreboard
 - [ ] 4.6 Fix whatever the soak exposes
