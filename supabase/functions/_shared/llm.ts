@@ -20,12 +20,13 @@
  *                 interviewer, painful for the gate.
  *   huggingface — large open models through the inference router, no comparable per-minute wall, so
  *                 the full gate completes in one pass. The better of the two for anything where the
- *                 judgement matters rather than the plumbing.
+ *                 judgement matters rather than the plumbing. No vision.
  *   gemini      — Google, through its OpenAI-compatible endpoint. No per-minute wall either, and
  *                 currently free. The 3.x models think before answering and bill that thinking as
- *                 completion tokens, so they need real headroom - see GEMINI_MODELS.
+ *                 completion tokens, so they need real headroom - see GEMINI_MODELS. The only
+ *                 OpenAI-compatible provider here that can see an image, so clause 10 works on it.
  *
- * READ THIS BEFORE TRUSTING EITHER. They prove the plumbing — that jobs flow, that the claim ledger
+ * READ THIS BEFORE TRUSTING ANY OF THEM. They prove the plumbing — that jobs flow, that the claim ledger
  * verifies, that a calendar entry appears. They do NOT prove the product:
  *
  *   - The gate is an adversarial judge. Acceptance test 8 wants 9 of 10 deliberately generic drafts
@@ -113,6 +114,23 @@ const GEMINI_MODELS: Record<Role, string> = {
   MID: "gemini-3.5-flash",
   CHEAP: "gemini-3.1-flash-lite",
 };
+
+/**
+ * A free-tier quirk worth writing down, because it took three wrong guesses to find.
+ *
+ * On this tier gemini-3.5-flash answers text and returns 429 for anything containing an image —
+ * at 2,000, 8,000 and 16,000 max_tokens alike, seconds after a plain text call to the same model
+ * succeeded. So it is not request size, and it is not the account being out of quota. Image
+ * requests have their own allowance on this model and it is effectively zero.
+ *
+ * gemini-3.1-flash-lite answers the same image request at 16,000 tokens without complaint.
+ *
+ * The tiering is deliberately NOT changed to route around this. The visual rebuild asks for STRONG
+ * because redrawing someone's diagram in their own brand is a judgement, and quietly demoting it
+ * to the cheapest model to dodge a free-tier limit would trade the thing clause 10 is for against
+ * a bill nobody is paying. Clause 10 works the moment there is a provider with vision headroom —
+ * Anthropic, or a paid Gemini tier. Until then it is blocked on the tier, not on the code.
+ */
 
 /** USD per million tokens, for the cost line in the monthly self-report (13.3). */
 const PRICING: Record<string, { in: number; out: number }> = {
@@ -343,6 +361,8 @@ interface CompatProvider {
    */
   maxConcurrent: number;
   spacingMs: number;
+  /** Whether this provider carries image blocks. Clause 10 is dead without it. */
+  vision: boolean;
 }
 
 const COMPAT: Record<"groq" | "huggingface" | "gemini", CompatProvider> = {
@@ -354,6 +374,7 @@ const COMPAT: Record<"groq" | "huggingface" | "gemini", CompatProvider> = {
     tpmBudget: 7500,
     maxConcurrent: 1,
     spacingMs: 9000,
+    vision: false,
   },
   huggingface: {
     name: "huggingface",
@@ -363,6 +384,7 @@ const COMPAT: Record<"groq" | "huggingface" | "gemini", CompatProvider> = {
     tpmBudget: null,
     maxConcurrent: 8,
     spacingMs: 0,
+    vision: false,
   },
   gemini: {
     name: "gemini",
@@ -374,6 +396,8 @@ const COMPAT: Record<"groq" | "huggingface" | "gemini", CompatProvider> = {
     // requests per minute, not tokens, so the fix is spacing rather than smaller completions.
     maxConcurrent: 2,
     spacingMs: 7000,
+    // Measured against the compat endpoint with a solid red image: it answered "Red".
+    vision: true,
   },
 };
 
@@ -398,20 +422,63 @@ function clampCompletion(
 }
 
 /**
- * Anthropic message content can be a string or an array of blocks; OpenAI's chat format wants a
- * string. Image blocks are dropped, so the visual rebuild (clause 10) does not work under Groq.
+ * Anthropic message content can be a string or an array of blocks; the OpenAI chat format takes
+ * either a string or a list of parts.
+ *
+ * IMAGES USED TO BE DROPPED HERE, SILENTLY
+ *
+ * The old version flattened every message to text, so an image block vanished on the way out and
+ * the visual rebuild was asked to redraw a picture it had never been shown. It failed schema
+ * validation five times reaching a conclusion that was knowable before the first attempt.
+ *
+ * Providers that can see images now get them as content parts. Providers that cannot still get
+ * text only — and canSeeImages() stops the job before it starts, so the drop is never the thing a
+ * caller discovers. Verified against Gemini with a solid red image: it answered "Red".
  */
 // deno-lint-ignore no-explicit-any
-function toOpenAIMessages(system: string, messages: any[]): any[] {
+function toOpenAIMessages(system: string, messages: any[], vision = false): any[] {
   // deno-lint-ignore no-explicit-any
   const out: any[] = [{ role: "system", content: system }];
+
   for (const m of messages) {
-    const content = typeof m.content === "string"
-      ? m.content
-      // deno-lint-ignore no-explicit-any
-      : (m.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
-    out.push({ role: m.role === "assistant" ? "assistant" : "user", content });
+    const role = m.role === "assistant" ? "assistant" : "user";
+
+    if (typeof m.content === "string") {
+      out.push({ role, content: m.content });
+      continue;
+    }
+
+    // deno-lint-ignore no-explicit-any
+    const blocks: any[] = m.content ?? [];
+    // deno-lint-ignore no-explicit-any
+    const hasImage = vision && blocks.some((b: any) => b.type === "image");
+
+    if (!hasImage) {
+      out.push({
+        role,
+        // deno-lint-ignore no-explicit-any
+        content: blocks.filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n"),
+      });
+      continue;
+    }
+
+    // deno-lint-ignore no-explicit-any
+    const parts = blocks.map((b: any) => {
+      if (b.type === "text") return { type: "text", text: b.text };
+      if (b.type === "image" && b.source?.type === "base64") {
+        return {
+          type: "image_url",
+          image_url: {
+            url: `data:${b.source.media_type ?? "image/png"};base64,${b.source.data}`,
+          },
+        };
+      }
+      return null;
+    }).filter(Boolean);
+
+    out.push({ role, content: parts });
   }
+
   return out;
 }
 
@@ -454,7 +521,7 @@ async function compatStructured<S extends z.ZodType>(
       body: JSON.stringify({
         model,
         max_completion_tokens: clampCompletion(p, opts.system, opts.messages, opts.maxTokens ?? 4000),
-        messages: toOpenAIMessages(opts.system, opts.messages),
+        messages: toOpenAIMessages(opts.system, opts.messages, p.vision),
         response_format: {
           type: "json_schema",
           json_schema: { name: "result", strict: true, schema: jsonSchema },
@@ -492,7 +559,7 @@ async function compatText(p: CompatProvider, opts: CallOptions, acc: Accounting)
       body: JSON.stringify({
         model,
         max_completion_tokens: clampCompletion(p, opts.system, opts.messages, opts.maxTokens ?? 2000),
-        messages: toOpenAIMessages(opts.system, opts.messages),
+        messages: toOpenAIMessages(opts.system, opts.messages, p.vision),
       }),
     });
     if (!res.ok) {
@@ -691,5 +758,6 @@ export function exceedsProviderCeiling(jobType: string): boolean {
  * moment it is.
  */
 export function canSeeImages(): boolean {
-  return provider() === "anthropic";
+  const p = compat();
+  return p ? p.vision : true; // no compat provider means Anthropic, which sees images
 }
