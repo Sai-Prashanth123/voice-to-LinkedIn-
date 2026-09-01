@@ -50,7 +50,7 @@ Tick when done **and** verified against the live system.
 - [x] 4.1 Build the soak script — `node eval/soak.mjs`
 - [~] 4.2 Push 10+ drafts through the gate — queued and grinding; free tier is the ceiling
 - [x] 4.3 Read every rejection — `--reasons`, and the split is now automatic
-- [~] 4.4 Run the image rebuild for the first time — **vision support built and deployed**; blocked on tier, not code
+- [x] 4.4 Run the image rebuild for the first time — **done**: visuals row 1, SVG + rendered PNG in storage
 - [ ] 4.5 Re-run the scoreboard
 - [ ] 4.6 Fix whatever the soak exposes
 

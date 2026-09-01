@@ -125,11 +125,12 @@ const GEMINI_MODELS: Record<Role, string> = {
  *
  * gemini-3.1-flash-lite answers the same image request at 16,000 tokens without complaint.
  *
- * The tiering is deliberately NOT changed to route around this. The visual rebuild asks for STRONG
- * because redrawing someone's diagram in their own brand is a judgement, and quietly demoting it
- * to the cheapest model to dodge a free-tier limit would trade the thing clause 10 is for against
- * a bill nobody is paying. Clause 10 works the moment there is a provider with vision headroom —
- * Anthropic, or a paid Gemini tier. Until then it is blocked on the tier, not on the code.
+ * So `visionModel` sends IMAGE REQUESTS ONLY to flash-lite, and nothing else moves — the drafter
+ * and the gate keep the stronger model. Josh chose this over paying, knowing the trade: a weaker
+ * model draws the first diagram, and he reviews it before it goes anywhere near a post.
+ *
+ * It is an accommodation, not the design. On Anthropic or a paid Gemini tier `visionModel` is null
+ * and the role model does the work, which is what clause 10 assumes.
  */
 
 /** USD per million tokens, for the cost line in the monthly self-report (13.3). */
@@ -345,7 +346,7 @@ async function anthropicText(opts: CallOptions, acc: Accounting): Promise<string
  * that constraint is why the gate had to learn to resume. Hugging Face has no comparable ceiling on
  * this account, so a null budget means "do not clamp the completion to fit a minute".
  */
-interface CompatProvider {
+export interface CompatProvider {
   name: "groq" | "huggingface" | "gemini";
   url: string;
   keyName: string;
@@ -363,9 +364,11 @@ interface CompatProvider {
   spacingMs: number;
   /** Whether this provider carries image blocks. Clause 10 is dead without it. */
   vision: boolean;
+  /** Model to use when a request contains an image, if the role model cannot. Usually null. */
+  visionModel: string | null;
 }
 
-const COMPAT: Record<"groq" | "huggingface" | "gemini", CompatProvider> = {
+export const COMPAT: Record<"groq" | "huggingface" | "gemini", CompatProvider> = {
   groq: {
     name: "groq",
     url: "https://api.groq.com/openai/v1/chat/completions",
@@ -375,6 +378,7 @@ const COMPAT: Record<"groq" | "huggingface" | "gemini", CompatProvider> = {
     maxConcurrent: 1,
     spacingMs: 9000,
     vision: false,
+    visionModel: null,
   },
   huggingface: {
     name: "huggingface",
@@ -385,6 +389,7 @@ const COMPAT: Record<"groq" | "huggingface" | "gemini", CompatProvider> = {
     maxConcurrent: 8,
     spacingMs: 0,
     vision: false,
+    visionModel: null,
   },
   gemini: {
     name: "gemini",
@@ -398,6 +403,8 @@ const COMPAT: Record<"groq" | "huggingface" | "gemini", CompatProvider> = {
     spacingMs: 7000,
     // Measured against the compat endpoint with a solid red image: it answered "Red".
     vision: true,
+    // Free-tier accommodation, see modelFor(). Remove it the moment billing is on.
+    visionModel: "gemini-3.1-flash-lite",
   },
 };
 
@@ -508,7 +515,7 @@ async function compatStructured<S extends z.ZodType>(
   acc: Accounting,
 ): Promise<z.infer<S>> {
   const started = Date.now();
-  const model = p.models[opts.model];
+  const model = modelFor(p, opts);
   const jsonSchema = tighten(z.toJSONSchema(schema, { io: "output" }));
 
   try {
@@ -545,9 +552,35 @@ async function compatStructured<S extends z.ZodType>(
   }
 }
 
+/**
+ * Which model this request goes to.
+ *
+ * Normally the role map. The exception is an image on a provider whose role model cannot carry
+ * one: gemini-3.5-flash returns 429 for anything containing an image on the free tier, at every
+ * token budget, seconds after a text call to the same model succeeds. Its own flash-lite handles
+ * the identical request.
+ *
+ * So the swap is scoped to requests that actually contain an image, and nothing else moves. The
+ * drafter and the gate keep the stronger model. This is a free-tier accommodation and is written
+ * down as one - on a paid tier or on Anthropic, visionModel is null and this does nothing.
+ */
+// deno-lint-ignore no-explicit-any
+export function modelFor(p: CompatProvider, opts: CallOptions): string {
+  const role = p.models[opts.model];
+  if (!p.visionModel) return role;
+  // deno-lint-ignore no-explicit-any
+  const hasImage = (opts.messages ?? []).some((m: any) =>
+    Array.isArray(m?.content) && m.content.some((b: any) => b?.type === "image")
+  );
+  return hasImage ? p.visionModel : role;
+}
+
 async function compatText(p: CompatProvider, opts: CallOptions, acc: Accounting): Promise<string> {
   const started = Date.now();
-  const model = GROQ_MODELS[opts.model];
+  // Was GROQ_MODELS regardless of provider, so a text call under Hugging Face or Gemini asked
+  // for a Groq model name. It only ever produced a provider error, never a wrong answer - but it
+  // meant no non-Groq provider could serve a plain text call at all.
+  const model = modelFor(p, opts);
 
   try {
     const res = await fetch(p.url, {
