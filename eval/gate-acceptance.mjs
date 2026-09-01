@@ -162,6 +162,15 @@ async function main() {
   console.log(`Acceptance test 8 — ten generic drafts, at least nine must be rejected.`);
   console.log(`Source moment: ${host.ref} · library v${libraryVersion}\n`);
 
+  // Fixture versions start at 9000 to stay clear of real drafts, but a previous run leaves its
+  // own behind - 6.3 forbids deleting them - so 9000 itself is only free the first time. The
+  // harness could be run exactly once per moment before this, and failed on a unique-constraint
+  // violation rather than on anything to do with the gate.
+  const existing = await rest(
+    `drafts?select=version&moment_id=eq.${host.id}&version=gte.9000&order=version.desc&limit=1`,
+  );
+  const base = Math.max(9000, (existing[0]?.version ?? 8999) + 1);
+
   const results = [];
 
   for (const [i, spec] of GENERIC_DRAFTS.entries()) {
@@ -172,7 +181,7 @@ async function main() {
       method: "POST",
       body: JSON.stringify({
         moment_id: host.id,
-        version: 9000 + i,
+        version: base + i,
         attempt: 1,
         body: spec.body,
         hook: spec.body.split("\n")[0],

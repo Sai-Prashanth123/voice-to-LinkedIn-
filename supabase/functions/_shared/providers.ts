@@ -43,6 +43,8 @@ export const DECLARED: Record<string, string> = {
   groq: "Doing Anthropic's work on a free tier while no Anthropic key exists. Added mid-build",
   huggingface: "Embeddings for the retelling check, and a second free-tier model provider. Added " +
     "mid-build",
+  gemini: "A third free-tier model provider, and the first with room for the whole gate in one " +
+    "pass. Added at Josh's request",
   openai: "A fallback for embeddings and for transcription. Not keyed, and never yet used",
   deepgram: "Turning voice notes and recordings into text",
   telegram: "Where moments are captured and questions get asked",

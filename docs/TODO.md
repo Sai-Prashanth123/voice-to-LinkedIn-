@@ -23,11 +23,11 @@ Tick when done **and** verified against the live system.
 > tools but not the scope — the scope is proved separately, by reading the grants.
 
 ## Phase 2 — Writing skills
-- [ ] 2.1 Write the drafting skill
-- [ ] 2.2 Write the gate skill (reads the existing eight checks)
-- [ ] 2.3 Build the pull loop in `cc-agent/work.mjs`
-- [ ] 2.4 Add it to the installer's schedule
-- [ ] 2.5 Mark Claude Code drafts in the database
+- [x] 2.1 Write the drafting skill
+- [x] 2.2 Write the gate skill (reads the existing eight checks)
+- [x] 2.3 Build the pull loop in `cc-agent/work.mjs`
+- [x] 2.4 Add it to the installer's schedule
+- [x] 2.5 Mark Claude Code drafts in the database
 - [ ] 2.6 Run one moment end to end: idea → draft → eight checks
 - [ ] 2.7 Read the rejections and tweak the skills
 

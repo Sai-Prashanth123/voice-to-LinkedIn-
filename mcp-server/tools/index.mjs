@@ -11,14 +11,17 @@
  *
  *   health      — this file's neighbour, and the only tool that needs no schema
  *   read tools  — task 1.2, tools/read.mjs
+ *   briefs      — tasks 2.1/2.2, tools/brief.mjs. The drafting and gate standards, assembled
+ *                 from prompts.ts so the skills do not hold a second copy of them
  *   write tools — task 1.3, tools/write.mjs
  */
 
 import { health } from "./health.mjs";
 import { readTools } from "./read.mjs";
+import { briefTools } from "./brief.mjs";
 import { writeTools } from "./write.mjs";
 
-export const tools = [...health, ...readTools, ...writeTools];
+export const tools = [...health, ...readTools, ...briefTools, ...writeTools];
 
 /** Guards against two tools claiming the same name, which registers silently and shadows one. */
 export function assertUniqueNames(list = tools) {

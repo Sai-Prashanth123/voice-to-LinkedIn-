@@ -30,6 +30,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { findSessions } from "./index.mjs";
 import { blank, c, done, failed, hint, no, ok, step, title, warn } from "./ui.mjs";
+import { claudeCommand } from "./claude-bin.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const AGENT = path.join(HERE, "index.mjs");
@@ -107,7 +108,16 @@ if (fs.existsSync(envFile)) {
     if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
   }
 }
-await import(path.join(here, "index.mjs"));
+// Two jobs, isolated from each other. Reading sessions and drafting are unrelated failures, and
+// a bad night for one must not silently cost the other its daily run.
+for (const job of ["index.mjs", "work.mjs"]) {
+  try {
+    await import(path.join(here, job));
+  } catch (err) {
+    console.error(\`\${job} failed: \${err?.message ?? err}\`);
+    process.exitCode = 1;
+  }
+}
 `,
     { mode: 0o700 },
   );
@@ -248,6 +258,64 @@ async function doctor({ quiet = false } = {}) {
       warn("Claude Code logs found, but no sessions in them");
     } else {
       say.ok(`${sessions.length} sessions to read`, logDir.replace(os.homedir(), "~"));
+    }
+  }
+
+  // 3b. Claude Code itself, because the scheduled run now drafts and gates as well as reading.
+  //     A missing binary here fails silently in exactly the way --doctor exists to prevent: the
+  //     daily run reads sessions, writes nothing, and looks like a quiet week.
+  try {
+    const { file, args: cmdArgs } = claudeCommand(["--version"]);
+    const version = execFileSync(file, cmdArgs, {
+      stdio: ["ignore", "pipe", "ignore"],
+    }).toString().trim();
+    say.ok("Claude Code on PATH", version.split("\n")[0]);
+  } catch {
+    warn("Claude Code not on PATH");
+    hint(
+      "The daily run reads sessions AND drafts posts. Without the `claude` command the drafting " +
+      "half does nothing, and the run still looks successful.",
+    );
+  }
+
+  // 3c. The scoped key the drafting half authenticates with. Separate from the pair below: this
+  //     one lives beside the MCP server, and one can be present while the other is not.
+  const mcpEnv = path.join(HERE, "..", "mcp-server", ".env");
+  const mcpText = fs.existsSync(mcpEnv) ? fs.readFileSync(mcpEnv, "utf8") : "";
+  const field = (k) =>
+    process.env[k] ?? (mcpText.match(new RegExp(`^${k}=(.*)$`, "m")) ?? [])[1]?.trim();
+  const mcpUrl = field("SUPABASE_URL");
+  const mcpKey = field("CONTENT_MCP_KEY");
+
+  if (!mcpUrl || !mcpKey) {
+    warn("No drafting key");
+    hint(
+      "Reading sessions will work; drafting will not.\n" +
+      "SUPABASE_ACCESS_TOKEN=sbp_... node mcp-server/mint-key.mjs --write",
+    );
+  } else {
+    // Probed rather than merely present. The first version of this check passed on a key that was
+    // there and had no grants at all — which is the same failure mode as a wrong CONTENT_SYSTEM_KEY,
+    // and the whole reason this command exists.
+    try {
+      const res = await fetch(`${mcpUrl.replace(/\/+$/, "")}/rest/v1/drafts?select=id&limit=1`, {
+        headers: { apikey: mcpKey, Authorization: `Bearer ${mcpKey}` },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (res.ok) say.ok("Drafting key works", "reads the idea bank");
+      else {
+        const body = await res.text();
+        warn("Drafting key rejected");
+        hint(
+          /42501|permission denied/.test(body)
+            ? "The key is valid but its role has no grants. Mint the scoped one:\n" +
+              "SUPABASE_ACCESS_TOKEN=sbp_... node mcp-server/mint-key.mjs --write"
+            : `The database answered ${res.status}. Check CONTENT_MCP_KEY in mcp-server/.env.`,
+        );
+      }
+    } catch (err) {
+      warn("Could not reach the database to check the drafting key");
+      hint(err?.message ?? String(err));
     }
   }
 

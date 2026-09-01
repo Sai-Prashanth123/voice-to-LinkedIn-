@@ -12,7 +12,7 @@
  * PROVIDERS
  *
  * Anthropic is what ships, and what the cost model and the whole quality argument assume. Clause 16
- * says "cheaper alternatives are welcome", so two OpenAI-compatible providers are supported for
+ * says "cheaper alternatives are welcome", so three OpenAI-compatible providers are supported for
  * exercising the pipeline without spending on Claude:
  *
  *   groq        — fastest, but the free tier allows 8,000 tokens per MINUTE, which the eight-check
@@ -21,6 +21,9 @@
  *   huggingface — large open models through the inference router, no comparable per-minute wall, so
  *                 the full gate completes in one pass. The better of the two for anything where the
  *                 judgement matters rather than the plumbing.
+ *   gemini      — Google, through its OpenAI-compatible endpoint. No per-minute wall either, and
+ *                 currently free. The 3.x models think before answering and bill that thinking as
+ *                 completion tokens, so they need real headroom - see GEMINI_MODELS.
  *
  * READ THIS BEFORE TRUSTING EITHER. They prove the plumbing — that jobs flow, that the claim ledger
  * verifies, that a calendar entry appears. They do NOT prove the product:
@@ -88,6 +91,29 @@ const HF_MODELS: Record<Role, string> = {
   CHEAP: "meta-llama/Llama-3.3-70B-Instruct",
 };
 
+/**
+ * Google Gemini, through its OpenAI-compatible endpoint.
+ *
+ * The best free option measured so far: no per-minute ceiling of Groq's kind, and the flash models
+ * answer the full eight-check gate in one pass.
+ *
+ * MEASURED, NOT ASSUMED — the 3.x models think before answering, and the thinking is billed as
+ * completion tokens. Asked for a two-field JSON verdict with max_tokens 200, gemini-3.5-flash spent
+ * 293 tokens reasoning, hit the limit mid-sentence, and returned the words "Here is the JSON
+ * requested:" followed by an unterminated code fence. It looked exactly like a model that cannot
+ * follow a schema. Given 3,000 tokens it complied first time.
+ *
+ * That is why tpmBudget is null here: clamping the completion to fit a per-minute budget, which is
+ * the right thing for Groq, would strangle these models before they answer.
+ */
+const GEMINI_MODELS: Record<Role, string> = {
+  // Deliberately pinned rather than the -latest aliases: 8.4 records which model wrote each draft,
+  // and an alias makes that record mean something different next month.
+  STRONG: "gemini-3.5-flash",
+  MID: "gemini-3.5-flash",
+  CHEAP: "gemini-3.1-flash-lite",
+};
+
 /** USD per million tokens, for the cost line in the monthly self-report (13.3). */
 const PRICING: Record<string, { in: number; out: number }> = {
   "claude-opus-5": { in: 5, out: 25 },
@@ -99,14 +125,19 @@ const PRICING: Record<string, { in: number; out: number }> = {
   "Qwen/Qwen3-235B-A22B-Instruct-2507": { in: 0.13, out: 0.6 },
   "Qwen/Qwen2.5-72B-Instruct": { in: 0.13, out: 0.4 },
   "meta-llama/Llama-3.3-70B-Instruct": { in: 0.1, out: 0.25 },
+  // Free tier at the time of writing. Listed so the monthly cost line stays arithmetic
+  // rather than a special case, and so it is not zero by accident if the tier changes.
+  "gemini-3.5-flash": { in: 0, out: 0 },
+  "gemini-3.1-flash-lite": { in: 0, out: 0 },
 };
 
-export type ProviderName = "anthropic" | "groq" | "huggingface";
+export type ProviderName = "anthropic" | "groq" | "huggingface" | "gemini";
 
 export function provider(): ProviderName {
   const set = secret("LLM_PROVIDER");
   if (set === "groq") return "groq";
   if (set === "huggingface" || set === "hf") return "huggingface";
+  if (set === "gemini" || set === "google") return "gemini";
   return "anthropic";
 }
 
@@ -114,6 +145,21 @@ export function provider(): ProviderName {
 function compat(): CompatProvider | null {
   const p = provider();
   return p === "anthropic" ? null : COMPAT[p];
+}
+
+/**
+ * How fast the current provider may be driven.
+ *
+ * Exported so callers ask the provider rather than checking its name. gate.ts used to decide this
+ * by comparing provider() against the literal "groq", which meant a provider added later with a
+ * different limit silently got Anthropic pacing and failed on its first real run. Gemini did
+ * exactly that: eight concurrent checks, 429 on the first one.
+ */
+export function pacing(): { parallel: number; spacingMs: number } {
+  const p = compat();
+  return p
+    ? { parallel: p.maxConcurrent, spacingMs: p.spacingMs }
+    : { parallel: 8, spacingMs: 0 };
 }
 
 export function modelName(role: Role): string {
@@ -282,20 +328,32 @@ async function anthropicText(opts: CallOptions, acc: Accounting): Promise<string
  * this account, so a null budget means "do not clamp the completion to fit a minute".
  */
 interface CompatProvider {
-  name: "groq" | "huggingface";
+  name: "groq" | "huggingface" | "gemini";
   url: string;
   keyName: string;
   models: Record<Role, string>;
   tpmBudget: number | null;
+  /**
+   * How many calls may be in flight at once, and how long to wait between starting them.
+   *
+   * Separate from tpmBudget because they are separate limits and conflating them cost a whole
+   * debugging pass. Groq caps TOKENS per minute, so its completions are clamped. Gemini caps
+   * REQUESTS per minute, so clamping does nothing and the eight gate checks simply have to be
+   * spread out. A provider can have either, both or neither.
+   */
+  maxConcurrent: number;
+  spacingMs: number;
 }
 
-const COMPAT: Record<"groq" | "huggingface", CompatProvider> = {
+const COMPAT: Record<"groq" | "huggingface" | "gemini", CompatProvider> = {
   groq: {
     name: "groq",
     url: "https://api.groq.com/openai/v1/chat/completions",
     keyName: "GROQ_API_KEY",
     models: GROQ_MODELS,
     tpmBudget: 7500,
+    maxConcurrent: 1,
+    spacingMs: 9000,
   },
   huggingface: {
     name: "huggingface",
@@ -303,6 +361,19 @@ const COMPAT: Record<"groq" | "huggingface", CompatProvider> = {
     keyName: "HUGGINGFACE_API_KEY",
     models: HF_MODELS,
     tpmBudget: null,
+    maxConcurrent: 8,
+    spacingMs: 0,
+  },
+  gemini: {
+    name: "gemini",
+    url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+    keyName: "GEMINI_API_KEY",
+    models: GEMINI_MODELS,
+    tpmBudget: null,
+    // Measured: eight concurrent gate checks return 429 immediately. The free tier limits
+    // requests per minute, not tokens, so the fix is spacing rather than smaller completions.
+    maxConcurrent: 2,
+    spacingMs: 7000,
   },
 };
 

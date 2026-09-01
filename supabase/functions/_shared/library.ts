@@ -9,53 +9,15 @@
  */
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import type { Library, LibrarySectionKey } from "./types.ts";
-
-/** What the drafter needs to write. */
-const DRAFTING_SECTIONS: LibrarySectionKey[] = [
-  "core_rules",
-  "pillars",
-  "frameworks",
-  "hooks",
-  "closes",
-  "audience",
-  "voice_guide",
-  // 8.1 — the recorded interview behind the guide. Evidence of how he SOUNDS, never a source of
-  // facts: 9.4 has no exception for it, and the claim ledger will not find a source span here.
-  "voice_transcript",
-  // 8.3 — structure borrowed from other writers, and nothing else about them.
-  "reference_posts",
-  "banned_phrases",
-  "formatting",
-];
+import type { Library } from "./types.ts";
+import { type LibraryViewName, renderLibrary } from "./views.ts";
 
 /**
- * What the gate needs to judge. Deliberately not identical to the drafting view.
- *
- * The gate does not need frameworks, and it must NOT see `reference_posts`: a judge that has read
- * another writer's posts starts measuring against their voice rather than Josh's, which is clause
- * 8a's failure arriving through a side door. It does not see `voice_transcript` either — the voice
- * guide is the rule it judges against, and the transcript is the evidence behind the rule.
+ * The section lists and the rendering moved to views.ts, which imports nothing, so the MCP server
+ * reads exactly the same ones. They were duplicated there briefly and the copy handed the gate
+ * every section - including the two it must never see. See the note in that file.
  */
-const GATING_SECTIONS: LibrarySectionKey[] = [
-  "core_rules",
-  "hooks",
-  "audience",
-  "voice_guide",
-  "banned_phrases",
-  "gate_rules",
-];
-
-const INTERVIEW_SECTIONS: LibrarySectionKey[] = ["core_rules", "pillars", "audience", "prompt_set"];
-
-export type LibraryView = "drafting" | "gating" | "interview" | "visual";
-
-const VIEWS: Record<LibraryView, LibrarySectionKey[]> = {
-  drafting: DRAFTING_SECTIONS,
-  gating: GATING_SECTIONS,
-  interview: INTERVIEW_SECTIONS,
-  visual: ["core_rules", "visual_brand", "audience"],
-};
+export type LibraryView = LibraryViewName;
 
 export async function loadLibrary(db: SupabaseClient, view: LibraryView): Promise<Library> {
   const { data, error } = await db
@@ -64,22 +26,7 @@ export async function loadLibrary(db: SupabaseClient, view: LibraryView): Promis
     .order("sort_order");
   if (error) throw new Error(`library load failed: ${error.message}`);
 
-  const wanted = new Set<string>(VIEWS[view]);
-  const sections: Record<string, string> = {};
-  const parts: string[] = [];
-
-  for (const row of data ?? []) {
-    if (!wanted.has(row.key)) continue;
-    const body = (row.body ?? "").trim();
-    sections[row.key] = body;
-    // An empty section is included as an explicit gap rather than silently omitted, so a missing
-    // voice guide is visible in the prompt instead of quietly changing how the model behaves.
-    parts.push(
-      body.length > 0
-        ? `## ${row.title}\n\n${body}`
-        : `## ${row.title}\n\n(Not yet supplied by Josh. Do not invent one — work without it.)`,
-    );
-  }
+  const { sections, prompt } = renderLibrary(data ?? [], view);
 
   const { data: ver } = await db
     .from("library_versions")
@@ -91,7 +38,7 @@ export async function loadLibrary(db: SupabaseClient, view: LibraryView): Promis
   return {
     version: ver?.version ?? 1,
     sections,
-    prompt: parts.join("\n\n---\n\n"),
+    prompt,
   };
 }
 

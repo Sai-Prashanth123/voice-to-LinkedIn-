@@ -44,34 +44,10 @@ export async function getNames(db: SupabaseClient, momentId: number): Promise<Mo
 }
 
 /**
- * The exact set of fields the drafter is allowed to see (9.1: "only the idea bank entry and the
- * reference library"). Built here, in one place, so no worker can widen it by accident — and so the
- * claim ledger verifies against precisely what the drafter was given.
- *
- * Note what is absent: the published archive. Clause 8a is explicit that it must never inform how a
- * post is written.
+ * Re-exported so every worker keeps importing it from here. The list itself moved to entry.ts,
+ * which imports nothing, so the MCP server can read the same one - see the note in that file.
  */
-export function sourceEntry(material: Material | null): Record<string, string> {
-  const entry: Record<string, string> = {};
-  if (!material) return entry;
-  const fields: (keyof Material)[] = [
-    "the_moment",
-    "the_detail",
-    "the_realisation",
-    "the_lesson",
-    "what_happened_before",
-    "who_was_there",
-    "their_actual_words",
-    "how_he_felt",
-    "what_changed",
-    "reader_takeaway",
-  ];
-  for (const f of fields) {
-    const v = material[f];
-    if (typeof v === "string" && v.trim().length > 0) entry[f] = v;
-  }
-  return entry;
-}
+export { sourceEntry, SOURCE_FIELDS } from "./entry.ts";
 
 /** 13.2 — failures surface rather than being swallowed. */
 export async function logEvent(

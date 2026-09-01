@@ -19,7 +19,7 @@
  */
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { callStructured, MODELS, provider } from "../llm.ts";
+import { callStructured, MODELS, pacing } from "../llm.ts";
 import { getMaterial, getMoment, getNames, logEvent, sourceEntry } from "../db.ts";
 import { clearedNames, unclearedNames } from "../names.ts";
 import { enqueue } from "../jobs.ts";
@@ -98,15 +98,17 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
   const already = new Map((done ?? []).map((r) => [r.check_key, r]));
   const remaining = GATE_CHECKS.filter((c) => !already.has(c.key));
 
-  // Concurrency is a provider property, not a constant: eight concurrent checks exhaust a per-minute
-  // token budget in one burst, and the first real gate run died on a 429 before judging anything.
+  // Concurrency is a provider property, and now it is actually asked for rather than decided here.
+  // This used to compare provider() against the
+  // literal "groq", which quietly assumed every provider added afterwards had Anthropic's headroom.
+  // Gemini does not — its free tier limits REQUESTS per minute rather than tokens — and its first
+  // real gate run returned 429 before judging anything, in exactly the way this comment already
+  // described and the code no longer prevented.
   //
-  // Only Groq's free tier has that ceiling. Anthropic and the Hugging Face router both take the
-  // whole gate at once, which is how it should run — throttling is an accommodation, and if the gate
-  // needs it in production the provider is wrong, not the gate.
-  const throttled = provider() === "groq";
-  const parallel = throttled ? 1 : GATE_CHECKS.length;
-  const spacingMs = throttled ? 9000 : 0;
+  // Throttling remains an accommodation: if the gate needs it in production, the provider is wrong,
+  // not the gate.
+  const { parallel: paced, spacingMs } = pacing();
+  const parallel = Math.min(paced, GATE_CHECKS.length);
 
   let deferred: Error | null = null;
 

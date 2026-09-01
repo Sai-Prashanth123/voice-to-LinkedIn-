@@ -122,6 +122,7 @@ Everything below runs on **your** accounts and your keys (14.1). We work inside 
 | **Anthropic** | The interview, the drafter, the gate, triage, the learning loop | ~$25/mo | **Declared, never keyed** |
 | **Groq** | Doing Anthropic's work on a free tier while no Anthropic key exists | Free tier | **In use — added mid-build** |
 | **Hugging Face** | Embeddings for the "have I told this story already" check, and a second free-tier model provider | Free tier | **In use — added mid-build** |
+| **Gemini** | A third free-tier model provider, and the first with room for the whole gate in one pass | Free tier | **In use — added at your request** |
 | **OpenAI** | Fallback for embeddings and for transcription | ~$1/mo if keyed | Not keyed, never used |
 | **Deepgram** | Turning your voice notes into text | ~$2/mo | In use |
 | **Telegram** | Where you send voice notes and get asked questions | Free | In use |
