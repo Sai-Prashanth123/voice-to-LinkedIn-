@@ -32,10 +32,12 @@ Tick when done **and** verified against the live system.
 - [x] 2.7 Read the rejections and tweak the skills — **found a check that judged nothing**
 
 > **The free tier ceiling, measured exactly.** Every Gemini 3.x *flash* model allows **20 requests
-> per day** (quotaId ). Eight checks per draft
-> means one draft costs 40% of a day. Only  has real headroom, so all three tiers now
-> point at it — which runs the pipeline for free but is **not** a result acceptance test 8 can be
-> reported against.
+> per day** — read from the quota violation itself, `GenerateRequestsPerDayPerProjectPerModel-FreeTier`,
+> not inferred from the 429. Eight checks per draft means one draft costs 40% of a day, and
+> acceptance test 8 needs eighty. Only `gemini-3.1-flash-lite` has real headroom, so all three
+> tiers point at it — which runs the pipeline for free but is **not** a result acceptance test 8
+> can be reported against, because flash-lite is the cheapest model Google sells and clause 9b is
+> the hardest judgement in the system.
 >
 > **Where Gemini gets to, measured.** A single draft now clears all eight checks in one run —
 > the first time that has happened, and something Groq never managed. Acceptance test 8 needs
