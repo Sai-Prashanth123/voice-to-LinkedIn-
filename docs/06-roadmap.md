@@ -1,120 +1,134 @@
-# What happens next
+# What we build next
 
 Six phases. Written 1 September 2026.
+Each lists **the actual things to build** — files, tables, functions.
 
-Each one below says, in plain words, **what we are actually doing** — then the
-list of jobs inside it.
+Phases 1, 2, 4, 5, 6 run in order. **Phase 3 runs alongside** and is not ours.
 
-Phases 1, 2, 4, 5, 6 run in order; each needs the one before it.
-**Phase 3 runs alongside all of them** and is the only phase not in our hands.
+---
+
+## The constraint that shapes phases 1 and 2
+
+Edge Functions run in Supabase's cloud. Claude Code runs on Josh's laptop.
+**The cloud cannot call the laptop.** So the laptop pulls: it asks what needs
+writing, writes it, and posts the result back.
+
+That means we do *not* add a `claude-code` provider inside `llm.ts` — a cloud
+function would sit there waiting for a machine it cannot reach. The drafting and
+gate handlers stay where they are; the laptop drives them from outside.
 
 ---
 
 ## Phase 1 · MCP connectors
 
-> **In simple terms:** right now Claude Code and the content system are two
-> separate things that cannot talk to each other. We are building the doorway
-> between them — so Claude Code can look at your ideas and hand back a draft
-> without anyone opening a website or a database.
+**Build a new `mcp-server/` package** — a stdio MCP server in Node, talking to
+Supabase over PostgREST.
 
-Why first: everything in Phase 2 comes through this door. Until it exists, the
-writer has nowhere to write to.
+| Build | Detail |
+|---|---|
+| `mcp-server/index.mjs` | Server entry, stdio transport, tool registration |
+| `mcp-server/tools/read.mjs` | `list_moments` · `get_moment` · `get_library` · `list_drafts` · `get_acceptance` |
+| `mcp-server/tools/write.mjs` | `create_draft` · `record_gate_verdict` · `propose_library_change` |
+| `mcp-server/auth.mjs` | Reads one key from env, never the service-role key |
+| `supabase/migrations/0028_mcp_role.sql` | A Postgres role with select on the bank and library, insert on drafts and verdicts, **no delete anywhere** |
+| `.mcp.json` | Register the server so Claude Code loads it |
+| `mcp-server/index.test.mjs` | Every tool called against live data once |
 
-- [ ] Build the connector — the idea bank, the library, the work queue
-- [ ] Reading: waiting moments, drafts, library sections, where each test stands
-- [ ] Writing: create a draft, record a check result, propose a library change
-- [ ] One key, limited to only what it needs, cancellable at any time
-- [ ] Prove it against the live system, not a copy
+**Reuses:** `db.ts` query shapes, the existing RLS. Adds no new access path —
+the new role sits under the same rules everything else does.
 
-**Done when:** Claude Code can list what is waiting and write a draft back, on its own.
+**Done when:** `list_moments` returns the real waiting moments and `create_draft`
+writes a row that appears in the calendar.
 
 ---
 
 ## Phase 2 · Writing skills — add, then tweak
 
-> **In simple terms:** this is the writer, and the eight checks that judge it.
-> Today the system writes with a free model that is not good enough — it invents
-> things, and the checks correctly throw the drafts away. We are moving that work
-> onto Claude Code, which you already pay for, so the writing is finally good
-> enough to survive its own checks.
+**Build two Claude Code skills and the loop that feeds them.**
 
-Why it matters: **four of the twelve acceptance tests and the finish line are
-waiting on nothing else.**
+| Build | Detail |
+|---|---|
+| `.claude/skills/draft-post/SKILL.md` | Reads library + one moment via Phase 1, emits a draft **and a claim per source span** — the format `claims.ts` already verifies |
+| `.claude/skills/gate-check/SKILL.md` | Runs the eight checks **read from `GATE_CHECKS`** — it does not restate them. One verdict per check, each independent |
+| `cc-agent/work.mjs` | The pull loop: ask what is waiting → run the skill → post back through Phase 1 |
+| `cc-agent/install.mjs` | Extend: schedule `work.mjs` alongside the existing session reader |
+| `supabase/migrations/0029_draft_source.sql` | Mark which drafts came from Claude Code, so test 8 can tell them apart |
+| `eval/gate-acceptance.mjs` | Re-point at Claude Code drafts and re-run |
 
-- [ ] The writing skill — reads your library and one idea, and shows where every fact came from
-- [ ] The checking skill — the eight checks, each able to reject a draft on its own
-- [ ] Route both through Phase 1 instead of buying model credits
-- [ ] First run all the way through: one idea → one draft → eight checks
-- [ ] **Then tweak** — read what comes out and adjust, until drafts pass for the right reasons
+**Reuses unchanged:** `prompts.ts` — `GATE_CHECKS` is `anyone_else`,
+`claims_trace`, `hook_opens_loop`, `aimed_at_someone`, `voice_guide`,
+`names_cleared`, `identifiable`, `banned_phrases`. Also `claims.ts` (verification
+is mechanical and stays server-side), `library.ts`, and the drafts table.
 
-**The rule for this phase:** if a draft fails, we fix the writer — never the checks.
-The checks are currently catching real invention. Loosening them to make the
-numbers look better would throw away the only thing protecting your name.
+**Already solved — do not rebuild:** `handlers/gate.ts` writes each verdict the
+moment it is reached and skips checks that already have one, so an interrupted
+run resumes rather than paying twice. It also drops to serial when the provider
+throttles. Both were built for Groq’s ceiling and both still apply.
+
+**Then tweak** — read the rejections and fix the skills, not the checks.
+`prompts.ts` and the gate thresholds do not move in this phase.
+
+**Unblocks:** component tests 6, 7, 8, 10 and the finish line 17a.
 
 ---
 
-## Phase 3 · Josh's additions — runs alongside everything
+## Phase 3 · Josh's additions — parallel, not ours
 
-> **In simple terms:** the parts only you can give us. The system can be perfect
-> and still write like nobody in particular until it knows how you sound and what
-> you care about.
+Nothing to build. Everything here is data he provides.
 
-**Start this now.** It does not wait for Phase 1 or 2.
-
-- [ ] **The voice guide** — about 400 words of you simply talking. Highest value thing on this page.
-- [ ] The other six library sections: pillars, audience, check rules, visual style, reference posts
-- [ ] Answer the five questions already sitting unanswered
-- [ ] Connect LinkedIn — this starts two four-week clocks
-- [ ] 19 more voice notes, 2 more sessions, and pick which call recorder you use
-- [ ] Run `node cc-agent/install.mjs` once — starts another two-week clock
+- [ ] Voice guide — ~400 words of him talking. **Start here.**
+- [ ] Six remaining library sections: pillars, audience, gate rules, visual brand, reference posts
+- [ ] The five moments already asked and unanswered
+- [ ] LinkedIn connected — starts two four-week clocks
+- [ ] 19 voice notes, 2 sessions, a call recorder chosen
+- [ ] `node cc-agent/install.mjs` — starts a two-week clock
 
 ---
 
 ## Phase 4 · Creative testing
 
-> **In simple terms:** we use it hard ourselves before you ever see it. Ten or
-> more real drafts, every rejection read one at a time, to find the things that
-> only show up in real use.
+Mostly running things, not building. What gets built is what the running exposes.
 
-- [ ] 10+ drafts all the way through the checks, rejections read individually
-- [ ] Turn one of your images into your own version, for real
-- [ ] Watch it choose what to write across several rounds — does it balance topics, does it spot a repeat
-- [ ] Re-run the scoreboard and watch rows change from "waiting" to "passed"
-- [ ] Anything that turns a row to **failed** stops this phase — that is a real fault
+| Build | Detail |
+|---|---|
+| `eval/soak.mjs` | Drive 10+ moments end to end, record every rejection reason |
+| `handlers/visual.ts` | First real run — the rebuild path has never executed |
+| `eval/acceptance.mjs` | Re-run; rows should move off `----` |
+| Fixes | Whatever the soak turns up |
 
-**Done when:** the drafts are good enough that showing them is not embarrassing.
+**Stop rule:** a row moving to `FAIL` is a real defect. Fix it before continuing.
+
+**Done when:** 10 drafts have cleared the gate for reasons we have read.
 
 ---
 
 ## Phase 5 · First round sharing
 
-> **In simple terms:** the first time you see the system's actual work instead of
-> a report about it. Real drafts, for your verdict.
-
-- [ ] **Change every development password first** — required before any real material goes in
-- [ ] Move every account into your name, so the system is yours and not ours
-- [ ] Record the walkthrough — the running order is already written
-- [ ] Send the first real batch of drafts
-- [ ] An updated build report showing where the twelve tests actually stand
+| Build | Detail |
+|---|---|
+| Key rotation | Deepgram, Telegram, Groq, Hugging Face, service-role, Supabase PAT — **before any real material** |
+| Account migration | `docs/04-handover.md`, executed rather than rehearsed |
+| Vercel + Supabase | Into Josh's accounts; `APP_URL`, redirect list, `NEXT_PUBLIC_SITE_URL` follow |
+| Recorded walkthrough | Running order is in `docs/05-walkthrough.md` |
+| Report refresh | Regenerate `docs/build-report.html` with the live scoreboard |
 
 ---
 
 ## Phase 6 · Feedback round changes
 
-> **In simple terms:** you tell us what is wrong with them, and we change it —
-> mostly by editing your library rather than by rewriting code, because that is
-> the part you can keep changing yourself afterwards.
+| Build | Detail |
+|---|---|
+| Library edits | His feedback applied to library sections — versioned, reversible, no deploy |
+| `worker-learn` | Read its proposals, approve or reject each |
+| Skill tweaks | Only where a library edit genuinely cannot carry it |
+| `eval/acceptance.mjs` | Final run; record which tests actually moved |
 
-- [ ] Apply your feedback to the library wherever it can be done there
-- [ ] Go through the changes the system proposes itself — approve or reject each
-- [ ] Re-run the scoreboard and record which tests genuinely moved
-- [ ] Anything asked for beyond the original specification gets quoted, not quietly absorbed
+Anything beyond the specification gets quoted, not absorbed.
 
 ---
 
-## The one honest constraint
+## The constraint no build removes
 
-Five of the twelve tests need two to four weeks of the system simply *running* —
-no amount of building shortens them. Those clocks start in **Phase 3**, not in
-Phase 5. Every day Phase 3 waits is a day added to the end, however fast phases
-1, 2 and 4 go.
+Five acceptance tests need two to four weeks of the system running. Those clocks
+start in **Phase 3** — which needs none of phases 1, 2 or 4 to begin. Every day
+it waits is a day on the end.
