@@ -9,7 +9,7 @@ Tick when done **and** verified against the live system.
 - [x] 1.3 Add the write tools (create draft, record verdict, propose change)
 - [x] 1.4 Add a scoped database role — no delete rights *(role live; its key needs one command from you)*
 - [x] 1.5 Register the server in `.mcp.json`
-- [x] 1.6 Test every tool once against live data — 21 tests passing
+- [x] 1.6 Test every tool once against live data — 26 tests, all 11 tools covered
 
 > **1.4 needs one command from you.** The `content_mcp` role and its grants are applied: 16 tables
 > readable, 3 insertable, zero update or delete. Minting its key needs a personal access token,

@@ -278,3 +278,81 @@ test("the role cannot do more than it should", async () => {
   const updateTools = tools.filter((t) => /update|delete|publish|approve/i.test(t.name));
   assert.equal(updateTools.length, 0, "no tool offers update, delete, publish or approve");
 });
+
+/* ── The briefs, which carry the invariants that fail quietly ────────────── */
+
+test("get_drafting_brief hands over the standard, the material and the names", async () => {
+  const db = createDb(creds);
+  // A moment with material, since a brief without it is correctly refused.
+  const withMaterial = (await db.select("material", { select: "moment_id", limit: 50 }));
+  const live = new Set(
+    (await call("list_moments", { limit: 200 })).moments.map((m) => m.id),
+  );
+  const target = withMaterial.map((m) => m.moment_id).find((id) => live.has(id));
+  if (!target) return; // nothing minable on this machine
+
+  const r = await call("get_drafting_brief", { moment_id: target });
+
+  assert.ok(r.system.length > 1000, "the writing standard is included, not summarised");
+  assert.ok(r.user.includes("THE MOMENT"), "the material is in the user message");
+  assert.equal(typeof r.library_version, "number", "8.4 — the draft can be attributed");
+  assert.ok(Array.isArray(r.must_not_name));
+
+  // 8.3 — the drafter MAY see reference posts, for structure only. The gate may not. This is the
+  // half of that pair that is allowed, asserted so the two views cannot quietly converge.
+  assert.ok(r.system.includes("Reference posts"), "the drafter's view includes reference posts");
+});
+
+test("get_drafting_brief refuses a moment with nothing to write from", async () => {
+  const db = createDb(creds);
+  const withMaterial = new Set(
+    (await db.select("material", { select: "moment_id", limit: 200 })).map((m) => m.moment_id),
+  );
+  const bare = (await call("list_moments", { limit: 200 })).moments
+    .find((m) => !withMaterial.has(m.id));
+  if (!bare) return;
+
+  await assert.rejects(
+    () => call("get_drafting_brief", { moment_id: bare.id }),
+    /no material/i,
+  );
+});
+
+test("get_gate_brief withholds what the gate must never see", async () => {
+  const [draft] = (await call("list_drafts", { limit: 1 })).drafts;
+  const r = await call("get_gate_brief", { draft_id: draft.id });
+
+  // Clause 8a through a side door: a judge that has read another writer's posts starts measuring
+  // against their voice rather than Josh's. This assertion is the reason the MCP server does not
+  // assemble its own library.
+  assert.ok(!r.system.includes("Reference posts"), "the gate must not see reference posts");
+  assert.ok(!r.system.includes("The voice interview"), "nor the voice transcript");
+});
+
+test("get_gate_brief does not offer a check with no basis, and says so", async () => {
+  const [draft] = (await call("list_drafts", { limit: 1 })).drafts;
+  const r = await call("get_gate_brief", { draft_id: draft.id });
+
+  assert.ok(Array.isArray(r.not_judgeable));
+  for (const key of r.not_judgeable) {
+    assert.ok(
+      !r.checks.some((c) => c.check_key === key),
+      `${key} has no basis, so it must not be offered as a judgement`,
+    );
+  }
+  if (r.not_judgeable.length > 0) {
+    assert.match(r.note ?? "", /NOT JUDGED|not in this list/i, "the omission is explained");
+  }
+});
+
+test("get_gate_brief resumes rather than restarting", async () => {
+  const judged = (await call("list_drafts", { limit: 20 })).drafts
+    .find((d) => d.checks.length > 0 && d.checks.length < 8);
+  if (!judged) return; // every draft is either untouched or complete
+
+  const r = await call("get_gate_brief", { draft_id: judged.id });
+  const offered = new Set(r.checks.map((c) => c.check_key));
+  for (const done of judged.checks) {
+    assert.ok(!offered.has(done.check), `${done.check} already has a verdict and was re-offered`);
+  }
+});
