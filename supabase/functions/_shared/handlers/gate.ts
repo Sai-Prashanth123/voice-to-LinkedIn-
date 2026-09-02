@@ -19,7 +19,7 @@
  */
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { callStructured, MODELS, pacing } from "../llm.ts";
+import { callStructured, MODELS, modelName, pacing } from "../llm.ts";
 import { getMaterial, getMoment, getNames, logEvent, sourceEntry } from "../db.ts";
 import { clearedNames, unclearedNames } from "../names.ts";
 import { enqueue } from "../jobs.ts";
@@ -238,7 +238,12 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
       check_key: check.key,
       passed: verdict.passed,
       reason: verdict.passed ? null : (verdict.reason || "Failed without a stated reason."),
-      model: MODELS.OPUS,
+      // The MODEL, not the role. This stored the literal "STRONG", which says nothing about what
+      // actually judged the draft — and what judged it is the single most important caveat on
+      // every gate number in this build, because "STRONG" has meant Claude, gpt-oss, Qwen and
+      // flash-lite at different points. A verdict you cannot attribute is a verdict you cannot
+      // weigh.
+      model: modelName(MODELS.OPUS),
     });
     already.set(check.key, { check_key: check.key, passed: verdict.passed, reason: verdict.reason });
   });

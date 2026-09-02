@@ -14,6 +14,8 @@
  * left namesOnFile: 0 sitting in the middle of the object as a lie the caller was trusted to
  * correct - and worker-ops, which does not run this file, never did. It is folded in here now.
  */
+import { gateFixtures } from "../supabase/functions/_shared/acceptance.ts";
+
 /** Rows, with killed moments excluded wherever a moment is involved. */
 export async function gather(q) {
   const [
@@ -24,8 +26,8 @@ export async function gather(q) {
     q("raw_inputs?select=moment_id,kind,transcript"),
     q("material?select=moment_id,the_moment,the_detail,the_realisation"),
     q("interview_turns?select=moment_id,role&role=eq.answer"),
-    q("drafts?select=moment_id,gate_passed,framework"),
-    q("gate_runs?select=check_key,passed"),
+    q("drafts?select=id,moment_id,version,gate_passed,framework"),
+    q("gate_runs?select=draft_id,check_key,passed,model"),
     q("selection_runs?select=ran_at"),
     q("visuals?select=id"),
     q("posts?select=id,moment_id,status,marked_ready_at,published_at"),
@@ -72,7 +74,8 @@ export async function gather(q) {
       .filter((d) => d.framework !== "acceptance-fixture" && d.gate_passed).length,
     namesOnFile: 0, // filled below
     gateChecksRun: gateRuns.length,
-    gateAcceptanceRun: false, // set by gate-acceptance.mjs when it writes its result
+    gateAcceptanceRun: false, // kept for worker-ops; test 8 is scored from the rows below
+    ...gateFixtures(drafts, gateRuns),
     selectionRuns: selectionRuns.length,
     selectionWeeks: weeksSince(selectionRuns.map((r) => r.ran_at)),
     visualsBuilt: visuals.length,

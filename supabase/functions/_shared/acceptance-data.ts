@@ -12,6 +12,7 @@
  */
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { gateFixtures } from "./acceptance.ts";
 import type { Counts } from "./acceptance.ts";
 
 function weeksSince(dates: (string | null)[]): number {
@@ -44,8 +45,10 @@ export async function gatherCounts(db: SupabaseClient): Promise<Counts> {
     // hung off a REAL moment, because testing the gate against an empty source entry proves nothing.
     // The harness does not clean them up, so without this they would be counted as drafts the system
     // produced — the same leak as the killed moments, arriving from a different direction.
-    db.from("drafts").select("moment_id, gate_passed, framework"),
-    db.from("gate_runs").select("check_key", { count: "exact", head: true }),
+    db.from("drafts").select("id, moment_id, version, gate_passed, framework"),
+    // Rows as well as a count now: test 8 is scored from the fixtures themselves, and the model
+    // that judged them is on these rows.
+    db.from("gate_runs").select("draft_id, model", { count: "exact" }),
     db.from("selection_runs").select("ran_at"),
     db.from("visuals").select("id", { count: "exact", head: true }),
     db.from("posts").select("id, moment_id, status, marked_ready_at, published_at"),
@@ -93,7 +96,10 @@ export async function gatherCounts(db: SupabaseClient): Promise<Counts> {
       .filter((d) => d.framework !== "acceptance-fixture" && d.gate_passed).length,
     namesOnFile: ofLive(names.data).filter((n) => n.kind !== "not_a_name").length,
     gateChecksRun: gateRuns.count ?? 0,
-    gateAcceptanceRun: false,
+    gateAcceptanceRun: false, // kept for compatibility; test 8 is scored from the rows
+    // The same scorer eval/gather.mjs uses. This file and that one are two readings of the same
+    // database, and every count they compute separately is a count that can quietly disagree.
+    ...gateFixtures(drafts.data ?? [], gateRuns.data ?? []),
     selectionRuns: (selectionRuns.data ?? []).length,
     selectionWeeks: weeksSince((selectionRuns.data ?? []).map((r) => r.ran_at)),
     visualsBuilt: visuals.count ?? 0,

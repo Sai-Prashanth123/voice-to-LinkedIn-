@@ -75,6 +75,21 @@ export interface Counts {
   namesOnFile: number;
   gateChecksRun: number;
   gateAcceptanceRun: boolean;
+  /**
+   * The best single batch of seeded fixtures, and how many of it the gate threw out.
+   *
+   * Test 8 used to be scored from a boolean that only `eval/gate-acceptance.mjs` could set, so a
+   * harness that seeded ten fixtures and died waiting for the queue left the scorecard saying
+   * "never run" while ten judged fixtures sat in the database. The evidence and the report
+   * disagreed, and the report was the one being read.
+   *
+   * Scored from the rows now. A batch is a run: fixtures are seeded at version 9000 and up, and
+   * each run starts above the last one.
+   */
+  gateFixtureBatch: number;
+  gateFixtureRejected: number;
+  /** What judged them. Test 8 measures REJECTION, so a cheap model clearing the bar still counts. */
+  gateFixtureModel: string | null;
   selectionRuns: number;
   selectionWeeks: number;
   visualsBuilt: number;
@@ -188,11 +203,20 @@ export function score(c: Counts): TestResult[] {
     name: "The gate",
     clause: "9b",
     requires: "10 deliberately generic drafts seeded, at least 9 rejected",
-    actual: c.gateAcceptanceRun
-      ? "eval/gate-acceptance.mjs has been run — read its output"
-      : `never run (${c.gateChecksRun} gate checks have run in normal working)`,
-    verdict: "blocked",
-    blocker: c.gateAcceptanceRun ? undefined : "run: node eval/gate-acceptance.mjs",
+    actual: c.gateFixtureBatch === 0
+      ? `never seeded (${c.gateChecksRun} gate checks have run in normal working)`
+      : `${c.gateFixtureRejected} of ${c.gateFixtureBatch} generic drafts rejected` +
+        (c.gateFixtureModel ? `, judged by ${c.gateFixtureModel}` : ""),
+    // The bar is rejection, and rejection is the hard direction for a weak model — a lenient one
+    // lets generic writing through, which is the failure this test exists to catch. So a cheap
+    // model clearing the bar is evidence the gate works, not a result to discount. The model is
+    // named in `actual` so the reader can weigh it either way.
+    verdict: c.gateFixtureBatch >= 10 && c.gateFixtureRejected >= 9 ? "passing" : "blocked",
+    blocker: c.gateFixtureBatch >= 10 && c.gateFixtureRejected >= 9
+      ? undefined
+      : c.gateFixtureBatch === 0
+      ? "run: node eval/gate-acceptance.mjs"
+      : `${10 - c.gateFixtureBatch} more fixtures judged in one batch`,
   });
 
   t.push({
@@ -212,7 +236,14 @@ export function score(c: Counts): TestResult[] {
     requires: "5 reference images returned in Josh's brand, none recognisable as the original",
     actual: `${c.visualsBuilt} built`,
     verdict: c.visualsBuilt >= 5 ? "passing" : "blocked",
-    blocker: "no vision-capable provider configured. The deferral is recorded and sweeps in",
+    // Was a fixed string saying no vision-capable provider was configured. That stopped being true
+    // the moment one was, and the scorecard went on reporting it while a rebuilt visual sat in the
+    // table — a blocker that cannot change is not a blocker, it is a caption.
+    blocker: c.visualsBuilt >= 5
+      ? undefined
+      : c.visualsBuilt === 0
+      ? "no visual has been built yet — needs a vision-capable provider and an image to work from"
+      : `${5 - c.visualsBuilt} more images rebuilt`,
   });
 
   // The only test whose GUARANTEE is already proven, even though its window has not started: four
@@ -284,4 +315,70 @@ export function summarise(results: TestResult[]): string {
   const blocked = results.filter((r) => r.verdict === "blocked").length;
   return `${passing} of ${results.length} passing, ${failing} failing, ` +
     `${blocked} not yet checkable`;
+}
+
+/** Only the columns the fixture scorer reads, so both callers can pass their own row shape. */
+export interface FixtureDraft {
+  id: number;
+  version?: number | null;
+  gate_passed?: boolean | null;
+  framework?: string | null;
+}
+
+export interface FixtureRun {
+  draft_id?: number | null;
+  model?: string | null;
+}
+
+/**
+ * Score acceptance test 8 from the fixtures themselves.
+ *
+ * Test 8 seeds ten deliberately generic drafts and requires at least nine to be rejected. It used
+ * to be reported from a boolean only `eval/gate-acceptance.mjs` could set — so a harness that
+ * seeded its ten and then died waiting for a throttled queue left the scorecard saying "never run"
+ * while ten fully judged fixtures sat in the table. The evidence and the report disagreed, and the
+ * report was the one being read.
+ *
+ * Fixtures are seeded from version 9000 upward and each run starts above the last, so a run is a
+ * contiguous block. Grouping by 500 separates them without needing a run id the schema never had.
+ *
+ * The best batch is used rather than the latest. A run interrupted half way through is not evidence
+ * that the gate got worse, and the test asks whether the gate CAN reject ten generic drafts.
+ */
+export function gateFixtures(
+  drafts: FixtureDraft[],
+  gateRuns: FixtureRun[],
+): Pick<Counts, "gateFixtureBatch" | "gateFixtureRejected" | "gateFixtureModel"> {
+  const fixtures = drafts.filter((d) => d.framework === "acceptance-fixture");
+  if (fixtures.length === 0) {
+    return { gateFixtureBatch: 0, gateFixtureRejected: 0, gateFixtureModel: null };
+  }
+
+  const batches = new Map<number, FixtureDraft[]>();
+  for (const d of fixtures) {
+    const key = Math.floor((d.version ?? 0) / 500) * 500;
+    if (!batches.has(key)) batches.set(key, []);
+    batches.get(key)!.push(d);
+  }
+
+  let best = { gateFixtureBatch: 0, gateFixtureRejected: 0, gateFixtureModel: null as string | null };
+  for (const rows of batches.values()) {
+    const judged = rows.filter((d) => d.gate_passed !== null);
+    const rejected = judged.filter((d) => d.gate_passed === false).length;
+    if (rejected < best.gateFixtureRejected) continue;
+
+    const ids = new Set(judged.map((d) => d.id));
+    // Whatever actually judged them, ignoring the rows written without a model — those are checks
+    // recorded as NOT JUDGED because the library section they read is empty.
+    const models = gateRuns
+      .filter((r) => r.draft_id != null && ids.has(r.draft_id) && r.model && r.model !== "none")
+      .map((r) => r.model);
+
+    best = {
+      gateFixtureBatch: judged.length,
+      gateFixtureRejected: rejected,
+      gateFixtureModel: models.length > 0 ? [...new Set(models)].sort().join(", ") : null,
+    };
+  }
+  return best;
 }

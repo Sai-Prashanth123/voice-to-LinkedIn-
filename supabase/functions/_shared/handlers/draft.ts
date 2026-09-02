@@ -12,7 +12,7 @@
  */
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { callStructured, MODELS } from "../llm.ts";
+import { callStructured, MODELS, modelName } from "../llm.ts";
 import { verifyDraft, type Claim } from "../claims.ts";
 import { getMaterial, getMoment, getNames, logEvent, park, sourceEntry } from "../db.ts";
 import { clearedNames, unclearedNames } from "../names.ts";
@@ -101,7 +101,9 @@ export async function handleDraft(db: SupabaseClient, job: Job): Promise<void> {
     hook: result.hook,
     framework: result.framework,
     library_version: library.version,
-    model: MODELS.OPUS,
+    // The model, not the role — see the note in gate.ts. 8.4 pins the library version a draft
+    // was written against; the model that wrote it deserves the same treatment.
+    model: modelName(MODELS.OPUS),
     claims: result.claims,
     claims_verified: verification.ok,
   }).select("id").single();
