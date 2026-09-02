@@ -27,7 +27,13 @@ import {
   PROMPT_VERSION,
 } from "../../supabase/functions/_shared/prompts.ts";
 import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
-import { renderLibrary, VIEWS } from "../../supabase/functions/_shared/views.ts";
+import {
+  CHECK_NEEDS_SECTION,
+  notJudged,
+  renderLibrary,
+  unjudgeableChecks,
+  VIEWS,
+} from "../../supabase/functions/_shared/views.ts";
 
 /**
  * The library, exactly as loadLibrary() assembles it for the same view.
@@ -58,6 +64,9 @@ async function libraryText(db, view) {
 
   return {
     text: prompt,
+    // Per-section bodies as well as the assembled prompt: the gate brief has to know WHICH section
+    // is empty, not merely that the prompt mentions a gap.
+    sections,
     version: version?.version ?? null,
     view,
     included: VIEWS[view],
@@ -204,9 +213,36 @@ export const briefTools = [
         (await db.select("gate_runs", { select: "check_key", draft_id: `eq.${args.draft_id}` }))
           .map((r) => r.check_key),
       );
-      const remaining = GATE_CHECKS.filter((c) => !done.has(c.key));
-
       const library = await libraryText(db, "gating");
+
+      // The same rule the edge function applies, from the same function.
+      //
+      // Without it the two gate paths disagreed on live data: handlers/gate.ts recorded voice_guide
+      // as NOT JUDGED while a run through this skill recorded it as a plain pass, on the same empty
+      // section. Two answers to one question, and the more flattering one was the one Claude Code
+      // produced. A check with nothing to judge against is not offered here at all.
+      const unjudgeable = new Set(
+        unjudgeableChecks(GATE_CHECKS, library.sections).map((c) => c.key),
+      );
+      const remaining = GATE_CHECKS.filter((c) => !done.has(c.key) && !unjudgeable.has(c.key));
+
+      // A read tool that writes needs a reason, and this is it: withholding the check without
+      // recording it leaves the draft permanently at seven of eight, and cc-agent/work.mjs looks
+      // for drafts with fewer than eight verdicts. It would re-gate the same draft for ever,
+      // burning quota on a check nobody can answer.
+      //
+      // So the row is written here, identically to handlers/gate.ts — same reason text, same
+      // model marker — rather than asking the model to reproduce a specific string faithfully.
+      const toRecord = [...unjudgeable].filter((key) => !done.has(key));
+      if (toRecord.length > 0) {
+        await db.insert("gate_runs", toRecord.map((key) => ({
+          draft_id: draft.id,
+          check_key: key,
+          passed: true,
+          reason: notJudged(CHECK_NEEDS_SECTION[key]),
+          model: "none",
+        })), { returning: false });
+      }
 
       // 9b — each check is its own call with its own rubric. Run together in one prompt a model
       // averages across them and lets marginal work through, which is the exact failure acceptance
@@ -216,6 +252,7 @@ export const briefTools = [
         moment_ref: moment?.ref,
         prompt_version: PROMPT_VERSION,
         already_judged: [...done],
+        not_judgeable: [...unjudgeable],
         checks_remaining: remaining.length,
         system: GATE_SYSTEM(library.text),
         checks: remaining.map((check) => ({
@@ -228,6 +265,10 @@ export const briefTools = [
             clearedNames: cleared,
           }),
         })),
+        note: unjudgeable.size > 0
+          ? [...unjudgeable].join(", ") + " is not in this list: the library section it judges " +
+            "against is empty, so it is recorded as NOT JUDGED rather than passed on no evidence."
+          : undefined,
         next: remaining.length > 0
           ? "Judge each check on its own and call record_gate_verdict once per check. When unsure, fail it."
           : "Every check already has a verdict. Nothing to do.",

@@ -138,12 +138,19 @@ function runClaude(prompt) {
       "--allowedTools", "mcp__content-system__*",
       "--strict-mcp-config",
       "--mcp-config", join(ROOT, ".mcp.json"),
-      prompt,
     ]);
+
+    // THE PROMPT GOES ON STDIN, NOT ON THE COMMAND LINE.
+    //
+    // --mcp-config is variadic: it takes a space-separated list of configs, so it swallows every
+    // argument after it. A prompt passed as the final argument was read as a second config file
+    // and the run died with "MCP config file not found: <the entire prompt>". This file could
+    // never have completed a single job, and it looked like a working scheduler.
     const child = spawn(file, cmdArgs, {
       cwd: ROOT,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
+    child.stdin.end(prompt);
 
     let out = "";
     let err = "";

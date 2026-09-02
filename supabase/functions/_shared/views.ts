@@ -125,3 +125,50 @@ export function renderLibrary(rows: SectionRow[], view: LibraryViewName): {
 
   return { sections, prompt: parts.join("\n\n---\n\n") };
 }
+
+/* ── Which checks have a basis to judge against ──────────────────────────── */
+//
+// Moved here from handlers/gate.ts, which imports the Supabase client and so can only be read by
+// Deno. The MCP server assembles the same eight checks for Claude Code and did not apply this
+// rule, so the two gate paths disagreed on live data: the edge function recorded voice_guide as
+// NOT JUDGED while a run through the skill recorded it as a pass, on the same empty section.
+// One rule, both readers.
+
+/**
+ * Checks that judge a draft against one library section, and cannot judge anything without it.
+ *
+ * Stated explicitly rather than matched by name. The two happen to share a spelling today, and a
+ * lookup that relied on that would silently stop working the first time a check or a section was
+ * renamed — by passing every draft, which is the direction that does not get noticed.
+ *
+ * Only genuine dependencies belong here. `aimed_at_someone` reads the audience section but also the
+ * audience recorded against the moment, and GATE_USER already handles a missing one deliberately,
+ * so it can still judge a post on its own terms and is not listed.
+ */
+export const CHECK_NEEDS_SECTION: Record<string, string> = {
+  voice_guide: "voice_guide",
+  banned_phrases: "banned_phrases",
+};
+
+/**
+ * Which of these checks cannot be judged, because the section they read is empty.
+ *
+ * Pulled out and exported so it can be tested without a database. The behaviour it guards is the
+ * kind that fails silently: get it wrong in one direction and a real check is skipped, get it wrong
+ * in the other and every draft is blocked on a section Josh was never required to fill in first.
+ */
+export function unjudgeableChecks<T extends { key: string }>(
+  checks: T[],
+  sections: Record<string, string>,
+): T[] {
+  return checks.filter((c) => {
+    const section = CHECK_NEEDS_SECTION[c.key];
+    return Boolean(section) && !(sections[section] ?? "").trim();
+  });
+}
+
+export const notJudged = (section: string) =>
+  `NOT JUDGED — the "${section}" section of the reference library is empty, so there was nothing ` +
+  `to judge this draft against. Recorded as passed so a section Josh has not supplied cannot ` +
+  `block a draft, but this is an absence of evidence rather than evidence of quality. It becomes ` +
+  `a real check the moment that section is filled in.`;
