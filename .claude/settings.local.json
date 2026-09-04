@@ -5,5 +5,8 @@
       "mcp__plugin_supabase_supabase__execute_sql",
       "mcp__supabase-voice-to-content__execute_sql"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "content-system"
+  ]
 }

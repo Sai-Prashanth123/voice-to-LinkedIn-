@@ -1,4 +1,5 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { isAllowed } from "./lib/allowlist";
 import { NextResponse, type NextRequest } from "next/server";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
@@ -49,9 +50,10 @@ export async function middleware(request: NextRequest) {
   // variable always set it looked correct for months; on a public deployment where it was missing,
   // anyone holding an account on this Supabase project could have read the whole bank.
   //
-  // A missing allowlist is now a locked door, not an open one.
-  const allowed = process.env.ALLOWED_EMAIL?.toLowerCase();
-  if (user && (!allowed || user.email?.toLowerCase() !== allowed)) {
+  // A missing allowlist is now a locked door, not an open one. The rule itself lives in
+  // lib/allowlist.ts, because the sign-in page has to apply the identical one before it posts a
+  // magic link - and two copies of an access rule is one copy too many.
+  if (user && !isAllowed(user.email)) {
     await supabase.auth.signOut();
     const url = request.nextUrl.clone();
     url.pathname = "/login";

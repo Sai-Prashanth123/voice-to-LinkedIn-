@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { isAllowed } from "@/lib/allowlist";
 import { SubmitButton } from "../submit-button";
 import { supabaseServer } from "@/lib/supabase";
 
@@ -12,8 +13,7 @@ async function sendLink(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   // 15.4, and it fails CLOSED for the same reason the middleware does: an unset ALLOWED_EMAIL used
   // to skip this check entirely and send a sign-in link to whoever asked.
-  const allowed = process.env.ALLOWED_EMAIL?.toLowerCase();
-  if (!allowed || email !== allowed) redirect("/login?denied=1");
+  if (!isAllowed(email)) redirect("/login?denied=1");
 
   const db = await supabaseServer();
   const { error } = await db.auth.signInWithOtp({
