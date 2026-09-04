@@ -83,10 +83,25 @@ export const VIEWS: Record<LibraryViewName, readonly string[]> = {
 export function isSupplied(body: string | null | undefined): boolean {
   const text = (body ?? "").trim();
   if (!text) return false;
-  // Both markers appear at the head of the section, under its title.
-  if (/DELIBERATELY EMPTY/.test(text)) return false;
-  if (/^#[^\n]*\n+\s*FOR JOSH\b/.test(text)) return false;
-  return true;
+
+  // No placeholder marker at the head: Josh has written or replaced this section himself.
+  const placeheld = /DELIBERATELY EMPTY/.test(text) || /^#[^\n]*\n+\s*FOR JOSH\b/.test(text);
+  if (!placeheld) return true;
+
+  // A PLACEHOLDER CAN HAVE REAL CONTENT APPENDED BELOW IT, AND ALMOST DID NOT COUNT.
+  //
+  // /voiceguide appends each recording to the END of the section, under a `---` divider, leaving
+  // the original "FOR JOSH" preamble at the top. The first version of this function tested only
+  // the head, so the first real voice recording Josh made was filed correctly, versioned
+  // correctly, appended correctly — and then reported as an empty section. The drafter was handed
+  // "" and the gate went on recording voice_guide as NOT JUDGED.
+  //
+  // Everything looked like it worked. Only the one thing that mattered did not.
+  //
+  // None of the fourteen placeholders contains a `---` divider of its own, so anything below the
+  // first one is content somebody added.
+  const [, ...appended] = text.split(/(?:^|\n)---(?:\n|$)/);
+  return appended.some((chunk) => chunk.trim().length > 0);
 }
 
 export interface SectionRow {

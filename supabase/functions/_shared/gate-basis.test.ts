@@ -120,3 +120,43 @@ test("the placeholder does not reach the prompt as if it were the standard", () 
   assert.ok(prompt.includes("Not yet supplied by Josh"), "the gap is named instead");
   assert.ok(prompt.includes("The two rules."), "real content still comes through");
 });
+
+/* ── Content appended under a placeholder ────────────────────────────────── */
+
+const PLACEHOLDER =
+  "# The voice interview\n\nFOR JOSH (8.1). The transcript of you talking at length.\n\n" +
+  "## Currently Empty.\n\nUntil it is filled, the voice guide has nothing behind it.\n";
+
+test("a placeholder on its own is still empty", () => {
+  assert.equal(isSupplied(PLACEHOLDER), false);
+  assert.equal(isSupplied(PLACEHOLDER + "\n---\n\n"), false, "a divider with nothing after it");
+  assert.equal(isSupplied(PLACEHOLDER + "\n---\n\n   \n"), false, "whitespace after it");
+});
+
+test("a recording appended below the placeholder DOES count", () => {
+  // The exact shape /voiceguide writes: the preamble stays at the top and each recording is
+  // appended under a divider. Testing only the head reported this as an empty section, so the
+  // first real voice recording was stored, versioned — and then ignored by the drafter.
+  const withOne = PLACEHOLDER +
+    "\n---\n\n## Recorded 2026-09-04\n\nHey. Hi. Hello. Today AWS is blocked due to some issues.\n";
+  assert.equal(isSupplied(withOne), true);
+
+  const withTwo = withOne + "\n---\n\n## Recorded 2026-09-05\n\nMore of him talking.\n";
+  assert.equal(isSupplied(withTwo), true);
+});
+
+test("the appended recording reaches the drafter, not a gap notice", () => {
+  const body = PLACEHOLDER + "\n---\n\n## Recorded 2026-09-04\n\nHey. Hi. Hello.\n";
+  const { sections, prompt } = renderLibrary(
+    [{ key: "voice_transcript", title: "The voice interview", body }],
+    "drafting",
+  );
+
+  assert.notEqual(sections.voice_transcript, "", "the section counts as supplied");
+  assert.ok(prompt.includes("Recorded 2026-09-04"), "the recording is in the prompt");
+  assert.ok(!prompt.includes("Not yet supplied by Josh"), "and the gap notice is gone");
+});
+
+test("a section Josh rewrote entirely still counts, divider or not", () => {
+  assert.equal(isSupplied("# Voice guide\n\nHe writes in short sentences. He never hedges."), true);
+});
