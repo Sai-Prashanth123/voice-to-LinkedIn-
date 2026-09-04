@@ -10,13 +10,17 @@
 set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
-CONTAINER=v2c-pg
+# Overridable so eval/e2e can stand up its own database from this same recipe rather than keeping
+# a second copy of it. A second copy would drift from this one, and the drift would be in the
+# migration order or the readiness check — the two things here that were hard to get right.
+CONTAINER="${CONTAINER:-v2c-pg}"
+PGPORT_HOST="${PGPORT_HOST:-55432}"
 IMAGE=pgvector/pgvector:pg17
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 echo "==> recreating $CONTAINER"
 docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
-docker run -d --name "$CONTAINER" -e POSTGRES_PASSWORD=pw -p 55432:5432 "$IMAGE" >/dev/null
+docker run -d --name "$CONTAINER" -e POSTGRES_PASSWORD=pw -p "$PGPORT_HOST":5432 "$IMAGE" >/dev/null
 
 # pg_isready answers "ready" while the server is still coming up, so the shim could land on a
 # database that then refused it: "FATAL: the database system is starting up". Seen for real. The

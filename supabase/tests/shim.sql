@@ -37,6 +37,12 @@ create table if not exists vault.decrypted_secrets (
   id uuid primary key default gen_random_uuid(),
   name text unique, decrypted_secret text);
 
+-- The undecrypted side. Real Supabase has both, and anything that only wants to know WHICH secrets
+-- exist should read this one — there is no value column to select by accident.
+create table if not exists vault.secrets (
+  id uuid primary key default gen_random_uuid(),
+  name text unique, description text, created_at timestamptz default now());
+
 -- pg_net
 create schema if not exists net;
 create or replace function net.http_post(
