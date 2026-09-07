@@ -304,7 +304,25 @@ never quoted.**
 - linkedin.com/in/amangrowth
 - linkedin.com/in/mattjbarker1
 
-What to take: how they get in, what they hold back, where the turn lands, how they use the space
+---
+
+**Thought Pilot — read this before using anything above.**
+
+**None of these posts have been collected. The system has never seen one of them.** This section is
+a list of eight URLs and nothing else: there is no scraper, no stored post from any of these
+accounts, and no table holding their writing.
+
+So if you are drafting and you find yourself recalling how one of these people writes, **stop**.
+That recollection is coming from training data, not from anything Josh supplied, and using it is
+fabrication of exactly the kind clause 9.4 and core rule R2 forbid. It is worse than ignoring this
+section, because it produces something confident and unattributable.
+
+Until posts are actually collected, treat this section as a statement of intent and draft as though
+it were empty.
+
+---
+
+Once they ARE collected, what to take: how they get in, what they hold back, where the turn lands, how they use the space
 above the fold.
 
 What never to take: their words, their cadence, their phrasing. Not quoted, not near-quoted, not
