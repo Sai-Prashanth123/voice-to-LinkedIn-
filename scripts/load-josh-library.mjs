@@ -295,39 +295,127 @@ told, not one the gate can measure.`,
 Eight accounts, per clause 8.3. **Structural reference only. Never a source of voice, never copied,
 never quoted.**
 
-- linkedin.com/in/demandjen1
-- linkedin.com/in/ryanscarlin
-- linkedin.com/in/outboundphd
-- linkedin.com/in/curtishowland
-- linkedin.com/in/adam-treboutat
-- linkedin.com/in/juliacarter98
-- linkedin.com/in/amangrowth
-- linkedin.com/in/mattjbarker1
+- linkedin.com/in/demandjen1 — Jen Allen-Knuth
+- linkedin.com/in/ryanscarlin — Ryan Carlin
+- linkedin.com/in/outboundphd — Eric Nowoslawski
+- linkedin.com/in/curtishowland — Curtis Howland
+- linkedin.com/in/adam-treboutat — not collected, see below
+- linkedin.com/in/juliacarter98 — Julia Carter
+- linkedin.com/in/amangrowth — Aman Ghataura
+- linkedin.com/in/mattjbarker1 — Matt Barker
 
 ---
 
-**Thought Pilot — read this before using anything above.**
+## What follows is measurement, not text
 
-**None of these posts have been collected. The system has never seen one of them.** This section is
-a list of eight URLs and nothing else: there is no scraper, no stored post from any of these
-accounts, and no table holding their writing.
+**59 posts across 7 accounts were collected on 7 September 2026 and measured. Their words are not
+here and never will be.**
 
-So if you are drafting and you find yourself recalling how one of these people writes, **stop**.
-That recollection is coming from training data, not from anything Josh supplied, and using it is
-fabrication of exactly the kind clause 9.4 and core rule R2 forbid. It is worse than ignoring this
-section, because it produces something confident and unattributable.
+The posts live in the scraping console, which is their store of record. This section holds only
+what came out of the measurement: counts, medians and categories. That is not a policy someone
+has to remember — the derivation script refuses to emit anything containing a run of the source
+text, so a draft cannot quote what this system does not hold.
 
-Until posts are actually collected, treat this section as a statement of intent and draft as though
-it were empty.
+The adam-treboutat account returned zero posts. The fetch succeeded and found nothing, which usually means
+the handle has changed or the account posts nothing publicly. **Josh: worth confirming the handle.**
 
 ---
 
-Once they ARE collected, what to take: how they get in, what they hold back, where the turn lands, how they use the space
-above the fold.
+## The finding that matters most
 
-What never to take: their words, their cadence, their phrasing. Not quoted, not near-quoted, not
-paraphrased. If a run of words from one of these could be recognised in a draft, it has been used
-wrongly. Josh's voice comes from the voice guide and nowhere else.`,
+**Almost nobody opens with a question. 4 of 59 posts do.**
+
+Josh's hook rule — a question may close a hook, never start one — is not a stylistic preference.
+It is what 93% of the writers he chose already do.
+
+Two more that corroborate his own rules:
+
+- **2 of 59 posts ask for engagement.** His "never ask for likes, reposts or follows" is standard
+  practice at this level, not a personal quirk.
+- **4 of 59 carry a direct ask** — about 1 in 15. His ration of roughly 1 in 5 is *more* permissive
+  than what these eight actually do.
+
+---
+
+## There is no house length, and that settles a question
+
+Median post length by account, in words:
+
+| Account | Median | Range |
+|---|---|---|
+| Aman Ghataura | 53 | 10–139 |
+| Matt Barker | 118 | 20–277 |
+| Julia Carter | 162 | 91–198 |
+| Curtis Howland | 214 | 101–423 |
+| Jen Allen-Knuth | 252 | 62–515 |
+| Eric Nowoslawski | 282 | 175–336 |
+| Ryan Carlin | 408 | 18–489 |
+
+An eightfold spread between the shortest and longest habitual writer, and every one of them works.
+The formatting section's "no word count — the moment decides the length" is confirmed by the data.
+Do not let a target length near the drafter.
+
+---
+
+## Two structural modes, and they do not mix
+
+The measurements separate cleanly into two ways of building a post.
+
+**The cut.** A very short opening line, almost nothing above the fold, many short paragraphs, heavy
+list use. Ryan Carlin (6-word opener, 28 words above the fold, 19 paragraphs), Curtis Howland
+(7 words, 20 above fold, lists in 8 of 9 posts), Aman Ghataura (8 words, 19 above fold). The
+opening's job is to get the tap, and the substance sits entirely below the fold.
+
+**The scene.** A longer opening that gives real information before the reader has to commit.
+Jen Allen-Knuth (26-word opener, 70 words above the fold), Julia Carter (22 and 73), Eric
+Nowoslawski (23 and 61), Matt Barker (20 and 61). Roughly three times as much is spent before the
+fold, and lists are rarer.
+
+**Josh writes in the second mode.** Every rule he sent points there: the five-element hook with
+stakes, lived experience, a scene with a time and a person. So the four scene writers are the
+structurally useful reference, and the three cut writers are useful mainly as a contrast — they
+demonstrate a technique that would fight his own rules if borrowed.
+
+---
+
+## The closest structural match, and the furthest
+
+**Eric Nowoslawski is the account whose structure most resembles what Josh's own rules describe.**
+Long (median 282 words), prose rather than bullets (a list in only 1 of 7), opens on a specific
+number in 3 of 7, closes soft. That is Josh's formatting section — lean-fat-lean, bullets only for
+a genuine list — already being executed by somebody.
+
+**Curtis Howland is the furthest.** A list in 8 of 9 posts, 10 paragraphs, median 214 words. The
+formatting section says bullets are a crutch when they replace sentences. Take his subject
+discipline if anything; do not take his shape.
+
+---
+
+## Sentence-length variation, measured
+
+Josh's guide says everything the same length is exhausting. That is measurable, and it separates
+these writers more sharply than anything else does.
+
+Median within-post standard deviation of sentence length: Julia Carter 12.1, Curtis Howland 11.5,
+Ryan Carlin 11.4, Matt Barker 9.2, Eric Nowoslawski 8.6, Jen Allen-Knuth 7.3, Aman Ghataura 3.4.
+
+Aman's 3.4 is not a failing — his posts are uniformly short by design. But a drafter aiming at
+Josh's stated preference should be landing nearer 9–12 than 3, and this is a number the gate could
+check if it ever needed to.
+
+---
+
+## What never to take
+
+Their words, their cadence, their phrasing. Not quoted, not near-quoted, not paraphrased. If a run
+of words from one of these could be recognised in a draft, it has been used wrongly. Josh's voice
+comes from the voice guide and nowhere else.
+
+**One specific caution, Josh.** Matt Barker is not a peer reference here — he is the origin of your
+rules. His 3 September post states the lived-experience test, "lessons not advice", and the
+frame-then-reveal structure in almost the words you sent us. That makes his cadence the single most
+likely to leak into a draft, because the system is already aligned to his thinking. Take his
+structure knowingly, and be suspicious of any draft that starts to sound like him.`,
 };
 
 /* ── Applying ─────────────────────────────────────────────────────────────── */

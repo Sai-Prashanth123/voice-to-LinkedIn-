@@ -8,7 +8,9 @@
       "mcp__claude_ai_xplatform__get_job",
       "mcp__claude_ai_xplatform__get_job_results",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "mcp__claude_ai_xplatform__platform_overview",
+      "mcp__claude_ai_xplatform__run_scrape"
     ]
   },
   "enabledMcpjsonServers": [

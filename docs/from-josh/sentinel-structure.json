@@ -1,0 +1,428 @@
+{
+  "accounts": 7,
+  "posts": 59,
+  "report": [
+    {
+      "handle": "amangrowth",
+      "name": "Aman Ghataura",
+      "posts_measured": 9,
+      "window": {
+        "from": "2026-02-27",
+        "to": "2026-07-23"
+      },
+      "length_words": {
+        "median": 53,
+        "min": 10,
+        "max": 139
+      },
+      "above_fold_words_median": 19,
+      "opening_words_median": 8,
+      "paragraphs_median": 4,
+      "opening_shapes": [
+        [
+          "statement",
+          7
+        ],
+        [
+          "colon_setup",
+          1
+        ],
+        [
+          "consensus_claim",
+          1
+        ]
+      ],
+      "close_shapes": [
+        [
+          "soft_close",
+          5
+        ],
+        [
+          "short_landing",
+          3
+        ],
+        [
+          "question",
+          1
+        ]
+      ],
+      "uses_a_list": "3/9",
+      "colon_lines_median": 0,
+      "links": "0/9",
+      "sentence_words": {
+        "mean_of_means": 10.5,
+        "variation_sd_median": 3.4,
+        "shortest_seen": 1,
+        "longest_seen": 86
+      }
+    },
+    {
+      "handle": "curtishowland",
+      "name": "Curtis Howland",
+      "posts_measured": 9,
+      "window": {
+        "from": "2026-08-28",
+        "to": "2026-09-06"
+      },
+      "length_words": {
+        "median": 214,
+        "min": 101,
+        "max": 423
+      },
+      "above_fold_words_median": 20,
+      "opening_words_median": 7,
+      "paragraphs_median": 10,
+      "opening_shapes": [
+        [
+          "statement",
+          6
+        ],
+        [
+          "question",
+          2
+        ],
+        [
+          "number_claim",
+          1
+        ]
+      ],
+      "close_shapes": [
+        [
+          "soft_close",
+          5
+        ],
+        [
+          "question",
+          1
+        ],
+        [
+          "short_landing",
+          1
+        ],
+        [
+          "direct_ask",
+          1
+        ],
+        [
+          "postscript",
+          1
+        ]
+      ],
+      "uses_a_list": "8/9",
+      "colon_lines_median": 1,
+      "links": "0/9",
+      "sentence_words": {
+        "mean_of_means": 11.6,
+        "variation_sd_median": 11.5,
+        "shortest_seen": 1,
+        "longest_seen": 92
+      }
+    },
+    {
+      "handle": "demandjen1",
+      "name": "Jen Allen-Knuth",
+      "posts_measured": 8,
+      "window": {
+        "from": "2026-08-26",
+        "to": "2026-09-03"
+      },
+      "length_words": {
+        "median": 251.5,
+        "min": 62,
+        "max": 515
+      },
+      "above_fold_words_median": 69.5,
+      "opening_words_median": 25.5,
+      "paragraphs_median": 8.5,
+      "opening_shapes": [
+        [
+          "statement",
+          5
+        ],
+        [
+          "number_claim",
+          2
+        ],
+        [
+          "question",
+          1
+        ]
+      ],
+      "close_shapes": [
+        [
+          "short_landing",
+          4
+        ],
+        [
+          "soft_close",
+          3
+        ],
+        [
+          "engagement_ask",
+          1
+        ]
+      ],
+      "uses_a_list": "3/8",
+      "colon_lines_median": 0,
+      "links": "2/8",
+      "sentence_words": {
+        "mean_of_means": 11.2,
+        "variation_sd_median": 7.3,
+        "shortest_seen": 1,
+        "longest_seen": 47
+      }
+    },
+    {
+      "handle": "juliacarter98",
+      "name": "Julia Carter",
+      "posts_measured": 8,
+      "window": {
+        "from": "2026-08-19",
+        "to": "2026-09-04"
+      },
+      "length_words": {
+        "median": 161.5,
+        "min": 91,
+        "max": 198
+      },
+      "above_fold_words_median": 72.5,
+      "opening_words_median": 22,
+      "paragraphs_median": 7.5,
+      "opening_shapes": [
+        [
+          "statement",
+          5
+        ],
+        [
+          "colon_setup",
+          1
+        ],
+        [
+          "first_person",
+          1
+        ],
+        [
+          "number_claim",
+          1
+        ]
+      ],
+      "close_shapes": [
+        [
+          "short_landing",
+          4
+        ],
+        [
+          "soft_close",
+          3
+        ],
+        [
+          "question",
+          1
+        ]
+      ],
+      "uses_a_list": "1/8",
+      "colon_lines_median": 0,
+      "links": "1/8",
+      "sentence_words": {
+        "mean_of_means": 16.3,
+        "variation_sd_median": 12.1,
+        "shortest_seen": 1,
+        "longest_seen": 146
+      }
+    },
+    {
+      "handle": "mattjbarker1",
+      "name": "Matt Barker",
+      "posts_measured": 9,
+      "window": {
+        "from": "2026-08-30",
+        "to": "2026-09-06"
+      },
+      "length_words": {
+        "median": 118,
+        "min": 20,
+        "max": 277
+      },
+      "above_fold_words_median": 61,
+      "opening_words_median": 20,
+      "paragraphs_median": 7,
+      "opening_shapes": [
+        [
+          "time_anchored",
+          2
+        ],
+        [
+          "colon_setup",
+          2
+        ],
+        [
+          "number_claim",
+          2
+        ],
+        [
+          "question",
+          1
+        ],
+        [
+          "statement",
+          1
+        ],
+        [
+          "consensus_claim",
+          1
+        ]
+      ],
+      "close_shapes": [
+        [
+          "soft_close",
+          5
+        ],
+        [
+          "postscript",
+          1
+        ],
+        [
+          "question",
+          1
+        ],
+        [
+          "short_landing",
+          1
+        ],
+        [
+          "direct_ask",
+          1
+        ]
+      ],
+      "uses_a_list": "4/9",
+      "colon_lines_median": 1,
+      "links": "5/9",
+      "sentence_words": {
+        "mean_of_means": 15.6,
+        "variation_sd_median": 9.2,
+        "shortest_seen": 1,
+        "longest_seen": 93
+      }
+    },
+    {
+      "handle": "outboundphd",
+      "name": "Eric Nowoslawski",
+      "posts_measured": 7,
+      "window": {
+        "from": "2026-09-01",
+        "to": "2026-09-04"
+      },
+      "length_words": {
+        "median": 282,
+        "min": 175,
+        "max": 336
+      },
+      "above_fold_words_median": 61,
+      "opening_words_median": 23,
+      "paragraphs_median": 10,
+      "opening_shapes": [
+        [
+          "number_claim",
+          3
+        ],
+        [
+          "first_person",
+          2
+        ],
+        [
+          "consensus_claim",
+          1
+        ],
+        [
+          "statement",
+          1
+        ]
+      ],
+      "close_shapes": [
+        [
+          "soft_close",
+          4
+        ],
+        [
+          "direct_ask",
+          2
+        ],
+        [
+          "engagement_ask",
+          1
+        ]
+      ],
+      "uses_a_list": "1/7",
+      "colon_lines_median": 0,
+      "links": "0/7",
+      "sentence_words": {
+        "mean_of_means": 14.1,
+        "variation_sd_median": 8.6,
+        "shortest_seen": 1,
+        "longest_seen": 46
+      }
+    },
+    {
+      "handle": "ryanscarlin",
+      "name": "Ryan Carlin",
+      "posts_measured": 9,
+      "window": {
+        "from": "2026-07-20",
+        "to": "2026-09-03"
+      },
+      "length_words": {
+        "median": 408,
+        "min": 18,
+        "max": 489
+      },
+      "above_fold_words_median": 28,
+      "opening_words_median": 6,
+      "paragraphs_median": 19,
+      "opening_shapes": [
+        [
+          "statement",
+          4
+        ],
+        [
+          "number_claim",
+          3
+        ],
+        [
+          "first_person",
+          1
+        ],
+        [
+          "colon_setup",
+          1
+        ]
+      ],
+      "close_shapes": [
+        [
+          "question",
+          4
+        ],
+        [
+          "short_landing",
+          3
+        ],
+        [
+          "direct_ask",
+          1
+        ],
+        [
+          "soft_close",
+          1
+        ]
+      ],
+      "uses_a_list": "4/9",
+      "colon_lines_median": 4,
+      "links": "0/9",
+      "sentence_words": {
+        "mean_of_means": 14.8,
+        "variation_sd_median": 11.4,
+        "shortest_seen": 1,
+        "longest_seen": 156
+      }
+    }
+  ]
+}
