@@ -16,6 +16,10 @@ const EXPECTED_FUNCTIONS = [
   "telegram-webhook", "transcript-webhook", "worker-dispatch", "worker-select",
   "worker-triage", "worker-slack", "worker-publish", "worker-metrics",
   "worker-learn", "worker-ops",
+  // The OAuth door. Listed here the moment it was written rather than the moment it was deployed,
+  // so S0-01 goes red until it actually ships — which is the whole point of this case. A function
+  // that exists in the repository and not in the project is exactly the drift being checked for.
+  "linkedin-oauth",
 ];
 
 const EXPECTED_CRON = [

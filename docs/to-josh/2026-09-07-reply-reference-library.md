@@ -113,7 +113,41 @@ where your job was to ask. There is very little of you making an argument unprom
 exactly the hook and the close. One fifteen-minute recording of you making a case for something would
 improve that section more than another six calls of discovery.
 
-## Six things I need back from you
+## LinkedIn, which is the longest pole
+
+Two of the twelve component tests — nothing publishes without your action, and the learning loop —
+cannot start their four-week windows until LinkedIn is connected. So this is worth starting before
+you need it.
+
+The connect flow is now built on our side and waiting. What it needs is a developer app in **your**
+name, because clause 14.1 puts every account in your name and this one holds a publishing identity.
+
+Four steps, in order:
+
+1. **A LinkedIn Page for Slingshot GTM, if there is not one already.** LinkedIn will not let you
+   create a developer app that is not associated with a Page. This is the step that most often
+   stalls, so it is worth checking first rather than last.
+2. **Create the app** in the LinkedIn developer portal, associated with that Page.
+3. **Add two products.** "Share on LinkedIn" gives the posting permission and is self-serve — no
+   review, granted immediately. "Sign In with LinkedIn using OpenID Connect" is needed only so the
+   system can read your member id, which becomes the author on every post.
+4. **Send me the Client ID and Client Secret.** They go into the encrypted vault in your own
+   database, not into a config file, so you can rotate them yourself later with one statement.
+
+Then one click connects it.
+
+**Separately, and much slower: post analytics.** Impressions, reach and reactions sit behind
+LinkedIn's Community Management API review, which needs a registered company and a Page admin and
+takes weeks. Publishing does not wait for it. The system is built to publish from day one and record
+the numbers as unavailable, because your spec says the two automatic signals have to be enough on
+their own. Apply if you want the numbers, but nothing is blocked on the answer.
+
+**One thing to expect.** LinkedIn does not issue every app a refresh token. If yours does not get
+one, the connection lasts about 60 days and then needs redoing. That is a known chore rather than a
+surprise: the expiry is watched and you will be warned well before it lapses. I mention it now so it
+is not a mystery in November.
+
+## Seven things I need back from you
 
 1. **The transcripts.** Your README flags that the 31 August call keeps its clinical vertical
    language, and anyone in that market could infer the client. Four calls or five is your call. I
@@ -127,6 +161,8 @@ improve that section more than another six calls of discovery.
    post. If you have a deck or a site with the colours already on it, sending that is faster than
    answering.
 6. **A recording of you making a case for something**, unprompted, fifteen minutes.
+7. **The LinkedIn app** — the Page, then the two products, then the Client ID and Secret. Start with
+   whether a Slingshot GTM Page exists, because everything else waits on it.
 
 ## What the system is waiting on
 
