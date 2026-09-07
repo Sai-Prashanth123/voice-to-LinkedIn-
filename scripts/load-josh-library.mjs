@@ -144,6 +144,27 @@ he actually did the thing. If he did not, the post should not exist.
 **Two stacked gaps.** Line two refuses to answer line one and adds a second question instead of
 resolving the first. For short hooks where there is no scene to set. Easy to overdo.
 
+## The open loop, and why most of them fail
+
+From Josh's coaching brief 4. This is the part that is usually got wrong, and it is not "be
+mysterious".
+
+**A curiosity gap works by building investment first, then cutting at the reveal.** Withholding on
+its own does nothing, because the reader has no reason to care yet. Investment comes from three
+things, and a hook missing all three cannot be rescued by a better cut:
+
+- **specificity** — the detail that proves this happened
+- **a real emotion** — what it felt like, not what it meant
+- **clear stakes** — what was at risk if it went the other way
+
+**Three ways it fails.** Name which one, rather than saying the hook is weak:
+
+1. **No gap at all.** The opening states its conclusion. Nothing is owed to the reader.
+2. **A gap with no investment behind it.** Something is withheld, but nothing has been given first,
+   so the withholding reads as a trick.
+3. **The cut is too late.** The reveal is already inside the hook, so the rest of the post is
+   confirmation rather than payoff.
+
 ## Two nevers
 
 **Never open with a question.** It reads as an advert and trips the reader's filter before anything
