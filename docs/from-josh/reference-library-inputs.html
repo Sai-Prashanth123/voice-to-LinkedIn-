@@ -1,0 +1,574 @@
+<title>Reference Library Inputs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<style>
+:root{
+  --ink:#0E2A44; --ink-500:#244765; --ink-400:#436381;
+  --ink-200:#9DAEC0; --ink-100:#C8D2DD; --ink-50:#EAEEF3;
+  --green:#2EA866; --green-d:#1B6E43; --green-l:#C8EAD3; --green-ll:#E7F5EC;
+  --cream:#F4F1EA; --cream-50:#FBF9F4; --cream-200:#EAE6DA; --cream-300:#D9D3C2;
+  --coral:#E87E5F; --coral-d:#B8533A; --coral-l:#F9E0D3;
+  --sage:#E1ECDF; --sage-100:#EEF4EC;
+  --sans:"DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --serif:"DM Serif Display", Georgia, "Times New Roman", serif;
+  --mono:"JetBrains Mono", ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+*{box-sizing:border-box}
+
+body{
+  background:var(--cream);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:16px;
+  line-height:1.65;
+  margin:0;
+  -webkit-font-smoothing:antialiased;
+}
+
+.page{max-width:62rem;margin:0 auto;padding:3rem 1.5rem 4rem}
+
+/* ---------- type ---------- */
+h1,h2,h3{font-family:var(--serif);font-weight:400;margin:0;text-wrap:balance}
+h1{font-size:clamp(2rem,4.6vw,2.9rem);line-height:1.12;letter-spacing:-.022em}
+h2{font-size:clamp(1.4rem,2.6vw,1.8rem);line-height:1.2;letter-spacing:-.018em}
+h3{font-size:1.08rem;line-height:1.3;letter-spacing:-.012em}
+h1 i,h2 i,h3 i{color:var(--green);font-style:italic}
+
+p{margin:0;max-width:74ch}
+a{color:var(--green-d)}
+strong{font-weight:700}
+em{font-style:italic}
+
+.eyebrow{
+  font-family:var(--mono);font-size:.7rem;font-weight:500;
+  text-transform:uppercase;letter-spacing:.18em;color:var(--green-d);
+}
+
+.lede{font-size:1.06rem;line-height:1.6;color:var(--ink-500);max-width:70ch}
+.meta{font-family:var(--mono);font-size:.72rem;text-transform:uppercase;letter-spacing:.14em;color:var(--ink-400)}
+
+/* ---------- header ---------- */
+.masthead{display:flex;align-items:flex-start;justify-content:space-between;gap:2rem;flex-wrap:wrap;margin-bottom:2.75rem}
+.masthead svg{width:190px}
+.doc-id{text-align:right;font-family:var(--mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.13em;color:var(--ink-400);line-height:1.9}
+
+.hero{display:flex;flex-direction:column;gap:1.15rem}
+
+/* ---------- sections ---------- */
+section{margin-bottom:0;display:flex;flex-direction:column;gap:1.15rem}
+.sec-head{display:flex;align-items:center;gap:.7rem}
+.sec-num{
+  width:28px;height:28px;flex:none;background:var(--ink);border-radius:2px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--serif);font-style:italic;color:#fff;font-size:15px;line-height:1;
+}
+.sec-head .eyebrow{line-height:1}
+
+.motif-rule{display:flex;align-items:center;gap:1rem;margin:3rem 0}
+.motif-rule .line{flex:1;height:1px;background:var(--cream-300)}
+
+/* ---------- blocks ---------- */
+.note{
+  background:var(--sage-100);border-left:3px solid var(--green);border-radius:0 3px 3px 0;
+  padding:1.05rem 1.25rem;display:flex;flex-direction:column;gap:.5rem;max-width:70ch;
+}
+.note .key{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--green-d)}
+
+.warn{
+  background:var(--coral-l);border-left:3px solid var(--coral);border-radius:0 3px 3px 0;
+  padding:1.05rem 1.25rem;display:flex;flex-direction:column;gap:.5rem;max-width:70ch;
+}
+.warn .key{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--coral-d)}
+
+.stack{display:flex;flex-direction:column;gap:1.15rem}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(17rem,1fr));gap:1rem}
+
+.card{background:#fff;border:1px solid var(--cream-300);border-left:3px solid var(--ink);border-radius:0 3px 3px 0;padding:1.15rem 1.25rem;display:flex;flex-direction:column;gap:.55rem}
+.card.g{border-left-color:var(--green)}
+.card .tag{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.13em;color:var(--ink-400)}
+.card.g .tag{color:var(--green-d)}
+.card h3{font-size:1rem}
+
+ul,ol{margin:0;padding-left:1.15rem;display:flex;flex-direction:column;gap:.5rem;max-width:74ch}
+li{padding-left:.15rem}
+ul.reqs{list-style:none;padding-left:0;gap:.65rem}
+ul.reqs li{display:grid;grid-template-columns:3.6rem 1fr;gap:.85rem;align-items:baseline;max-width:74ch}
+ul.reqs .rid{font-family:var(--mono);font-size:.7rem;letter-spacing:.06em;color:var(--ink-400);font-variant-numeric:tabular-nums}
+.must{font-family:var(--mono);font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--green-d)}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--cream-300);border-radius:3px;background:#fff}
+table{border-collapse:collapse;width:100%;font-size:.92rem;min-width:34rem}
+th{
+  font-family:var(--mono);font-size:.66rem;font-weight:500;text-transform:uppercase;letter-spacing:.1em;
+  color:var(--ink-400);text-align:left;background:var(--cream-50);
+  padding:.7rem .9rem;border-bottom:1px solid var(--cream-200);white-space:nowrap;
+}
+td{padding:.7rem .9rem;border-bottom:1px solid var(--cream-200);vertical-align:top;color:var(--ink-500)}
+td:first-child{color:var(--ink);font-weight:500}
+tr:last-child td{border-bottom:0}
+td code,.mono{font-family:var(--mono);font-size:.84em;color:var(--ink)}
+
+/* ---------- diagram ---------- */
+figure{margin:0;display:flex;flex-direction:column;gap:.9rem}
+.canvas{overflow-x:auto;background:#fff;border:1px solid var(--cream-300);border-radius:3px;padding:1.5rem 1.1rem}
+.canvas svg{display:block;width:100%;min-width:900px;height:auto}
+figcaption{font-size:.88rem;color:var(--ink-400);max-width:70ch}
+.legend{display:flex;flex-wrap:wrap;gap:1.4rem}
+.legend-item{display:flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-400)}
+.swatch{width:26px;height:12px;flex:none;border-radius:1px}
+
+.d-box{fill:#fff;stroke:#D9D3C2;stroke-width:1.25}
+.d-box-me{fill:#fff;stroke:#2EA866;stroke-width:1.5}
+.d-box-auto{fill:#FBF9F4;stroke:#D9D3C2;stroke-width:1.25}
+.d-ln{stroke:#9DAEC0;stroke-width:1.25;fill:none}
+.d-ln-g{stroke:#2EA866;stroke-width:1.25;fill:none}
+.d-ln-d{stroke:#9DAEC0;stroke-width:1.25;fill:none;stroke-dasharray:5 4}
+.d-t{font:500 13px "DM Sans",sans-serif;fill:#0E2A44}
+.d-s{font:400 11px "DM Sans",sans-serif;fill:#436381}
+.d-n{font:500 10px "JetBrains Mono",monospace;fill:#9DAEC0;letter-spacing:.1em}
+.d-tag{font:500 9px "JetBrains Mono",monospace;fill:#1B6E43;letter-spacing:.12em}
+.d-tag-a{font:500 9px "JetBrains Mono",monospace;fill:#9DAEC0;letter-spacing:.12em}
+.d-lbl{font:400 10px "JetBrains Mono",monospace;fill:#436381}
+
+/* ---------- footer ---------- */
+footer{border-top:1px solid var(--cream-300);margin-top:3.5rem;padding-top:1.75rem;display:flex;flex-direction:column;gap:.55rem}
+footer p{font-size:.88rem;color:var(--ink-400);max-width:70ch}
+
+a:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+
+@media (max-width:680px){
+  .tw{border:0;background:transparent;overflow-x:visible}
+  table{min-width:0;font-size:.9rem}
+  table,tbody,tr,td{display:block;width:100%}
+  thead{display:none}
+  tr{background:#fff;border:1px solid var(--cream-300);border-radius:3px;margin-bottom:.75rem;padding:.65rem .9rem}
+  td{border:0;padding:.4rem 0}
+  td::before{
+    content:attr(data-label);display:block;font-family:var(--mono);font-size:10px;
+    text-transform:uppercase;letter-spacing:.1em;color:var(--ink-400);margin-bottom:.2rem;
+  }
+  ul.reqs li{grid-template-columns:1fr;gap:.15rem}
+}
+</style>
+<div class="page">
+
+  <div class="masthead">
+    <svg viewBox="0 0 420 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Slingshot GTM">
+    <g fill="#0E2A44">
+    <path d="M28.25 131.25Q21.07 131.25 15.80 128.95Q10.53 126.64 7.52 122.62Q4.52 118.61 4.02 113.47H18.03Q18.48 115.41 19.74 117.02Q21.00 118.62 23.10 119.57Q25.20 120.51 28.05 120.51Q30.86 120.51 32.67 119.72Q34.48 118.94 35.35 117.63Q36.23 116.32 36.23 114.84Q36.23 112.61 34.97 111.44Q33.70 110.27 31.28 109.53Q28.87 108.78 25.47 108.11Q21.75 107.32 18.17 106.24Q14.59 105.17 11.76 103.49Q8.92 101.81 7.25 99.20Q5.59 96.59 5.59 92.75Q5.59 88.12 8.12 84.40Q10.64 80.68 15.42 78.53Q20.19 76.39 26.89 76.39Q36.37 76.39 41.91 80.65Q47.45 84.91 48.43 92.37H35.23Q34.66 89.91 32.50 88.55Q30.33 87.19 26.82 87.19Q23.11 87.19 21.15 88.54Q19.18 89.89 19.18 92.00Q19.18 93.47 20.44 94.61Q21.69 95.75 24.10 96.56Q26.50 97.38 29.96 98.11Q36.02 99.35 40.57 100.92Q45.12 102.49 47.72 105.48Q50.32 108.47 50.30 114.05Q50.37 119.09 47.66 122.98Q44.95 126.87 40.01 129.06Q35.06 131.25 28.25 131.25Z"/>
+    <path d="M56.47 130.00V55.12H70.51V130.00Z"/>
+    <path d="M96.86 130.00V77.64H109.22L110.26 86.14Q112.65 81.72 117.09 79.05Q121.52 76.39 127.70 76.39Q134.16 76.39 138.63 79.08Q143.10 81.78 145.47 86.97Q147.85 92.17 147.85 99.74V130.00H133.87V101.04Q133.87 94.89 131.21 91.55Q128.56 88.20 123.04 88.20Q119.57 88.20 116.81 89.85Q114.04 91.50 112.47 94.57Q110.90 97.64 110.90 102.05V130.00Z"/>
+    <path d="M177.85 154.13Q170.35 154.13 164.75 152.31Q159.15 150.49 156.09 146.80Q153.03 143.12 153.03 137.67Q153.03 134.02 154.90 130.79Q156.77 127.56 160.38 124.92Q163.98 122.28 169.30 120.39L174.66 127.34Q169.88 128.89 167.76 131.24Q165.64 133.58 165.64 136.24Q165.64 138.67 167.25 140.30Q168.86 141.92 171.60 142.73Q174.35 143.54 177.77 143.54Q181.09 143.54 183.57 142.70Q186.04 141.86 187.43 140.26Q188.83 138.67 188.83 136.47Q188.83 133.60 186.85 131.86Q184.88 130.11 178.96 129.70Q173.61 129.28 169.49 128.49Q165.37 127.70 162.29 126.62Q159.21 125.54 157.05 124.20Q154.88 122.87 153.55 121.51V119.12L164.70 107.13L174.73 110.33L161.62 123.27L165.66 116.34Q166.74 117.05 167.85 117.62Q168.96 118.19 170.63 118.64Q172.31 119.08 174.98 119.49Q177.66 119.89 181.83 120.26Q188.72 120.86 193.11 122.80Q197.50 124.75 199.58 128.07Q201.67 131.39 201.67 136.16Q201.67 140.79 199.12 144.89Q196.58 148.98 191.31 151.56Q186.04 154.13 177.85 154.13ZM177.92 114.54Q171.35 114.54 166.61 111.98Q161.86 109.42 159.32 105.10Q156.78 100.79 156.78 95.47Q156.78 90.14 159.32 85.85Q161.87 81.55 166.62 78.97Q171.36 76.39 177.92 76.39Q184.54 76.39 189.27 78.97Q194.00 81.55 196.51 85.85Q199.01 90.14 199.01 95.47Q199.01 100.79 196.51 105.10Q194.00 109.42 189.27 111.98Q184.54 114.54 177.92 114.54ZM177.92 103.83Q181.95 103.83 184.44 101.71Q186.93 99.59 186.93 95.53Q186.93 91.48 184.44 89.37Q181.95 87.26 177.92 87.26Q173.91 87.26 171.35 89.37Q168.80 91.48 168.80 95.53Q168.80 99.59 171.34 101.71Q173.88 103.83 177.92 103.83ZM186.57 87.52 184.28 77.64H205.89V85.96Z"/>
+    <path d="M232.96 131.25Q225.79 131.25 220.51 128.95Q215.24 126.64 212.24 122.62Q209.23 118.61 208.74 113.47H222.74Q223.19 115.41 224.45 117.02Q225.71 118.62 227.81 119.57Q229.92 120.51 232.76 120.51Q235.57 120.51 237.38 119.72Q239.19 118.94 240.07 117.63Q240.94 116.32 240.94 114.84Q240.94 112.61 239.68 111.44Q238.42 110.27 236.00 109.53Q233.58 108.78 230.19 108.11Q226.46 107.32 222.88 106.24Q219.30 105.17 216.47 103.49Q213.63 101.81 211.97 99.20Q210.30 96.59 210.30 92.75Q210.30 88.12 212.83 84.40Q215.36 80.68 220.13 78.53Q224.91 76.39 231.60 76.39Q241.09 76.39 246.63 80.65Q252.16 84.91 253.14 92.37H239.94Q239.38 89.91 237.21 88.55Q235.04 87.19 231.53 87.19Q227.82 87.19 225.86 88.54Q223.90 89.89 223.90 92.00Q223.90 93.47 225.15 94.61Q226.40 95.75 228.81 96.56Q231.22 97.38 234.67 98.11Q240.74 99.35 245.28 100.92Q249.83 102.49 252.43 105.48Q255.03 108.47 255.01 114.05Q255.09 119.09 252.37 122.98Q249.66 126.87 244.72 129.06Q239.78 131.25 232.96 131.25Z"/>
+    <path d="M261.18 130.00V55.12H275.22V85.38Q277.79 81.28 282.14 78.83Q286.49 76.39 292.20 76.39Q298.72 76.39 303.19 79.10Q307.66 81.80 309.98 87.05Q312.29 92.29 312.29 99.93V130.00H298.35V101.23Q298.35 94.97 295.72 91.59Q293.08 88.20 287.54 88.20Q284.06 88.20 281.24 89.88Q278.42 91.56 276.82 94.69Q275.22 97.81 275.22 102.26V130.00Z"/>
+    <path d="M344.52 131.25Q337.01 131.25 331.00 127.75Q324.99 124.26 321.53 118.06Q318.07 111.86 318.07 103.85Q318.07 95.72 321.55 89.52Q325.04 83.33 331.06 79.86Q337.08 76.39 344.59 76.39Q352.20 76.39 358.20 79.86Q364.19 83.33 367.65 89.51Q371.12 95.69 371.12 103.84Q371.12 111.89 367.63 118.08Q364.15 124.26 358.14 127.75Q352.13 131.25 344.52 131.25ZM344.53 119.13Q348.00 119.13 350.75 117.41Q353.50 115.70 355.15 112.28Q356.81 108.86 356.81 103.82Q356.81 98.72 355.18 95.32Q353.56 91.92 350.81 90.21Q348.07 88.51 344.63 88.51Q341.27 88.51 338.48 90.21Q335.69 91.92 334.03 95.33Q332.38 98.74 332.38 103.83Q332.38 108.85 334.03 112.28Q335.68 115.70 338.43 117.41Q341.19 119.13 344.53 119.13Z"/>
+    <path d="M401.06 130.00Q395.59 130.00 391.46 128.27Q387.33 126.54 385.05 122.54Q382.77 118.53 382.77 111.63V89.35H373.79V77.64H382.77L384.34 63.30H396.79V77.64H410.62V89.35H396.81V111.75Q396.81 115.30 398.36 116.68Q399.91 118.06 403.68 118.06H410.48V130.00Z"/>
+    </g>
+    <g stroke="#2EA866" stroke-linecap="round" fill="none" stroke-width="2.5">
+    <line x1="67" y1="50" x2="81" y2="50" opacity="0.35"/>
+    <line x1="73" y1="42" x2="85" y2="42" opacity="0.55"/>
+    <line x1="79" y1="34" x2="89" y2="34" opacity="0.75"/>
+    </g>
+    <g transform="translate(78,130) skewX(-12) translate(-78,-130)">
+    <rect x="71" y="68" width="14" height="62" rx="2" ry="2" fill="#2EA866"/>
+    <rect x="71" y="36" width="14" height="14" rx="2" ry="2" fill="#0E2A44"/>
+    </g>
+    <g fill="#2EA866">
+    <path d="M346.70 168.38Q343.53 168.38 341.15 166.96Q338.78 165.53 337.46 162.96Q336.15 160.38 336.15 156.94Q336.15 153.50 337.50 150.86Q338.86 148.22 341.39 146.72Q343.92 145.22 347.41 145.22Q351.37 145.22 353.98 147.11Q356.59 149.00 357.35 152.36H352.53Q352.04 150.87 350.74 150.04Q349.44 149.20 347.39 149.20Q345.21 149.20 343.67 150.14Q342.13 151.09 341.34 152.83Q340.55 154.57 340.55 156.96Q340.55 159.38 341.35 161.09Q342.14 162.80 343.63 163.68Q345.12 164.56 347.14 164.56Q350.08 164.56 351.60 162.96Q353.11 161.37 353.41 158.86H347.90V155.62H357.75V168.00H353.77L353.43 165.16Q352.73 166.19 351.79 166.92Q350.85 167.64 349.60 168.01Q348.36 168.38 346.70 168.38Z"/>
+    <path d="M367.31 168.00V149.08H360.77V145.60H378.16V149.08H371.62V168.00Z"/>
+    <path d="M381.53 168.00V145.60H386.69L393.54 159.57L400.32 145.60H405.47V168.00H401.15V152.95L395.22 164.86H391.80L385.85 152.95V168.00Z"/>
+    </g></svg>
+    <div class="doc-id">
+      Version 1.0<br>
+      4 September 2026<br>
+      Josh Fryszer to Thought Pilot
+    </div>
+  </div>
+
+  <div class="hero">
+    <span class="eyebrow">Companion to the build spec</span>
+    <h1>The half of the spec I <i>owe you</i></h1>
+    <p class="lede">The spec left one section deliberately open on the basis that I would bring my half of
+      it. This is that half. How I want to write, who I am writing for, and three files of raw material to
+      go with it. Where you already have a piece of this solved, your version wins.</p>
+  </div>
+
+  <div class="motif-rule"><span class="line"></span><svg viewBox="0 0 100 40" width="110" height="42" aria-hidden="true"><path d="M 4 34 Q 50 -6 92 20" stroke="#2EA866" stroke-width="2" stroke-dasharray="2 4" fill="none" stroke-linecap="round"/><circle cx="92" cy="20" r="5" fill="#2EA866"/></svg><span class="line"></span></div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">1</span><span class="eyebrow">How to read this</span></div>
+    <h2>Material, not <i>instructions</i></h2>
+
+    <p>Section 8 of the spec says, in effect, that I bring the pillars, the body frameworks, the hook rules,
+      the closing lines, the questions the system asks me, and who I am talking to. This is that, and it has
+      been sitting unanswered since August.</p>
+
+    <p>It came out of four separate bodies of work by four different people who contradict each other in
+      places. You should not have to referee that, so I have made the calls and written it up as one settled
+      set of rules rather than a menu.</p>
+
+    <div class="note">
+      <span class="key">The part that matters most</span>
+      <p>You have built systems like this before and I have not. If any of what follows is already covered by
+        how you build, or you have a better way, say so and skip it. I would rather use your method than
+        mine. I am trying to protect the philosophy, not the mechanics.</p>
+    </div>
+
+    <p>The only thing not open to a better idea is the test in clause 1: could anyone else have written this.
+      Everything else here is a preference and I will happily be talked out of it.</p>
+  </section>
+
+  <div class="motif-rule"><span class="line"></span><svg viewBox="0 0 100 40" width="110" height="42" aria-hidden="true"><path d="M 4 34 Q 50 -6 92 20" stroke="#2EA866" stroke-width="2" stroke-dasharray="2 4" fill="none" stroke-linecap="round"/><circle cx="92" cy="20" r="5" fill="#2EA866"/></svg><span class="line"></span></div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">2</span><span class="eyebrow">The audience</span></div>
+    <h2>A more <i>sophisticated</i> reader than most advice assumes</h2>
+
+    <p>Nearly all LinkedIn writing advice is built for solo operators, freelancers and early-stage founders.
+      My buyer is not that, and this is the single biggest adjustment I want the system to make. Every rule
+      below sits underneath this one.</p>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th>Who they are</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td data-label="Who they are">The person</td><td data-label="Detail">A VP of Business Development, a VP of Sales, or a head of inside sales. That level.</td></tr>
+          <tr><td data-label="Who they are">The company</td><td data-label="Detail">A vertical SaaS business, Series A through Series C.</td></tr>
+          <tr><td data-label="Who they are">The motion</td><td data-label="Detail">An existing outbound motion. Nobody is starting from zero.</td></tr>
+          <tr><td data-label="Who they are">The team</td><td data-label="Detail">At least five SDRs, BDRs or account executives doing the outreach.</td></tr>
+          <tr><td data-label="Who they are">Who they sell to</td><td data-label="Detail">SMB and mid-market.</td></tr>
+          <tr><td data-label="Who they are">The pain</td><td data-label="Detail">Not booking the meetings they want. Volume is not the problem. Quality and prioritisation are.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <span class="key">Two words that get misread</span>
+      <p><strong>Sophisticated</strong> means their operating vocabulary at the altitude they work at. The
+        writing stays plain, and jargon still fails. <strong>Strategic</strong> means altitude, not
+        vagueness: a strategic post still carries a specific number, a specific person and a specific
+        Tuesday. A post for this buyer talks about how a segment gets chosen. A post for a beginner talks
+        about which button to press.</p>
+    </div>
+  </section>
+
+  <div class="motif-rule"><span class="line"></span><svg viewBox="0 0 100 40" width="110" height="42" aria-hidden="true"><path d="M 4 34 Q 50 -6 92 20" stroke="#2EA866" stroke-width="2" stroke-dasharray="2 4" fill="none" stroke-linecap="round"/><circle cx="92" cy="20" r="5" fill="#2EA866"/></svg><span class="line"></span></div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">3</span><span class="eyebrow">Pillars</span></div>
+    <h2>Where the <i>material</i> comes from</h2>
+
+    <p>Three pillars. They describe where a moment came from, not what it is about. This is the value that
+      goes in the pillar field in clause 6.</p>
+
+    <div class="grid2">
+      <div class="card">
+        <span class="tag">Pillar 1</span>
+        <h3>Career and business</h3>
+        <p>Running the consultancy. Client work, decisions, pricing, what I turned down, what went wrong,
+          what I noticed across engagements. The commercial side rather than the craft.</p>
+      </div>
+      <div class="card">
+        <span class="tag">Pillar 2</span>
+        <h3>Expertise and craft</h3>
+        <p>The method itself. Finding pain in public data, building segments, what breaks in a build, what a
+          data source turned out to be worth, where I was wrong about a technique.</p>
+      </div>
+      <div class="card g">
+        <span class="tag">Pillar 3</span>
+        <h3>Life</h3>
+        <p>Anything outside work. It stays in, because it is where the lived experience test is easiest to
+          pass. But it carries a condition, below.</p>
+      </div>
+    </div>
+
+    <div class="note">
+      <span class="key">The condition on the life pillar</span>
+      <p>Every life post has to land somewhere my buyer recognises, at the same altitude as everything else.
+        The walk is not the post. What I worked out on the walk is. A life post with no landing attracts the
+        wrong readers, and the wrong readers are worse than no readers.</p>
+    </div>
+  </section>
+
+  <div class="motif-rule"><span class="line"></span><svg viewBox="0 0 100 40" width="110" height="42" aria-hidden="true"><path d="M 4 34 Q 50 -6 92 20" stroke="#2EA866" stroke-width="2" stroke-dasharray="2 4" fill="none" stroke-linecap="round"/><circle cx="92" cy="20" r="5" fill="#2EA866"/></svg><span class="line"></span></div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">4</span><span class="eyebrow">The hook</span></div>
+    <h2>One test, one <i>default</i>, and a toolkit</h2>
+
+    <p><strong>The test, which is pass or fail.</strong> Two things, both required. Only I could have written
+      it, because only I was in that room. And it opens a loop rather than closing one. Already the first
+      check in clause 9.6, and it does not move.</p>
+
+    <p><strong>What a good one usually has.</strong> Five elements in the opening lines: timeline, location,
+      character, action, stakes. The stakes are the one most often left out and the one that does the most
+      work, because without them the reader assumes everything was fine.</p>
+
+    <p>Not every hook needs all five, and I do not want this applied mechanically. It is what we are aiming
+      at rather than a template to fill. Use your judgement on when a hook lands better without one of
+      them.</p>
+
+    <div class="note">
+      <span class="key">Worked example</span>
+      <p>In March I sat on a call with a VP of Sales in Melbourne who had just been handed a number nobody
+        had worked out how to hit.</p>
+      <p class="meta">Timeline: in March. Location: a call, Melbourne. Character: a VP of Sales. Action:
+        handed a number. Stakes: nobody knew how to hit it.</p>
+    </div>
+
+    <p><strong>The toolkit</strong>, in order of how often I want it reached for.</p>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th>Tool</th><th>What it does</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td data-label="Tool">Name who it is for</td><td data-label="What it does">States the job title, team size, company type or a qualifier in the opening line.</td><td data-label="When">Highest value tool I have. Does the altitude work on its own, turning the right reader on and the wrong one off.</td></tr>
+          <tr><td data-label="Tool">Contrast</td><td data-label="What it does">Two short lines that fight each other. Past against present, expectation against reality, consensus against what I found.</td><td data-label="When">Whenever the moment has a genuine before and after. Do not manufacture one.</td></tr>
+          <tr><td data-label="Tool">Authority markers</td><td data-label="What it does">Time, status, money or recency attached to an otherwise ordinary opening.</td><td data-label="When">Only when the number is real and mine. A borrowed or rounded number is worse than none.</td></tr>
+          <tr><td data-label="Tool">Premise, setup, trigger</td><td data-label="What it does">A longer three-part opener. A premise with a real number, a setup that breaks the expectation, a line that teases the reveal.</td><td data-label="When">Posts with a big result and a twist underneath it. Uses more of the space above the fold.</td></tr>
+          <tr><td data-label="Tool">How I, not how to</td><td data-label="What it does">Puts me inside the claim instead of standing outside teaching it.</td><td data-label="When">Any time I actually did the thing. If I did not, the post should not exist.</td></tr>
+          <tr><td data-label="Tool">Two stacked gaps</td><td data-label="What it does">Line two refuses to answer line one and adds a second question instead of resolving the first.</td><td data-label="When">Short hooks where there is no scene to set. Easy to overdo.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><strong>Never open with a question.</strong> It reads as an advert and trips the reader's filter
+      before anything has been earned. A question can close a hook, which is a different thing and often
+      works well. It cannot start one.</p>
+
+    <p><strong>No bait.</strong> Some of the material I collected teaches deliberately provoking a reaction
+      to lift reach. It is effective and I do not want it. It contradicts how I sell and it attracts an
+      audience I cannot do anything with. If a hook only works because it annoys someone, it fails.</p>
+  </section>
+
+  <div class="motif-rule"><span class="line"></span><svg viewBox="0 0 100 40" width="110" height="42" aria-hidden="true"><path d="M 4 34 Q 50 -6 92 20" stroke="#2EA866" stroke-width="2" stroke-dasharray="2 4" fill="none" stroke-linecap="round"/><circle cx="92" cy="20" r="5" fill="#2EA866"/></svg><span class="line"></span></div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">5</span><span class="eyebrow">The body</span></div>
+    <h2>Three <i>frameworks</i>, and nothing else</h2>
+
+    <p>Clause 9.3 asks the drafter to record which framework it chose. These are the three it chooses from.</p>
+
+    <div class="grid2">
+      <div class="card">
+        <span class="tag">Framework 1</span>
+        <h3>What, why, how</h3>
+        <p>State what happened. Explain why it happened. Show how the reader could apply it. The most
+          versatile of the three and the right default when nothing else obviously fits.</p>
+      </div>
+      <div class="card">
+        <span class="tag">Framework 2</span>
+        <h3>Problem, agitate, solve</h3>
+        <p>Name a problem the reader recognises, make them feel what it costs, then show what fixed it. For
+          posts about a mistake, a frustration or something broken.</p>
+      </div>
+      <div class="card">
+        <span class="tag">Framework 3</span>
+        <h3>Hook, frame, insight, lesson</h3>
+        <p>The frame is the extra step: name what most people believe before delivering what I found
+          instead. For posts that challenge an assumption rather than teach a method.</p>
+      </div>
+    </div>
+
+    <p>On formatting: lean, then fat, then lean. Colons pull the eye down the page and are underused. Short
+      paragraphs with a break between each, because this is read on a phone. Bullets are for surfacing a
+      genuine list, not for avoiding sentences, and one list per post is usually plenty. Vary the sentence
+      length. No fixed word count: the moment decides the length, and nothing gets padded to reach a target.</p>
+  </section>
+
+  <div class="motif-rule"><span class="line"></span><svg viewBox="0 0 100 40" width="110" height="42" aria-hidden="true"><path d="M 4 34 Q 50 -6 92 20" stroke="#2EA866" stroke-width="2" stroke-dasharray="2 4" fill="none" stroke-linecap="round"/><circle cx="92" cy="20" r="5" fill="#2EA866"/></svg><span class="line"></span></div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">6</span><span class="eyebrow">Closing lines</span></div>
+    <h2>One ask at most, or <i>none</i></h2>
+
+    <div class="grid2">
+      <div class="card">
+        <span class="tag">Close 1</span>
+        <h3>A genuine question</h3>
+        <p>Specific enough that only my reader could answer it, and one I actually want the answer to. Not
+          "what do you think". The default close.</p>
+      </div>
+      <div class="card">
+        <span class="tag">Close 2</span>
+        <h3>A soft close, no ask</h3>
+        <p>A line that closes the loop the post opened and leaves the reader with something. Right for the
+          more personal posts, where an ask would jar.</p>
+      </div>
+      <div class="card g">
+        <span class="tag">Close 3</span>
+        <h3>One direct ask</h3>
+        <p>Message me, here is the link, let's talk. Permitted, but rationed to roughly one post in five.
+          More often and the whole feed reads as a pitch.</p>
+      </div>
+    </div>
+
+    <p>Never two asks in one post, because the reader then does neither. Never a request for likes, reposts
+      or follows. Never a pitch bolted onto a post that was not about the offer, which reads as a bait and
+      switch after someone has given you three minutes.</p>
+  </section>
+
+  <div class="motif-rule"><span class="line"></span><svg viewBox="0 0 100 40" width="110" height="42" aria-hidden="true"><path d="M 4 34 Q 50 -6 92 20" stroke="#2EA866" stroke-width="2" stroke-dasharray="2 4" fill="none" stroke-linecap="round"/><circle cx="92" cy="20" r="5" fill="#2EA866"/></svg><span class="line"></span></div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">7</span><span class="eyebrow">Proof</span></div>
+    <h2>Show it, but never <i>name</i> them</h2>
+
+    <p>There is a real tension here, worth stating rather than letting the system discover it. Writing for
+      this buyer means showing proof rather than asserting expertise, and proof usually wants a named client
+      and a real number. Clause 9c forbids naming anyone without express permission for that specific post.</p>
+
+    <p>The resolution is that no client gets named. Not on a roster, not with permission, not at all. Posts
+      use the shape instead: a vertical SaaS company, a compliance platform, a team of forty, a health tech
+      business selling into clinics.</p>
+
+    <div class="warn">
+      <span class="key">This needs to be an actual check, not a hope</span>
+      <p>Removing the name does not anonymise anything on its own. A number plus a niche plus a date
+        identifies a company to anyone in that market, and my readers are in that market. Clause 9.13 already
+        says this. It needs to be something the gate genuinely tests, because it is the failure mode that
+        costs me a client rather than a post.</p>
+    </div>
+
+    <p>Where a moment cannot survive without identifying someone, two options in order: use my own numbers
+      instead of theirs, or park it. Parking it is a correct outcome.</p>
+
+    <div class="note">
+      <span class="key">A side note on showing it</span>
+      <p>Where a post makes a claim I can actually show, a screenshot or an image usually proves it better
+        than another sentence does. A result, a dashboard, a message thread, a diagram. Worth flagging to me
+        when a draft is making a claim that would land harder with something to look at. The naming rule
+        above applies to anything visible in the image too.</p>
+    </div>
+  </section>
+
+  <div class="motif-rule"><span class="line"></span><svg viewBox="0 0 100 40" width="110" height="42" aria-hidden="true"><path d="M 4 34 Q 50 -6 92 20" stroke="#2EA866" stroke-width="2" stroke-dasharray="2 4" fill="none" stroke-linecap="round"/><circle cx="92" cy="20" r="5" fill="#2EA866"/></svg><span class="line"></span></div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">8</span><span class="eyebrow">Attached</span></div>
+    <h2>Three files of <i>raw material</i></h2>
+
+    <p>Rather than describe these, I have written them out. All three are rewritten for my world rather than
+      sent as I received them, so they should be usable directly rather than needing translation.</p>
+
+    <div class="grid2">
+      <div class="card g">
+        <span class="tag">File 1</span>
+        <h3>The prompt set</h3>
+        <p>Everything the system asks me. Four sets: the six questions that mine a single moment plus the
+          three depths that come before them, the five-question weekly sweep, a five-category interview for
+          when the sweep comes back empty, and thirty standalone prompts each already matched to a pillar and
+          a framework.</p>
+        <p class="meta">You said this is not part of what you normally build, so it is the fullest of the
+          three. Clause 4.2.2.</p>
+      </div>
+      <div class="card g">
+        <span class="tag">File 2</span>
+        <h3>The quality checklists</h3>
+        <p>Four checklists a draft can be tested against. The master test with its depth levels and worked
+          pass and fail examples, six retention criteria, five formatting checks, and a four-level scale for
+          whether a post is actually saying anything.</p>
+        <p class="meta">Raw material for the gate, not a specification. Clause 9.6.</p>
+      </div>
+      <div class="card g">
+        <span class="tag">File 3</span>
+        <h3>The ten coaching prompts</h3>
+        <p>Ten single-purpose assistants, one per job: find the story, find something to write about, build
+          the hook, build the open loop, choose the structure, and five that review a finished draft.</p>
+        <p class="meta">Each mapped to the spec clause it answers. None of the ten write anything, which
+          is the point, and the file opens by explaining why.</p>
+      </div>
+    </div>
+
+    <div class="note">
+      <span class="key">Still outstanding</span>
+      <p>The four or five call recordings. I am picking them now and they will follow separately. Clause 8.2
+        puts the voice guide on the critical path, so if anything here is blocking you, it is that rather
+        than this document.</p>
+    </div>
+  </section>
+
+  <div class="motif-rule"><span class="line"></span><svg viewBox="0 0 100 40" width="110" height="42" aria-hidden="true"><path d="M 4 34 Q 50 -6 92 20" stroke="#2EA866" stroke-width="2" stroke-dasharray="2 4" fill="none" stroke-linecap="round"/><circle cx="92" cy="20" r="5" fill="#2EA866"/></svg><span class="line"></span></div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">9</span><span class="eyebrow">Over to you</span></div>
+    <h2>Two things I am <i>leaving</i> with you</h2>
+
+    <p>Before the two specifics, the general version. Ghostwriting and copywriting are your craft and not
+      mine. What I have written across this document is a skeleton. If there is meat you would add to it,
+      add it, and tell me where you have. That applies to everything above as much as to the two below.</p>
+
+    <h3>Screening for writing that sounds machine-generated</h3>
+
+    <p>Do you already screen for this? I assume so, since it is the obvious failure mode of a system like
+      this, which is why I have not written it up as a requirement. I do hold a long list of patterns I treat
+      as tells: certain structural cliches, filler phrases, punctuation habits, uniform sentence rhythm, a
+      missing first person. If your system does not already cover it, say the word and I will send the list.
+      If it does, use yours.</p>
+
+    <h3>How much weight the two feedback signals get</h3>
+
+    <p>Clause 12a makes engagement numbers automatic and required. Clause 12b makes the question about
+      whether a post started a conversation best effort, because it depends on me turning up. How they get
+      weighted against each other is your call, not mine.</p>
+
+    <div class="warn">
+      <span class="key">The one risk worth naming</span>
+      <p>Engagement numbers arrive reliably every week. Conversations almost never do, and never on a
+        schedule. So the loop will always hold far more of the weak signal than the strong one. Tuned mainly
+        on numbers, it drifts toward whatever wins likes, which in my market is a style aimed at people who
+        will never buy anything. My buyer lurks, reads, and does not engage. A design problem rather than an
+        objection, and you will solve it better than I would.</p>
+    </div>
+  </section>
+
+  <div class="motif-rule"><span class="line"></span><svg viewBox="0 0 100 40" width="110" height="42" aria-hidden="true"><path d="M 4 34 Q 50 -6 92 20" stroke="#2EA866" stroke-width="2" stroke-dasharray="2 4" fill="none" stroke-linecap="round"/><circle cx="92" cy="20" r="5" fill="#2EA866"/></svg><span class="line"></span></div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">10</span><span class="eyebrow">Accounts and sources</span></div>
+    <h2>Who to learn <i>structure</i> from</h2>
+
+    <p>Eight accounts, per clause 8.3. Structural reference only. Never a source of voice, never copied,
+      never quoted.</p>
+
+    <ul>
+      <li><span class="mono">linkedin.com/in/demandjen1</span></li>
+      <li><span class="mono">linkedin.com/in/ryanscarlin</span></li>
+      <li><span class="mono">linkedin.com/in/outboundphd</span></li>
+      <li><span class="mono">linkedin.com/in/curtishowland</span></li>
+      <li><span class="mono">linkedin.com/in/adam-treboutat</span></li>
+      <li><span class="mono">linkedin.com/in/juliacarter98</span></li>
+      <li><span class="mono">linkedin.com/in/amangrowth</span></li>
+      <li><span class="mono">linkedin.com/in/mattjbarker1</span></li>
+    </ul>
+
+    <h3>Where the thinking came from</h3>
+
+    <p>Worth being straight about it, so you know what you are looking at and can judge how much weight any
+      of it deserves.</p>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th>Source</th><th>What came from it</th></tr></thead>
+        <tbody>
+          <tr><td data-label="Source">Matt Barker</td><td data-label="What came from it">The lived experience method, the three depths, the three pillars, the five-part hook, the three body frameworks, the closes, the thirty prompts and the ten coaching prompts. Most of sections 3 to 8.</td></tr>
+          <tr><td data-label="Source">Aman</td><td data-label="What came from it">The altitude layer in section 2, calling out who a post is for, and the argument that likes and impressions are close to worthless for a buyer who lurks. Most of what makes this different from generic LinkedIn advice.</td></tr>
+          <tr><td data-label="Source">Matt Lakajev</td><td data-label="What came from it">The reader-side test: a post has to come from their world, break an expectation, and be compressed enough to land. The clearest statement of why the altitude layer matters.</td></tr>
+          <tr><td data-label="Source">Adam Robinson</td><td data-label="What came from it">The premise, setup and curiosity trigger shape in the toolkit. Reached me through someone else's breakdown of his posts rather than directly.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <p class="meta">Reference library inputs, version 1.0, 4 September 2026</p>
+    <p>Prepared by Josh Fryszer, Slingshot GTM, for Thought Pilot. Companion to the content system build
+      specification version 2.0 of 20 August 2026. Clause numbers throughout refer to that document. Sent
+      with three attachments: the prompt set, the quality checklists, and the ten coaching prompts.</p>
+  </footer>
+
+</div>

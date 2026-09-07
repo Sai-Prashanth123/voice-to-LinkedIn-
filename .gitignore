@@ -27,3 +27,10 @@ eval/.env
 
 # Deploy artefact, rebuilt by the host. Never committed.
 app/desk-deploy.zip
+
+# Josh's call recordings (docs/from-josh/README.md, "Two cautions before sending").
+# Redacted, but he flagged that the 31 August call keeps clinical vertical language and anyone in
+# that market could infer the client. Git history is permanent and this repository is the handover
+# vehicle, so they stay out of it until he decides whether that is acceptable. They are on disk and
+# in his Drive either way; nothing is lost by waiting for his answer.
+docs/from-josh/transcripts/

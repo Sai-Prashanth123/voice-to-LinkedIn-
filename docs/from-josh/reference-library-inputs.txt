@@ -1,0 +1,562 @@
+Reference Library Inputs
+
+- 
+
+- 
+
+- 
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+- 
+ 
+- 
+ 
+- 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ Version 1.0
+ 4 September 2026
+ Josh Fryszer to Thought Pilot
+ 
+
+ 
+
+ 
+ Companion to the build spec
+ 
+
+# The half of the spec I owe you
+ The spec left one section deliberately open on the basis that I would bring my half of
+ it. This is that half. How I want to write, who I am writing for, and three files of raw material to
+ go with it. Where you already have a piece of this solved, your version wins.
+
+ 
+
+ 
+
+ 
+ 1How to read this
+
+ 
+
+## Material, not instructions
+
+ Section 8 of the spec says, in effect, that I bring the pillars, the body frameworks, the hook rules,
+ the closing lines, the questions the system asks me, and who I am talking to. This is that, and it has
+ been sitting unanswered since August.
+
+ It came out of four separate bodies of work by four different people who contradict each other in
+ places. You should not have to referee that, so I have made the calls and written it up as one settled
+ set of rules rather than a menu.
+
+ 
+ The part that matters most
+ You have built systems like this before and I have not. If any of what follows is already covered by
+ how you build, or you have a better way, say so and skip it. I would rather use your method than
+ mine. I am trying to protect the philosophy, not the mechanics.
+
+ 
+
+ The only thing not open to a better idea is the test in clause 1: could anyone else have written this.
+ Everything else here is a preference and I will happily be talked out of it.
+
+ 
+
+ 
+
+ 
+ 2The audience
+
+ 
+
+## A more sophisticated reader than most advice assumes
+
+ Nearly all LinkedIn writing advice is built for solo operators, freelancers and early-stage founders.
+ My buyer is not that, and this is the single biggest adjustment I want the system to make. Every rule
+ below sits underneath this one.
+
+ 
+ 
+ | | Who they are | Detail
+
+ 
+ | The person | A VP of Business Development, a VP of Sales, or a head of inside sales. That level.
+
+ | The company | A vertical SaaS business, Series A through Series C.
+
+ | The motion | An existing outbound motion. Nobody is starting from zero.
+
+ | The team | At least five SDRs, BDRs or account executives doing the outreach.
+
+ | Who they sell to | SMB and mid-market.
+
+ | The pain | Not booking the meetings they want. Volume is not the problem. Quality and prioritisation are.
+
+ 
+ 
+ 
+
+ 
+ Two words that get misread
+ Sophisticated means their operating vocabulary at the altitude they work at. The
+ writing stays plain, and jargon still fails. Strategic means altitude, not
+ vagueness: a strategic post still carries a specific number, a specific person and a specific
+ Tuesday. A post for this buyer talks about how a segment gets chosen. A post for a beginner talks
+ about which button to press.
+
+ 
+
+ 
+
+ 
+
+ 
+ 3Pillars
+
+ 
+
+## Where the material comes from
+
+ Three pillars. They describe where a moment came from, not what it is about. This is the value that
+ goes in the pillar field in clause 6.
+
+ 
+ 
+ Pillar 1
+ 
+
+### Career and business
+ Running the consultancy. Client work, decisions, pricing, what I turned down, what went wrong,
+ what I noticed across engagements. The commercial side rather than the craft.
+
+ 
+
+ 
+ Pillar 2
+ 
+
+### Expertise and craft
+ The method itself. Finding pain in public data, building segments, what breaks in a build, what a
+ data source turned out to be worth, where I was wrong about a technique.
+
+ 
+
+ 
+ Pillar 3
+ 
+
+### Life
+ Anything outside work. It stays in, because it is where the lived experience test is easiest to
+ pass. But it carries a condition, below.
+
+ 
+
+ 
+
+ 
+ The condition on the life pillar
+ Every life post has to land somewhere my buyer recognises, at the same altitude as everything else.
+ The walk is not the post. What I worked out on the walk is. A life post with no landing attracts the
+ wrong readers, and the wrong readers are worse than no readers.
+
+ 
+
+ 
+
+ 
+
+ 
+ 4The hook
+
+ 
+
+## One test, one default, and a toolkit
+
+ The test, which is pass or fail. Two things, both required. Only I could have written
+ it, because only I was in that room. And it opens a loop rather than closing one. Already the first
+ check in clause 9.6, and it does not move.
+
+ What a good one usually has. Five elements in the opening lines: timeline, location,
+ character, action, stakes. The stakes are the one most often left out and the one that does the most
+ work, because without them the reader assumes everything was fine.
+
+ Not every hook needs all five, and I do not want this applied mechanically. It is what we are aiming
+ at rather than a template to fill. Use your judgement on when a hook lands better without one of
+ them.
+
+ 
+ Worked example
+ In March I sat on a call with a VP of Sales in Melbourne who had just been handed a number nobody
+ had worked out how to hit.
+
+ Timeline: in March. Location: a call, Melbourne. Character: a VP of Sales. Action:
+ handed a number. Stakes: nobody knew how to hit it.
+
+ 
+
+ The toolkit, in order of how often I want it reached for.
+
+ 
+ 
+ | | Tool | What it does | When
+
+ 
+ | Name who it is for | States the job title, team size, company type or a qualifier in the opening line. | Highest value tool I have. Does the altitude work on its own, turning the right reader on and the wrong one off.
+
+ | Contrast | Two short lines that fight each other. Past against present, expectation against reality, consensus against what I found. | Whenever the moment has a genuine before and after. Do not manufacture one.
+
+ | Authority markers | Time, status, money or recency attached to an otherwise ordinary opening. | Only when the number is real and mine. A borrowed or rounded number is worse than none.
+
+ | Premise, setup, trigger | A longer three-part opener. A premise with a real number, a setup that breaks the expectation, a line that teases the reveal. | Posts with a big result and a twist underneath it. Uses more of the space above the fold.
+
+ | How I, not how to | Puts me inside the claim instead of standing outside teaching it. | Any time I actually did the thing. If I did not, the post should not exist.
+
+ | Two stacked gaps | Line two refuses to answer line one and adds a second question instead of resolving the first. | Short hooks where there is no scene to set. Easy to overdo.
+
+ 
+ 
+ 
+
+ Never open with a question. It reads as an advert and trips the reader's filter
+ before anything has been earned. A question can close a hook, which is a different thing and often
+ works well. It cannot start one.
+
+ No bait. Some of the material I collected teaches deliberately provoking a reaction
+ to lift reach. It is effective and I do not want it. It contradicts how I sell and it attracts an
+ audience I cannot do anything with. If a hook only works because it annoys someone, it fails.
+
+ 
+
+ 
+
+ 
+ 5The body
+
+ 
+
+## Three frameworks, and nothing else
+
+ Clause 9.3 asks the drafter to record which framework it chose. These are the three it chooses from.
+
+ 
+ 
+ Framework 1
+ 
+
+### What, why, how
+ State what happened. Explain why it happened. Show how the reader could apply it. The most
+ versatile of the three and the right default when nothing else obviously fits.
+
+ 
+
+ 
+ Framework 2
+ 
+
+### Problem, agitate, solve
+ Name a problem the reader recognises, make them feel what it costs, then show what fixed it. For
+ posts about a mistake, a frustration or something broken.
+
+ 
+
+ 
+ Framework 3
+ 
+
+### Hook, frame, insight, lesson
+ The frame is the extra step: name what most people believe before delivering what I found
+ instead. For posts that challenge an assumption rather than teach a method.
+
+ 
+
+ 
+
+ On formatting: lean, then fat, then lean. Colons pull the eye down the page and are underused. Short
+ paragraphs with a break between each, because this is read on a phone. Bullets are for surfacing a
+ genuine list, not for avoiding sentences, and one list per post is usually plenty. Vary the sentence
+ length. No fixed word count: the moment decides the length, and nothing gets padded to reach a target.
+
+ 
+
+ 
+
+ 
+ 6Closing lines
+
+ 
+
+## One ask at most, or none
+
+ 
+ 
+ Close 1
+ 
+
+### A genuine question
+ Specific enough that only my reader could answer it, and one I actually want the answer to. Not
+ "what do you think". The default close.
+
+ 
+
+ 
+ Close 2
+ 
+
+### A soft close, no ask
+ A line that closes the loop the post opened and leaves the reader with something. Right for the
+ more personal posts, where an ask would jar.
+
+ 
+
+ 
+ Close 3
+ 
+
+### One direct ask
+ Message me, here is the link, let's talk. Permitted, but rationed to roughly one post in five.
+ More often and the whole feed reads as a pitch.
+
+ 
+
+ 
+
+ Never two asks in one post, because the reader then does neither. Never a request for likes, reposts
+ or follows. Never a pitch bolted onto a post that was not about the offer, which reads as a bait and
+ switch after someone has given you three minutes.
+
+ 
+
+ 
+
+ 
+ 7Proof
+
+ 
+
+## Show it, but never name them
+
+ There is a real tension here, worth stating rather than letting the system discover it. Writing for
+ this buyer means showing proof rather than asserting expertise, and proof usually wants a named client
+ and a real number. Clause 9c forbids naming anyone without express permission for that specific post.
+
+ The resolution is that no client gets named. Not on a roster, not with permission, not at all. Posts
+ use the shape instead: a vertical SaaS company, a compliance platform, a team of forty, a health tech
+ business selling into clinics.
+
+ 
+ This needs to be an actual check, not a hope
+ Removing the name does not anonymise anything on its own. A number plus a niche plus a date
+ identifies a company to anyone in that market, and my readers are in that market. Clause 9.13 already
+ says this. It needs to be something the gate genuinely tests, because it is the failure mode that
+ costs me a client rather than a post.
+
+ 
+
+ Where a moment cannot survive without identifying someone, two options in order: use my own numbers
+ instead of theirs, or park it. Parking it is a correct outcome.
+
+ 
+ A side note on showing it
+ Where a post makes a claim I can actually show, a screenshot or an image usually proves it better
+ than another sentence does. A result, a dashboard, a message thread, a diagram. Worth flagging to me
+ when a draft is making a claim that would land harder with something to look at. The naming rule
+ above applies to anything visible in the image too.
+
+ 
+
+ 
+
+ 
+
+ 
+ 8Attached
+
+ 
+
+## Three files of raw material
+
+ Rather than describe these, I have written them out. All three are rewritten for my world rather than
+ sent as I received them, so they should be usable directly rather than needing translation.
+
+ 
+ 
+ File 1
+ 
+
+### The prompt set
+ Everything the system asks me. Four sets: the six questions that mine a single moment plus the
+ three depths that come before them, the five-question weekly sweep, a five-category interview for
+ when the sweep comes back empty, and thirty standalone prompts each already matched to a pillar and
+ a framework.
+
+ You said this is not part of what you normally build, so it is the fullest of the
+ three. Clause 4.2.2.
+
+ 
+
+ 
+ File 2
+ 
+
+### The quality checklists
+ Four checklists a draft can be tested against. The master test with its depth levels and worked
+ pass and fail examples, six retention criteria, five formatting checks, and a four-level scale for
+ whether a post is actually saying anything.
+
+ Raw material for the gate, not a specification. Clause 9.6.
+
+ 
+
+ 
+ File 3
+ 
+
+### The ten coaching prompts
+ Ten single-purpose assistants, one per job: find the story, find something to write about, build
+ the hook, build the open loop, choose the structure, and five that review a finished draft.
+
+ Each mapped to the spec clause it answers. None of the ten write anything, which
+ is the point, and the file opens by explaining why.
+
+ 
+
+ 
+
+ 
+ Still outstanding
+ The four or five call recordings. I am picking them now and they will follow separately. Clause 8.2
+ puts the voice guide on the critical path, so if anything here is blocking you, it is that rather
+ than this document.
+
+ 
+
+ 
+
+ 
+
+ 
+ 9Over to you
+
+ 
+
+## Two things I am leaving with you
+
+ Before the two specifics, the general version. Ghostwriting and copywriting are your craft and not
+ mine. What I have written across this document is a skeleton. If there is meat you would add to it,
+ add it, and tell me where you have. That applies to everything above as much as to the two below.
+
+ 
+
+### Screening for writing that sounds machine-generated
+
+ Do you already screen for this? I assume so, since it is the obvious failure mode of a system like
+ this, which is why I have not written it up as a requirement. I do hold a long list of patterns I treat
+ as tells: certain structural cliches, filler phrases, punctuation habits, uniform sentence rhythm, a
+ missing first person. If your system does not already cover it, say the word and I will send the list.
+ If it does, use yours.
+
+ 
+
+### How much weight the two feedback signals get
+
+ Clause 12a makes engagement numbers automatic and required. Clause 12b makes the question about
+ whether a post started a conversation best effort, because it depends on me turning up. How they get
+ weighted against each other is your call, not mine.
+
+ 
+ The one risk worth naming
+ Engagement numbers arrive reliably every week. Conversations almost never do, and never on a
+ schedule. So the loop will always hold far more of the weak signal than the strong one. Tuned mainly
+ on numbers, it drifts toward whatever wins likes, which in my market is a style aimed at people who
+ will never buy anything. My buyer lurks, reads, and does not engage. A design problem rather than an
+ objection, and you will solve it better than I would.
+
+ 
+
+ 
+
+ 
+
+ 
+ 10Accounts and sources
+
+ 
+
+## Who to learn structure from
+
+ Eight accounts, per clause 8.3. Structural reference only. Never a source of voice, never copied,
+ never quoted.
+
+ 
+ 
+- linkedin.com/in/demandjen1
+ 
+- linkedin.com/in/ryanscarlin
+ 
+- linkedin.com/in/outboundphd
+ 
+- linkedin.com/in/curtishowland
+ 
+- linkedin.com/in/adam-treboutat
+ 
+- linkedin.com/in/juliacarter98
+ 
+- linkedin.com/in/amangrowth
+ 
+- linkedin.com/in/mattjbarker1
+ 
+
+ 
+
+### Where the thinking came from
+
+ Worth being straight about it, so you know what you are looking at and can judge how much weight any
+ of it deserves.
+
+ 
+ 
+ | | Source | What came from it
+
+ 
+ | Matt Barker | The lived experience method, the three depths, the three pillars, the five-part hook, the three body frameworks, the closes, the thirty prompts and the ten coaching prompts. Most of sections 3 to 8.
+
+ | Aman | The altitude layer in section 2, calling out who a post is for, and the argument that likes and impressions are close to worthless for a buyer who lurks. Most of what makes this different from generic LinkedIn advice.
+
+ | Matt Lakajev | The reader-side test: a post has to come from their world, break an expectation, and be compressed enough to land. The clearest statement of why the altitude layer matters.
+
+ | Adam Robinson | The premise, setup and curiosity trigger shape in the toolkit. Reached me through someone else's breakdown of his posts rather than directly.
+
+ 
+ 
+ 
+
+ 
+
+ 
+ Reference library inputs, version 1.0, 4 September 2026
+
+ Prepared by Josh Fryszer, Slingshot GTM, for Thought Pilot. Companion to the content system build
+ specification version 2.0 of 20 August 2026. Clause numbers throughout refer to that document. Sent
+ with three attachments: the prompt set, the quality checklists, and the ten coaching prompts.
