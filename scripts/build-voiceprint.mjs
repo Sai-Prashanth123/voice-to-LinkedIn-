@@ -266,7 +266,24 @@ if (sentinelPath) {
 }
 
 const md = render(fp, ctr);
-const json = { computed_at: new Date().toISOString(), ...fp, contrast: ctr };
+
+// MANUAL CORRECTIONS SURVIVE RECOMPUTE.
+//
+// scripts/voice-tune.mjs writes bans, signature terms, directives and what it has learned from
+// Josh's own edits into a `manual` block. Everything else in this file is derived from the
+// transcripts and is meant to be overwritten — that block is not.
+//
+// Without this, a correction Josh made would vanish silently the next time the fingerprint was
+// rebuilt, which is the failure that teaches people to stop bothering to correct anything. The
+// content-agent original says the same in one line: "Manual edits are preserved when
+// build_voiceprint.py recomputes."
+let manual = { banned: [], signature: [], directives: [], learned: [] };
+try {
+  const prior = JSON.parse(readFileSync(join(OUT_DIR, "voiceprint.json"), "utf8"));
+  if (prior.manual) manual = prior.manual;
+} catch { /* first run, or no prior file */ }
+
+const json = { computed_at: new Date().toISOString(), ...fp, contrast: ctr, manual };
 
 console.log(md);
 

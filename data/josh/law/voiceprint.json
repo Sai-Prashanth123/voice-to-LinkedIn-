@@ -1,5 +1,5 @@
 {
-  "computed_at": "2026-09-08T07:03:44.007Z",
+  "computed_at": "2026-09-08T09:11:27.816Z",
   "corpus": {
     "calls": 6,
     "turns": 317,
@@ -466,5 +466,11 @@
         "mine_per_1k": 0.1
       }
     ]
+  },
+  "manual": {
+    "banned": [],
+    "signature": [],
+    "directives": [],
+    "learned": []
   }
 }
