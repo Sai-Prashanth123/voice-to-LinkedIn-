@@ -1,0 +1,102 @@
+# Every test in this repository, run on push, because until now none of them ran on their own.
+#
+# WHY THIS DID NOT EXIST BEFORE
+#
+# There are 125 Deno tests, 26 MCP tests and 110 end-to-end cases in here, and the only thing that
+# ever ran them was a person remembering to. Every regression this build has had was found by
+# somebody noticing — including a worker deployed two days stale, and a draft reporting itself
+# fully gated with two checks never run.
+#
+# WHAT RUNS HERE AND WHAT CANNOT
+#
+# The jobs below need no credentials, so they run on every push for anyone, including a fork.
+#
+# The suites that read the live project — mcp-server/*.test.mjs, the live tier of the e2e harness,
+# and eval/acceptance.mjs — are deliberately NOT here. They need a service key, and a workflow that
+# silently skipped them when a secret was absent would report green while checking nothing, which
+# is the exact failure this file exists to stop. They stay a local command until somebody decides
+# to put a scoped key in repository secrets, and that is a decision with a blast radius.
+
+name: checks
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shared:
+    name: Shared logic (125 tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check every edge function
+        # A function that no longer compiles is a function that will fail on deploy, and the deploy
+        # is the one moment nobody is watching a terminal.
+        run: |
+          for f in supabase/functions/*/index.ts; do
+            echo "checking $f"
+            deno check --allow-import "$f"
+          done
+      - name: Run the shared tests
+        run: deno test --allow-all supabase/functions/_shared/
+
+  scripts:
+    name: Scripts and harness parse
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Every script parses
+        # These are one-shot operational scripts run by hand against the live database. A syntax
+        # error in one is only discovered at the moment somebody needs it, usually under pressure.
+        run: |
+          for f in scripts/*.mjs scripts/lib/*.mjs eval/*.mjs eval/e2e/*.mjs eval/e2e/cases/*.mjs \
+                   mcp-server/*.mjs mcp-server/tools/*.mjs cc-agent/*.mjs; do
+            node --check "$f"
+          done
+      - name: The tool registry has no duplicate names
+        run: node mcp-server/index.mjs --tools
+
+  migrations:
+    name: Migrations build from nothing
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # pgvector, not plain postgres. 0001 creates the vector extension for moment_embeddings,
+        # and supabase/tests/run-migrations.sh has always used this image for the same reason.
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+        ports: ['5432:5432']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply every migration in order to an empty database
+        # 14.3 promises the system can be rebuilt from this repository into Josh's own account. The
+        # only way to know that is to do it, every time, rather than the day it matters.
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -f supabase/tests/shim.sql
+          for f in supabase/migrations/*.sql; do
+            echo "applying $(basename "$f")"
+            psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f "$f"
+          done
+          psql -h localhost -U postgres -c \
+            "select count(*) as tables from information_schema.tables
+             where table_schema='public' and table_type='BASE TABLE';"
