@@ -56,6 +56,22 @@ export type Action =
   | { kind: "pillar"; momentId: number; index: number }
   /* 6.4 — bringing a parked moment back into the queue. */
   | { kind: "reopen"; momentId: number }
+  /*
+   * The four ways out of an interview that is not going anywhere.
+   *
+   * Until these existed there were exactly two: type an answer, or say nothing. Five interviews
+   * were stalled on the second, one of them since 26 August, and the only thing that ever happened
+   * to them was worker-select giving up after a fortnight without Josh being told either way.
+   *
+   * "Skip" and "enough" are not the same and the difference matters. Skip means this question is
+   * wrong, ask me something else. Enough means stop asking and write it up with what you have —
+   * which the interviewer prompt already treats as a legitimate ending ("a moment with a scene and
+   * no lesson is a real outcome"), but which he previously had no way to say.
+   */
+  | { kind: "resume"; momentId: number }
+  | { kind: "skipq"; momentId: number }
+  | { kind: "enough"; momentId: number }
+  | { kind: "parkit"; momentId: number }
   /* 8.8 — which library section a rule typed in Telegram belongs to. */
   | { kind: "rulesection"; index: number }
   /* 8.1 — whether a line typed during voice capture belongs in the voice guide. */
@@ -107,6 +123,14 @@ export function parseAction(data: string | undefined): Action {
       return { kind: "candidate", momentId: id };
     case "reopen":
       return { kind: "reopen", momentId: id };
+    case "rsm":
+      return { kind: "resume", momentId: id };
+    case "skq":
+      return { kind: "skipq", momentId: id };
+    case "enuf":
+      return { kind: "enough", momentId: id };
+    case "pk":
+      return { kind: "parkit", momentId: id };
     case "img":
       return { kind: "imgmoment", momentId: id };
     case "prop":

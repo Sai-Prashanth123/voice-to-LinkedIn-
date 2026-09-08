@@ -24,7 +24,8 @@ import {
 import { creditSession, recordAsked, syncQuestions } from "../questions.ts";
 import { ExtractionSchema, NextQuestionSchema } from "../schemas.ts";
 import { appendTurn, deepest, loadSession, renderTranscript } from "../session.ts";
-import { type Button, joshChatId, sendMessage } from "../telegram.ts";
+import { joshChatId, sendMessage } from "../telegram.ts";
+import { questionOuts } from "../interviewouts.ts";
 import { sendParked } from "../parked.ts";
 import { isRealName, unclearedNames } from "../names.ts";
 import type { InterviewDepth, Job } from "../types.ts";
@@ -147,10 +148,42 @@ export async function handleInterviewStep(db: SupabaseClient, job: Job): Promise
   }).eq("id", momentId);
 
   // 5.12 — tell him when he has given something strong, so he learns what good material feels like.
-  const text = next.encouragement?.trim()
+  /*
+   * Where he is, counted in code rather than asked for in the prompt.
+   *
+   * 5.12 already tells him when an answer was good. What it never told him was how much longer this
+   * goes on, and an interview with no visible end is one it is always rational to put off — which
+   * is what five stalled conversations look like from the inside.
+   *
+   * Deterministic on purpose. The count is a fact this function already holds, and a model asked to
+   * report it would eventually report it wrongly, which is worse than not saying it at all.
+   */
+  const askedNow = session.questionsAsked + 1;
+  const left = Math.max(0, maxQuestions - askedNow);
+  const progress = left === 0
+    ? "Last one."
+    : left === 1
+    ? "One more after this, at most."
+    : `${askedNow} of at most ${maxQuestions}.`;
+
+  const text = (next.encouragement?.trim()
     ? `${next.encouragement.trim()}\n\n${next.question}`
-    : next.question;
-  const messageId = await sendMessage(joshChatId(), text);
+    : next.question) + `\n\n${progress}`;
+
+  /*
+   * Every question carries a way out that is not silence.
+   *
+   * Before these buttons a question had exactly two responses: type an answer, or say nothing. Five
+   * interviews were sitting on the second, and the system read all five the same way — as Josh
+   * being busy — when they are three different facts: the question is wrong, there is nothing more
+   * to say, or the moment is not worth it. Silence cannot tell them apart, so nothing downstream
+   * could either.
+   *
+   * "That is enough" is the one the prompt already believes in and could never hear: it tells the
+   * interviewer to stop and write up what it has, which clause 5 calls a real outcome rather than a
+   * failure. It is also the answer to "how do I know when an interview is finished" — he decides.
+   */
+  const messageId = await sendMessage(joshChatId(), text, questionOuts(momentId));
 
   // So that a reply is unambiguously an answer to THIS question, even days later (5.11).
   if (messageId) {

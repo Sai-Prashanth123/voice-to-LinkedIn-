@@ -14,7 +14,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { noteProvider } from "../_shared/providers.ts";
 import type { Awaiting } from "../_shared/types.ts";
-import { admin, getSetting, logEvent } from "../_shared/db.ts";
+import { admin, getSetting, logEvent, park } from "../_shared/db.ts";
 import { loadSecrets, secret } from "../_shared/secrets.ts";
 import { enqueue, json, nudge } from "../_shared/jobs.ts";
 import { pushBack } from "../_shared/pushback.ts";
@@ -836,6 +836,88 @@ async function handleTap(
           "Reopened " + (reopened?.ref ?? "it") + ". One question coming — tell me what you remember.",
         );
       }
+      return;
+    }
+
+    /*
+     * The four ways out of an interview, from the daily roundup or from any question.
+     *
+     * All four are deliberately cheap: none of them calls a model except `skipq`, which has to ask
+     * something else and cannot know what without one. A button that costs a request is a button
+     * that stops working when the free tier runs out, and these are exactly the buttons that must
+     * work on the day he has stopped replying.
+     */
+
+    // "Answer" — he wants to deal with this one now. Point the conversation at it and show him the
+    // question again rather than generating a fresh one: re-asking would spend a model call to
+    // replace a question he has already read, and might replace it with a worse one.
+    case "resume": {
+      const { data: q } = await db
+        .from("interview_turns")
+        .select("body")
+        .eq("moment_id", action.momentId)
+        .eq("role", "question")
+        .order("turn_no", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      await setState(db, "answer", action.momentId);
+      await logEvent(db, "interview_resumed_by_josh", "info", { moment_id: action.momentId });
+
+      if (messageId) {
+        await replaceMessage(
+          chatId,
+          messageId,
+          q?.body ? `${q.body as string}\n\n(Answer whenever — text or voice.)` : "Tell me about that one.",
+        );
+      }
+      return;
+    }
+
+    // "Skip" — the question is wrong, not the moment. Recorded as a turn so the interviewer can see
+    // he declined it and asks something else; without the turn it would have no way to know and
+    // would be free to ask the same thing again, which is the nagging the prompt warns about.
+    case "skipq": {
+      await appendTurn(db, action.momentId, {
+        role: "answer",
+        body: "(skipped that question)",
+        question_key: null,
+        depth: null,
+        is_pushback: false,
+      });
+      await enqueue(db, "interview_step", { moment_id: action.momentId });
+      nudge();
+      await logEvent(db, "interview_question_skipped", "info", { moment_id: action.momentId });
+
+      if (messageId) await replaceMessage(chatId, messageId, "Fair enough — let me try a different one.");
+      return;
+    }
+
+    // "That is enough, write it up" — clause 5 already calls a scene with no lesson a real outcome.
+    // This is Josh being able to say so, instead of the system deciding it for him after a
+    // fortnight of silence. Extraction decides whether what is there is material or a park.
+    case "enough": {
+      await enqueue(db, "interview_extract", { moment_id: action.momentId });
+      nudge();
+      await logEvent(db, "interview_ended_by_josh", "info", { moment_id: action.momentId });
+
+      if (messageId) {
+        await replaceMessage(chatId, messageId, "Got it — I will write it up with what I have.");
+      }
+      return;
+    }
+
+    // "Park it" — 6.3, so nothing is deleted. The reason names him, because a moment parked by the
+    // system and one parked by Josh are different facts and the bank should not blur them.
+    case "parkit": {
+      await park(db, action.momentId, "You parked this one. Send me more about it any time.");
+      await setState(db, "nothing", null);
+      await logEvent(db, "moment_parked", "info", {
+        moment_id: action.momentId,
+        reason: "parked by Josh from a button",
+      });
+
+      if (messageId) await replaceMessage(chatId, messageId, "Parked. It stays in the bank.");
       return;
     }
 

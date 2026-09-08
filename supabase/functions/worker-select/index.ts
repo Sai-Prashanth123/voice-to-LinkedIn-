@@ -25,6 +25,7 @@ import { checkRetelling, loadThresholds, type DedupResult } from "../_shared/ded
 import { canSeeImages } from "../_shared/llm.ts";
 import { recordEditDiff } from "../_shared/outcome.ts";
 import { joshChatId, sendMessage } from "../_shared/telegram.ts";
+import { roundupOuts } from "../_shared/interviewouts.ts";
 import { enqueue, json } from "../_shared/jobs.ts";
 import {
   applyRecencySpacing,
@@ -51,6 +52,10 @@ Deno.serve(async () => {
   await ageOutStaleCandidates(db, ageOutDays);
   await expireDecayedMoments(db);
   await rescueStranded(db);
+  // Before the close, not after: a moment must have had its chance to be reminded about before the
+  // system gives up on it. rescueStranded runs first so anything the SYSTEM broke is fixed before
+  // Josh is asked about anything.
+  await remindStalledInterviews(db);
   await closeStaleConversations(db);
   await resumeDeferredVisuals(db);
   await backfillEditDiffs(db);
@@ -508,6 +513,152 @@ export type { DedupResult };
  *   last turn is an ANSWER  — waiting on the SYSTEM. A timer is the wrong answer to that: he replied
  *                             and nothing came back. That is a job that died, and it gets resumed.
  */
+/**
+ * Remind Josh about interviews he has stopped answering — once a day, in one message, with a way
+ * out of each.
+ *
+ * WHAT THIS REPLACES
+ *
+ * Nothing. `closeStaleConversations` below has always handled every case except this one: it starts
+ * interviews that never started, resumes ones the system stranded, and after 7 to 14 days of
+ * silence takes what it has. What it never did was tell Josh any of that was happening. Five
+ * interviews were stalled mid-question when this was written, the oldest since 26 August, and each
+ * was heading for a silent close that would produce a thin moment or a park he never heard about.
+ *
+ * WHY ONE MESSAGE A DAY AND NOT ONE PER MOMENT
+ *
+ * The interviewer prompt is explicit that pressing on "does not get better material; it costs you
+ * the next session, because he will remember this one as an interrogation". Five stalled moments
+ * times a per-moment reminder is five notifications, which is precisely that. So the cap is on the
+ * MESSAGE, not on the moment: at most one a day no matter how many are open, and it lists them.
+ *
+ * The cap is read from system_events rather than kept in a counter column. That is where every
+ * other operational fact lives (13.2), it is auditable after the fact, and a counter that drifts is
+ * indistinguishable from a counter that is right.
+ *
+ * WHY IT COSTS NOTHING
+ *
+ * No model call. The text is the question he was already asked, quoted back. A reminder that spent
+ * a request would stop working on the day the free tier ran out, which is exactly the day it is
+ * most needed.
+ */
+async function remindStalledInterviews(db: SupabaseClient): Promise<void> {
+  // An off switch, because this is the only thing in the system that messages Josh without him
+  // having done something first. Defaults ON so a rebuild from this repository behaves as designed
+  // (14.3), and is set to false in the live project until the operator arms it.
+  if (!(await getSetting(db, "nudge_enabled", true))) return;
+
+  const afterHours = await getSetting(db, "nudge_after_hours", 36);
+  const maxListed = await getSetting(db, "nudge_max_listed", 3);
+
+  const dayAgo = new Date(Date.now() - 24 * 3_600_000).toISOString();
+  const { count: alreadySent } = await db
+    .from("system_events")
+    .select("*", { count: "exact", head: true })
+    .eq("kind", "interview_roundup_sent")
+    .gte("created_at", dayAgo);
+  if ((alreadySent ?? 0) > 0) return;
+
+  const { data: open } = await db
+    .from("moments")
+    .select("id, ref, status")
+    .in("status", ["captured", "half_mined"])
+    .eq("killed", false)
+    .limit(100);
+
+  const waiting: { id: number; ref: string; question: string; about: string }[] = [];
+
+  for (const m of open ?? []) {
+    // Same guard as closeStaleConversations: queued work means it is not waiting on him.
+    const { count: live } = await db
+      .from("jobs")
+      .select("*", { count: "exact", head: true })
+      .in("type", ["interview_step", "interview_extract", "transcribe"])
+      .in("status", ["pending", "running"])
+      .eq("payload->>moment_id", String(m.id));
+    if ((live ?? 0) > 0) continue;
+
+    const { data: last } = await db
+      .from("interview_turns")
+      .select("role, body, created_at")
+      .eq("moment_id", m.id)
+      .order("turn_no", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // Only an unanswered QUESTION is his to act on. No turns at all, or a trailing answer, are the
+    // system's own problems and closeStaleConversations already fixes both.
+    if (!last || last.role !== "question") continue;
+
+    const silentHours = (Date.now() - new Date(last.created_at as string).getTime()) / 3_600_000;
+    if (silentHours < afterHours) continue;
+
+    // His own first words about it, which is the only label he will recognise. The ref means
+    // nothing to him and the question alone does not say which moment it belongs to.
+    const { data: first } = await db
+      .from("interview_turns")
+      .select("body")
+      .eq("moment_id", m.id)
+      .eq("role", "answer")
+      .order("turn_no", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    waiting.push({
+      id: m.id as number,
+      ref: m.ref as string,
+      question: String(last.body ?? "").trim(),
+      about: String(first?.body ?? "").trim(),
+    });
+  }
+
+  if (waiting.length === 0) return;
+
+  const listed = waiting.slice(0, maxListed);
+  const only = listed.length === 1;
+
+  const lines = listed.map((w, i) => {
+    const label = only ? "" : `${i + 1}. `;
+    const about = w.about ? `${snippet(w.about, 70)}\n   ` : "";
+    return `${label}${about}${snippet(w.question, 140)}`;
+  });
+
+  const more = waiting.length > listed.length
+    ? `\n\n(${waiting.length - listed.length} more, but this is plenty for one message.)`
+    : "";
+
+  const text =
+    (only ? "One thing still open:" : `${listed.length} things still open:`) +
+    `\n\n${lines.join("\n\n")}${more}` +
+    `\n\nNo rush, and no need to answer all of them. ` +
+    `Leave them and I will close them on their own.`;
+
+  try {
+    await sendMessage(joshChatId(), text, roundupOuts(listed.map((w) => w.id)));
+  } catch (err) {
+    // 13.2 — a reminder that failed to send must not look like a reminder that was not due. Logged
+    // as an error and NOT recorded as sent, so the next sweep tries again in four hours.
+    await logEvent(db, "interview_roundup_failed", "error", { error: String(err) });
+    return;
+  }
+
+  // Written only after the send succeeded. This row IS the once-a-day cap.
+  await logEvent(db, "interview_roundup_sent", "info", {
+    listed: listed.map((w) => w.ref),
+    waiting: waiting.length,
+    silent_after_hours: afterHours,
+  });
+}
+
+/** Telegram truncation that does not cut a word in half. */
+function snippet(text: string, max: number): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  if (flat.length <= max) return flat;
+  const cut = flat.slice(0, max);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > max * 0.6 ? cut.slice(0, space) : cut).trim()}…`;
+}
+
 async function closeStaleConversations(db: SupabaseClient): Promise<void> {
   const ownDays = await getSetting(db, "stale_own_days", 14);
   const candidateDays = await getSetting(db, "stale_candidate_days", 7);
