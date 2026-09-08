@@ -1,0 +1,470 @@
+{
+  "computed_at": "2026-09-08T07:03:44.007Z",
+  "corpus": {
+    "calls": 6,
+    "turns": 317,
+    "words": 11022,
+    "register": "speech"
+  },
+  "rhythm": {
+    "sentence_words_mean": 10.2,
+    "sentence_words_median": 5,
+    "sentence_words_sd": 16.3,
+    "short_pct": 62,
+    "long_pct": 14,
+    "words_per_turn_median": 14
+  },
+  "register": {
+    "i_vs_we": 6.46,
+    "contractions_per_1k": 59.52,
+    "hedging_per_1k": 22.68,
+    "you_address_per_1k": 32.03,
+    "question_turns_pct": 21
+  },
+  "surface": {
+    "em_dashes": 0,
+    "ellipsis_per_1k": 0,
+    "exclaim_per_1k": 0,
+    "allcaps_per_1k": 1.36,
+    "opening_mix": [
+      [
+        "statement",
+        269
+      ],
+      [
+        "question",
+        24
+      ],
+      [
+        "first_person",
+        18
+      ],
+      [
+        "consensus_claim",
+        3
+      ],
+      [
+        "number_claim",
+        3
+      ]
+    ]
+  },
+  "contrast": {
+    "compared_against": {
+      "posts": 59,
+      "words": 11195,
+      "register": "writing"
+    },
+    "signature_terms": [
+      {
+        "word": "terms",
+        "count": 16,
+        "mine_per_1k": 1.55,
+        "theirs_per_1k": 0,
+        "ratio": 31
+      },
+      {
+        "word": "partner",
+        "count": 11,
+        "mine_per_1k": 1.06,
+        "theirs_per_1k": 0,
+        "ratio": 21.2
+      },
+      {
+        "word": "situation",
+        "count": 10,
+        "mine_per_1k": 0.97,
+        "theirs_per_1k": 0,
+        "ratio": 19.4
+      },
+      {
+        "word": "consulting",
+        "count": 8,
+        "mine_per_1k": 0.77,
+        "theirs_per_1k": 0,
+        "ratio": 15.4
+      },
+      {
+        "word": "melbourne",
+        "count": 8,
+        "mine_per_1k": 0.77,
+        "theirs_per_1k": 0,
+        "ratio": 15.4
+      },
+      {
+        "word": "helping",
+        "count": 7,
+        "mine_per_1k": 0.68,
+        "theirs_per_1k": 0,
+        "ratio": 13.6
+      },
+      {
+        "word": "appreciate",
+        "count": 7,
+        "mine_per_1k": 0.68,
+        "theirs_per_1k": 0,
+        "ratio": 13.6
+      },
+      {
+        "word": "potentially",
+        "count": 7,
+        "mine_per_1k": 0.68,
+        "theirs_per_1k": 0,
+        "ratio": 13.6
+      },
+      {
+        "word": "guys",
+        "count": 6,
+        "mine_per_1k": 0.58,
+        "theirs_per_1k": 0,
+        "ratio": 11.6
+      },
+      {
+        "word": "enrollment",
+        "count": 6,
+        "mine_per_1k": 0.58,
+        "theirs_per_1k": 0,
+        "ratio": 11.6
+      },
+      {
+        "word": "information",
+        "count": 6,
+        "mine_per_1k": 0.58,
+        "theirs_per_1k": 0,
+        "ratio": 11.6
+      },
+      {
+        "word": "sense",
+        "count": 36,
+        "mine_per_1k": 3.48,
+        "theirs_per_1k": 0.27,
+        "ratio": 10.9
+      },
+      {
+        "word": "businesses",
+        "count": 15,
+        "mine_per_1k": 1.45,
+        "theirs_per_1k": 0.09,
+        "ratio": 10.4
+      },
+      {
+        "word": "let's",
+        "count": 15,
+        "mine_per_1k": 1.45,
+        "theirs_per_1k": 0.09,
+        "ratio": 10.4
+      },
+      {
+        "word": "name",
+        "count": 14,
+        "mine_per_1k": 1.35,
+        "theirs_per_1k": 0.09,
+        "ratio": 9.6
+      },
+      {
+        "word": "offices",
+        "count": 5,
+        "mine_per_1k": 0.48,
+        "theirs_per_1k": 0,
+        "ratio": 9.6
+      },
+      {
+        "word": "five",
+        "count": 5,
+        "mine_per_1k": 0.48,
+        "theirs_per_1k": 0,
+        "ratio": 9.6
+      },
+      {
+        "word": "australia",
+        "count": 5,
+        "mine_per_1k": 0.48,
+        "theirs_per_1k": 0,
+        "ratio": 9.6
+      },
+      {
+        "word": "born",
+        "count": 5,
+        "mine_per_1k": 0.48,
+        "theirs_per_1k": 0,
+        "ratio": 9.6
+      },
+      {
+        "word": "given",
+        "count": 5,
+        "mine_per_1k": 0.48,
+        "theirs_per_1k": 0,
+        "ratio": 9.6
+      },
+      {
+        "word": "october",
+        "count": 5,
+        "mine_per_1k": 0.48,
+        "theirs_per_1k": 0,
+        "ratio": 9.6
+      },
+      {
+        "word": "recut",
+        "count": 5,
+        "mine_per_1k": 0.48,
+        "theirs_per_1k": 0,
+        "ratio": 9.6
+      },
+      {
+        "word": "might",
+        "count": 20,
+        "mine_per_1k": 1.93,
+        "theirs_per_1k": 0.18,
+        "ratio": 8.4
+      },
+      {
+        "word": "around",
+        "count": 12,
+        "mine_per_1k": 1.16,
+        "theirs_per_1k": 0.09,
+        "ratio": 8.3
+      },
+      {
+        "word": "you've",
+        "count": 17,
+        "mine_per_1k": 1.64,
+        "theirs_per_1k": 0.18,
+        "ratio": 7.1
+      }
+    ],
+    "spoken_filler": [
+      {
+        "word": "yeah",
+        "count": 205,
+        "mine_per_1k": 19.83,
+        "theirs_per_1k": 0,
+        "ratio": 396.6
+      },
+      {
+        "word": "probably",
+        "count": 29,
+        "mine_per_1k": 2.8,
+        "theirs_per_1k": 0,
+        "ratio": 56
+      },
+      {
+        "word": "yep",
+        "count": 21,
+        "mine_per_1k": 2.03,
+        "theirs_per_1k": 0,
+        "ratio": 40.6
+      },
+      {
+        "word": "kind",
+        "count": 51,
+        "mine_per_1k": 4.93,
+        "theirs_per_1k": 0.09,
+        "ratio": 35.2
+      },
+      {
+        "word": "there's",
+        "count": 41,
+        "mine_per_1k": 3.97,
+        "theirs_per_1k": 0.09,
+        "ratio": 28.4
+      },
+      {
+        "word": "obviously",
+        "count": 12,
+        "mine_per_1k": 1.16,
+        "theirs_per_1k": 0,
+        "ratio": 23.2
+      },
+      {
+        "word": "sorry",
+        "count": 10,
+        "mine_per_1k": 0.97,
+        "theirs_per_1k": 0,
+        "ratio": 19.4
+      },
+      {
+        "word": "guess",
+        "count": 10,
+        "mine_per_1k": 0.97,
+        "theirs_per_1k": 0,
+        "ratio": 19.4
+      },
+      {
+        "word": "okay",
+        "count": 62,
+        "mine_per_1k": 6,
+        "theirs_per_1k": 0.27,
+        "ratio": 18.8
+      },
+      {
+        "word": "oh",
+        "count": 22,
+        "mine_per_1k": 2.13,
+        "theirs_per_1k": 0.09,
+        "ratio": 15.2
+      },
+      {
+        "word": "makes",
+        "count": 33,
+        "mine_per_1k": 3.19,
+        "theirs_per_1k": 0.18,
+        "ratio": 13.9
+      },
+      {
+        "word": "think",
+        "count": 97,
+        "mine_per_1k": 9.38,
+        "theirs_per_1k": 0.63,
+        "ratio": 13.8
+      },
+      {
+        "word": "nice",
+        "count": 7,
+        "mine_per_1k": 0.68,
+        "theirs_per_1k": 0,
+        "ratio": 13.6
+      },
+      {
+        "word": "him",
+        "count": 7,
+        "mine_per_1k": 0.68,
+        "theirs_per_1k": 0,
+        "ratio": 13.6
+      },
+      {
+        "word": "like",
+        "count": 274,
+        "mine_per_1k": 26.5,
+        "theirs_per_1k": 2.05,
+        "ratio": 12.6
+      }
+    ],
+    "peer_words_he_avoids": [
+      {
+        "word": "your",
+        "theirs_per_1k": 11.34,
+        "mine_per_1k": 2.9
+      },
+      {
+        "word": "by",
+        "theirs_per_1k": 3.93,
+        "mine_per_1k": 1.16
+      },
+      {
+        "word": "day",
+        "theirs_per_1k": 3.75,
+        "mine_per_1k": 0.39
+      },
+      {
+        "word": "who",
+        "theirs_per_1k": 3.31,
+        "mine_per_1k": 0.97
+      },
+      {
+        "word": "sales",
+        "theirs_per_1k": 3.13,
+        "mine_per_1k": 0.39
+      },
+      {
+        "word": "marketing",
+        "theirs_per_1k": 2.86,
+        "mine_per_1k": 0.48
+      },
+      {
+        "word": "run",
+        "theirs_per_1k": 2.86,
+        "mine_per_1k": 0.48
+      },
+      {
+        "word": "every",
+        "theirs_per_1k": 2.77,
+        "mine_per_1k": 0.1
+      },
+      {
+        "word": "ai",
+        "theirs_per_1k": 2.68,
+        "mine_per_1k": 0.39
+      },
+      {
+        "word": "last",
+        "theirs_per_1k": 2.59,
+        "mine_per_1k": 0.77
+      },
+      {
+        "word": "ads",
+        "theirs_per_1k": 2.59,
+        "mine_per_1k": 0.1
+      },
+      {
+        "word": "revenue",
+        "theirs_per_1k": 2.41,
+        "mine_per_1k": 0.1
+      },
+      {
+        "word": "write",
+        "theirs_per_1k": 2.32,
+        "mine_per_1k": 0
+      },
+      {
+        "word": "pipeline",
+        "theirs_per_1k": 2.23,
+        "mine_per_1k": 0.39
+      },
+      {
+        "word": "best",
+        "theirs_per_1k": 2.14,
+        "mine_per_1k": 0
+      },
+      {
+        "word": "days",
+        "theirs_per_1k": 2.14,
+        "mine_per_1k": 0.29
+      },
+      {
+        "word": "same",
+        "theirs_per_1k": 2.05,
+        "mine_per_1k": 0.58
+      },
+      {
+        "word": "down",
+        "theirs_per_1k": 2.05,
+        "mine_per_1k": 0.39
+      },
+      {
+        "word": "account",
+        "theirs_per_1k": 2.05,
+        "mine_per_1k": 0.39
+      },
+      {
+        "word": "cpa",
+        "theirs_per_1k": 2.05,
+        "mine_per_1k": 0
+      },
+      {
+        "word": "content",
+        "theirs_per_1k": 1.97,
+        "mine_per_1k": 0.29
+      },
+      {
+        "word": "here's",
+        "theirs_per_1k": 1.88,
+        "mine_per_1k": 0
+      },
+      {
+        "word": "before",
+        "theirs_per_1k": 1.88,
+        "mine_per_1k": 0.48
+      },
+      {
+        "word": "target",
+        "theirs_per_1k": 1.88,
+        "mine_per_1k": 0.1
+      },
+      {
+        "word": "company",
+        "theirs_per_1k": 1.79,
+        "mine_per_1k": 0.1
+      }
+    ]
+  }
+}
