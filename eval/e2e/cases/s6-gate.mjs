@@ -257,4 +257,54 @@ export const cases = [
       assert.match(nearby, /return|short|calendar/i, "and short-circuits before the calendar");
     },
   }),
+
+  defineCase({
+    id: "S6-16",
+    stage: 6,
+    clause: "9b",
+    tier: "deterministic",
+    name: "one gate_runs row per check, so counting rows cannot overstate progress",
+    async run({ assert, seen }) {
+      // THE BUG THIS EXISTS FOR
+      //
+      // handlers/draft.ts used to write one gate_runs row per FAILED CLAIM, all keyed
+      // claims_trace. Draft 49 collected three of them 65 milliseconds apart. Everything that
+      // counted rows instead of distinct checks then believed the draft was further through the
+      // gate than it was: eight rows, six checks actually judged, and names_cleared and
+      // banned_phrases never run at all.
+      //
+      // cc-agent/work.mjs finds work with "drafts with fewer than eight gate_runs", so that draft
+      // was finished forever with two checks missing. A draft judged on six of eight that reports
+      // itself complete is precisely what 9b exists to stop.
+      const fs = await import("node:fs");
+      const draft = fs.readFileSync(
+        new URL("../../../supabase/functions/_shared/handlers/draft.ts", import.meta.url),
+        "utf8",
+      );
+      seen("draft.ts", { chars: draft.length });
+
+      // The failure shape was a loop around the insert. The reasons join into one row instead.
+      const claimBlock = draft.slice(draft.indexOf("verification.ok"));
+      assert.not(
+        /for\s*\(const failure of verification\.failures\)/.test(draft),
+        "the claim ledger no longer writes a row per failure",
+      );
+      assert.match(
+        claimBlock,
+        /check_key:\s*"claims_trace"[\s\S]{0,200}reason:\s*verification\.failures\.join/,
+        "it writes one claims_trace row carrying every reason",
+      );
+
+      // And the reader that reported "all eight recorded" while two were missing.
+      const write = fs.readFileSync(
+        new URL("../../../mcp-server/tools/write.mjs", import.meta.url),
+        "utf8",
+      );
+      assert.not(
+        /const done = existing\.length \+ 1/.test(write),
+        "record_gate_verdict no longer counts rows as checks",
+      );
+      assert.match(write, /byCheck\.size/, "it counts distinct check keys");
+    },
+  }),
 ];

@@ -189,9 +189,28 @@ export const writeTools = [
         model: args.model ?? "claude-code",
       });
 
-      const done = existing.length + 1;
-      const failed = [...existing, { check_key: args.check_key, passed: args.passed }]
-        .filter((r) => !r.passed).map((r) => r.check_key);
+      // COUNTED BY DISTINCT CHECK, NOT BY ROW.
+      //
+      // It used to be `existing.length + 1`, and that is wrong wherever a check has more than one
+      // row. The deterministic claim ledger in handlers/draft.ts wrote one gate_runs row per FAILED
+      // CLAIM, all keyed claims_trace — draft 49 had three of them, 65 milliseconds apart.
+      //
+      // The count therefore read 8 while only 6 distinct checks had been judged, and this function
+      // replied "All eight recorded, 0 remaining". names_cleared and banned_phrases had never run.
+      // Worse, cc-agent/work.mjs finds work by "drafts with fewer than 8 gate_runs", so that draft
+      // was finished forever with two checks silently missing.
+      //
+      // A draft that has been judged on six of eight checks and reports itself complete is the
+      // exact failure clause 9b exists to prevent.
+      const all = [...existing, { check_key: args.check_key, passed: args.passed }];
+      const byCheck = new Map();
+      for (const r of all) {
+        // A later verdict does not overwrite an earlier one — the insert above is append-only and
+        // the first recorded answer is the one that stands.
+        if (!byCheck.has(r.check_key)) byCheck.set(r.check_key, r);
+      }
+      const done = byCheck.size;
+      const failed = [...byCheck.values()].filter((r) => !r.passed).map((r) => r.check_key);
 
       return {
         gate_run_id: row.id,

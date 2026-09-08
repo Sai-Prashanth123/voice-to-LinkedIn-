@@ -95,7 +95,12 @@ if (!token) {
         method: "POST",
         body: JSON.stringify({
           type: "secret",
-          name: "content-mcp",
+          // Underscore, not a hyphen. The Management API rejects the hyphenated form with
+          // "Name must start with a lowercase letter or an underscore, followed only by lowercase
+          // alphanumeric characters or underscore" — a 400 this script had never seen because it
+          // had never successfully run. It also matches the Postgres role it maps to, which is
+          // what anyone reading the key list in the dashboard will be trying to match it against.
+          name: "content_mcp",
           description:
             "The MCP server (mcp-server/). Scoped to the content_mcp Postgres role — reads the " +
             "idea bank and library, inserts drafts, gate verdicts and library proposals. " +

@@ -117,15 +117,23 @@ export async function handleDraft(db: SupabaseClient, job: Job): Promise<void> {
   if (!verification.ok) {
     // Deterministic failure. No point paying for eight gate calls on a draft that already asserts
     // something that never happened.
-    for (const failure of verification.failures) {
-      await db.from("gate_runs").insert({
-        draft_id: inserted.id,
-        check_key: "claims_trace",
-        passed: false,
-        reason: failure,
-        model: "deterministic",
-      });
-    }
+    // ONE ROW PER CHECK, NOT ONE PER FAILED CLAIM.
+    //
+    // This loop used to insert a gate_runs row for every failure, all keyed claims_trace. Draft 49
+    // ended up with three of them written 65 milliseconds apart, and everything that counts rows
+    // rather than distinct checks then read the draft as further through the gate than it was:
+    // eight rows, six checks actually judged, and names_cleared and banned_phrases never run at
+    // all. cc-agent/work.mjs looks for drafts with fewer than eight gate_runs, so it would never
+    // have come back to them.
+    //
+    // The gate is eight independent judgements. That is one row each, and the reasons join.
+    await db.from("gate_runs").insert({
+      draft_id: inserted.id,
+      check_key: "claims_trace",
+      passed: false,
+      reason: verification.failures.join(" "),
+      model: "deterministic",
+    });
     await db.from("drafts").update({
       gate_passed: false,
       gate_reason: verification.failures.join(" "),
