@@ -321,6 +321,8 @@ the handle has changed or the account posts nothing publicly. **Josh: worth conf
 
 ---
 
+<!-- sentinel-measurements:start -->
+
 ## The finding that matters most
 
 **Almost nobody opens with a question. 4 of 59 posts do.**
@@ -332,7 +334,7 @@ Two more that corroborate his own rules:
 
 - **2 of 59 posts ask for engagement.** His "never ask for likes, reposts or follows" is standard
   practice at this level, not a personal quirk.
-- **4 of 59 carry a direct ask** — about 1 in 15. His ration of roughly 1 in 5 is *more* permissive
+- **5 of 59 carry a direct ask** — about 1 in 12. His ration of roughly 1 in 5 is *more* permissive
   than what these eight actually do.
 
 ---
@@ -404,6 +406,8 @@ Josh's stated preference should be landing nearer 9–12 than 3, and this is a n
 check if it ever needed to.
 
 ---
+
+<!-- sentinel-measurements:end -->
 
 ## What never to take
 

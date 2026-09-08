@@ -64,7 +64,7 @@ words are not stored anywhere in your system and never will be, per 8.3. Only th
 - Four of fifty-nine posts open with a question. Your never-open-with-a-question rule is what 93 per
   cent of them already practise.
 - Two of fifty-nine ask for engagement.
-- Four of fifty-nine carry a direct ask, about one in fifteen. Your ration of one in five is more
+- Five of fifty-nine carry a direct ask, about one in twelve. Your ration of one in five is more
   permissive than what they actually do.
 
 **There is no house length.** Median post length across the eight runs from 53 words to 408. An
