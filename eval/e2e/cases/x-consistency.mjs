@@ -207,4 +207,83 @@ export const cases = [
       assert.not(/model: MODELS\.OPUS,\s*\}\)/.test(gate), "no bare role is written as a model");
     },
   }),
+
+  defineCase({
+    id: "X-07",
+    stage: "X",
+    clause: "8",
+    tier: "live",
+    name: "the law set and the library may differ, and the difference is reported rather than hidden",
+    async run({ live, assert, seen, note }) {
+      // THIS CASE DELIBERATELY DOES NOT FAIL ON DIVERGENCE.
+      //
+      // `data/josh/law/` and the fourteen library sections are two descriptions of the same
+      // standard, held independently on purpose: the law set is for a person or an agent thinking
+      // about how Josh writes, the library is what the gate actually enforces. They are allowed to
+      // drift, and that was a deliberate choice made with the failure mode named out loud.
+      //
+      // Every other case in this file exists because two readers disagreed silently. The mitigation
+      // that respects the decision is not to force them into agreement — it is to make sure the
+      // disagreement is never silent. So this asserts the safety properties that must hold, and
+      // NOTES the drift.
+      const fs = await import("node:fs");
+      const law = (name) => {
+        try {
+          return fs.readFileSync(new URL("../../../data/josh/law/" + name, import.meta.url), "utf8");
+        } catch { return null; }
+      };
+
+      const files = ["identity.md", "voice.md", "receipts.md", "content-plan.md", "quality-bar.md"];
+      const missing = files.filter((f) => !law(f));
+      seen("law set", files.map((f) => f + ": " + (law(f)?.length ?? 0) + " chars"));
+      assert.same(missing, [], "the law set the josh-voice skill points at exists");
+
+      // The one property that is not a matter of taste. Mich's and Alex's voice.md embed real
+      // POSTS as forms to imitate. Josh's must not, because 8a puts his archive out of scope as a
+      // calibration set — those posts were AI-assisted and drifted from how he sounds. A voice.md
+      // that lost this warning would invite exactly the training data the clause forbids.
+      const voice = law("voice.md") ?? "";
+      assert.match(voice, /8a/, "voice.md cites the clause that rules out the post archive");
+      assert.match(voice, /^>\s*\[SPOKEN\]/m, "its quotes are tagged as speech, not as posts to imitate");
+      // Anchored to a quote line on purpose. The first version tested for the string anywhere in
+      // the file and failed on voice.md's own sentence explaining that there are no [CONFORMING]
+      // posts to imitate — the check fired on the explanation of the rule it was checking.
+      assert.not(/^>\s*\[CONFORMING\]/m.test(voice), "and no quote is offered as a form to copy");
+
+      // The skill must name both sources and say which one wins, or a reader will assume the file
+      // in front of them is the standard.
+      const skill = fs.readFileSync(
+        new URL("../../../.claude/skills/josh-voice/SKILL.md", import.meta.url), "utf8",
+      );
+      assert.match(skill, /library/i, "the skill names the library as the other source");
+      assert.match(skill, /allowed to disagree|may disagree/i, "and says they may disagree");
+
+      // Now the part that only reports. Pillar names are the sharpest comparable thing: the
+      // selector balances across whatever `parsePillars` returns from the live section (7.1), and
+      // identity.md carries a copy taken at build time.
+      const sections = await live.rest("library_sections?select=key,body&key=eq.pillars");
+      const body = sections?.[0]?.body ?? "";
+      const livePillars = body.split("\n")
+        .map((l) => l.trim())
+        .map((l) => (l.match(/^#{2,}\s+(.{2,60})$/) ?? [])[1])
+        .filter(Boolean)
+        .map((n) => n.split(/[—–:|]/)[0].replace(/[*_`]/g, "").trim())
+        .filter((n) => n.length >= 2 && n.length <= 40 &&
+          !/^(for josh|not drafted|what goes here|starter|three to five|content pillars)/i.test(n));
+
+      const identity = law("identity.md") ?? "";
+      const absent = livePillars.filter((p) => !identity.includes(p));
+
+      note("live_pillars", livePillars);
+      note("pillars_missing_from_identity_md", absent);
+      note("drift", absent.length === 0
+        ? "none — the law set still names every pillar the selector balances across"
+        : absent.length + " pillar(s) in the library are not in identity.md. That is permitted; " +
+          "rebuild with `node scripts/build-law.mjs --apply` if it should follow.");
+
+      // Asserting something true either way, so the case reports a verdict rather than nothing —
+      // a case that asserts nothing counts as a failure in this harness, deliberately.
+      assert.ok(livePillars.length > 0, "the live pillars section still parses to at least one pillar");
+    },
+  }),
 ];
