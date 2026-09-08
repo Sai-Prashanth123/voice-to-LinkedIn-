@@ -17,7 +17,8 @@ import { cases as s7 } from "./s7-calendar.mjs";
 import { cases as s8 } from "./s8-publish.mjs";
 import { cases as s9 } from "./s9-learn.mjs";
 import { cases as x } from "./x-consistency.mjs";
+import { cases as m } from "./m-journeys.mjs";
 
 export function allCases() {
-  return [...s0, ...s1, ...s2, ...s3, ...s4, ...s5, ...s6, ...s7, ...s8, ...s9, ...x];
+  return [...s0, ...s1, ...s2, ...s3, ...s4, ...s5, ...s6, ...s7, ...s8, ...s9, ...x, ...m];
 }
