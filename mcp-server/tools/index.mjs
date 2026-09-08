@@ -23,8 +23,9 @@ import { readTools } from "./read.mjs";
 import { briefTools } from "./brief.mjs";
 import { writeTools } from "./write.mjs";
 import { inspectTools } from "./inspect.mjs";
+import { visualTools } from "./visual.mjs";
 
-export const tools = [...health, ...readTools, ...briefTools, ...inspectTools, ...writeTools];
+export const tools = [...health, ...readTools, ...briefTools, ...inspectTools, ...visualTools, ...writeTools];
 
 /** Guards against two tools claiming the same name, which registers silently and shadows one. */
 export function assertUniqueNames(list = tools) {
