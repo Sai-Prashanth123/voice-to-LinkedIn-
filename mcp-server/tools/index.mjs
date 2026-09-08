@@ -14,14 +14,17 @@
  *   briefs      — tasks 2.1/2.2, tools/brief.mjs. The drafting and gate standards, assembled
  *                 from prompts.ts so the skills do not hold a second copy of them
  *   write tools — task 1.3, tools/write.mjs
+ *   inspect     — tools/inspect.mjs. The five granted tables the original eleven never reached:
+ *                 proposals, outcomes, the calendar, selection runs, and a whole-system status
  */
 
 import { health } from "./health.mjs";
 import { readTools } from "./read.mjs";
 import { briefTools } from "./brief.mjs";
 import { writeTools } from "./write.mjs";
+import { inspectTools } from "./inspect.mjs";
 
-export const tools = [...health, ...readTools, ...briefTools, ...writeTools];
+export const tools = [...health, ...readTools, ...briefTools, ...inspectTools, ...writeTools];
 
 /** Guards against two tools claiming the same name, which registers silently and shadows one. */
 export function assertUniqueNames(list = tools) {
