@@ -162,15 +162,43 @@ It reads only channels you are a member of, joins nothing and posts nothing. Eve
 Slack conversation is recorded and left uncleared — 4.5.3 is explicit that this is other people's
 words in a place they did not expect to be quoted.
 
-**cc-agent**, on your machine. Calibrate before trusting it:
+**Claude Code sessions**, on your machine. There are two ways to read them and you only need one.
+
+### The short way: ask for it
+
+If you use Claude Code you already have the MCP server, so there is nothing further to install:
+
+> scan my sessions
+
+The `scan_sessions` tool reads this machine's recent sessions, keeps only the genuinely unusual
+ones, and sends a digest of what you **said and decided**. No code and no tool output ever leaves
+the machine — the filter runs locally, which is what keeps 625 MB of logs and anything resembling
+client work off the wire (15.4).
+
+Ask for a dry run the first time on a new machine. It shows exactly what would be sent, sends
+nothing, and leaves the seen-list untouched so a real run afterwards still has every session to look
+at.
+
+It refuses to upload with a service_role key. It does not need one: `worker-triage` builds its own
+admin client and only requires a valid JWT, so **the anon key is enough**, and a key that bypasses
+row-level security should not sit on a laptop to do a job the public key can do. Put the anon key in
+the MCP server's environment as `CONTENT_SYSTEM_KEY`.
+
+To make it automatic, add a `SessionStart` hook that runs it in the background. That fires when you
+start working — which is also the only time new sessions exist to read — so it is a better trigger
+than a fixed hour, not a worse one.
+
+### The long way: schedule it
+
+Only needed if Claude Code is **not** where you work. Calibrate first:
 
 ```bash
 node eval/calibrate-cc.mjs             # what the filter would surface, and at what rate
 node cc-agent/index.mjs --dry-run      # what it would send today
 ```
 
-Then schedule it. One command — it asks for the two values, registers a daily task (Task Scheduler on
-Windows, `launchd` on a Mac, a systemd timer on Linux), and proves the wiring with a dry run:
+Then one command registers a daily task (Task Scheduler on Windows, `launchd` on a Mac, a systemd
+timer on Linux):
 
 ```bash
 node cc-agent/install.mjs              # set it up
@@ -179,14 +207,23 @@ node cc-agent/install.mjs --uninstall  # stop it
 ```
 
 Credentials go in `cc-agent/.env`, readable only by you, rather than into the task definition —
-`schtasks /query` prints arguments in full, and a service-role key has no business in anything that
-prints.
+`schtasks /query` prints arguments in full, and a key has no business in anything that prints.
 
-4.4.1 says these logs must be read "on a schedule, with no action from Josh". That cannot mean no
-action ever: the logs are on your machine and nothing in Supabase can reach them. It means no action
-per **run**. This is the one setup, and then never again — which is the point, because the previous
-version of this section asked you to build a scheduled task by hand, and that is the class of
-instruction that quietly never happens.
+Note that the scheduled runner also executes `work.mjs`, which drafts and gates through Claude Code.
+That makes this machine the drafting engine, on your subscription. The two jobs are isolated, so if
+you do not have Claude Code the reader still runs.
+
+### On 4.4.1
+
+The clause says these logs must be read "on a schedule, with no action from Josh". That cannot mean
+no action ever — the logs are on your machine and nothing in Supabase can reach them.
+
+The scheduled route reads it as no action per **run**: one setup, then never again. The hook reads
+it as no action you would not already be taking. Both are honest readings and neither is a
+reinterpretation made quietly; whichever you use, this paragraph is why.
+
+**If you do not use Claude Code, this input produces nothing however it is installed.** That is
+worth settling before either route, because acceptance test 4 waits on it either way.
 
 ## 4. What to check first when something breaks
 

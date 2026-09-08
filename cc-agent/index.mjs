@@ -65,12 +65,30 @@ const BORING_MARKERS = [
   "typo", "formatting", "bump version", "update readme",
 ];
 
-async function main() {
-  const dryRun = process.argv.includes("--dry-run");
-
+/**
+ * The scan itself, separated from the command that prints it.
+ *
+ * Extracted so the MCP server's `scan_sessions` tool runs THIS code rather than a copy of it. The
+ * local filter is the part that must not be duplicated: it is what keeps 625 MB of session logs and
+ * anything resembling client code off the wire (15.4), and a second implementation of it would
+ * diverge silently — the reader would look fine and be sending more than it should.
+ *
+ * Deliberately does no I/O of its own beyond reading the logs. It never saves state and never
+ * sends; the caller decides both. That is not tidiness — saving state here was a real bug, where an
+ * empty dry run marked all 558 sessions as seen and the next real run had nothing left to look at.
+ */
+export async function scan() {
   if (!fs.existsSync(PROJECTS_DIR)) {
-    console.log(`No Claude Code sessions at ${PROJECTS_DIR} — nothing to do.`);
-    return;
+    return {
+      available: false,
+      dir: PROJECTS_DIR,
+      changed: 0,
+      digests: [],
+      skipped: 0,
+      overflow: 0,
+      allScores: [],
+      state: null,
+    };
   }
 
   const state = loadState();
@@ -81,8 +99,6 @@ async function main() {
     const seen = state.seen[f];
     return !seen || seen.mtime !== stat.mtimeMs;
   });
-
-  console.log(`${files.length} session(s) changed in the last ${LOOKBACK_DAYS} days.`);
 
   const digests = [];
   const allScores = [];
@@ -118,6 +134,30 @@ async function main() {
   const overflow = Math.max(0, digests.length - MAX_PER_RUN);
   if (overflow > 0) digests.length = MAX_PER_RUN;
 
+  return {
+    available: true,
+    dir: PROJECTS_DIR,
+    changed: files.length,
+    digests,
+    skipped,
+    overflow,
+    allScores,
+    state,
+  };
+}
+
+async function main() {
+  const dryRun = process.argv.includes("--dry-run");
+  const result = await scan();
+
+  if (!result.available) {
+    console.log(`No Claude Code sessions at ${result.dir} — nothing to do.`);
+    return;
+  }
+
+  const { digests, skipped, overflow, allScores, state } = result;
+
+  console.log(`${result.changed} session(s) changed in the last ${LOOKBACK_DAYS} days.`);
   console.log(
     `${digests.length} worth a look, ${skipped + overflow} set aside ` +
       `(most sessions producing nothing is the expected result).`,
@@ -347,9 +387,19 @@ function collapse(text, max) {
   return one.length > max ? `${one.slice(0, max)}…` : one;
 }
 
-async function send(digests) {
-  const url = process.env.CONTENT_SYSTEM_URL;
-  const key = process.env.CONTENT_SYSTEM_KEY;
+/**
+ * Hand the digests to worker-triage, which applies the SECOND filter and the daily cap (4.4.3).
+ *
+ * Never a direct database write, from here or from anywhere else that calls this. The local pass is
+ * a heuristic and heuristics drift; the server pass is the backstop that stops a drifted heuristic
+ * becoming a wall of candidates Josh stops reading. A caller that inserted straight into `moments`
+ * would skip it, so no caller is given that option.
+ *
+ * `opts` exists so the MCP tool can pass its own credentials rather than inheriting this process's.
+ */
+export async function send(digests, opts = {}) {
+  const url = opts.url ?? process.env.CONTENT_SYSTEM_URL;
+  const key = opts.key ?? process.env.CONTENT_SYSTEM_KEY;
   if (!url || !key) throw new Error("CONTENT_SYSTEM_URL and CONTENT_SYSTEM_KEY must be set");
 
   const res = await fetch(`${url.replace(/\/$/, "")}/worker-triage`, {
@@ -381,7 +431,7 @@ function saveState(state) {
 
 // Exported so the calibration harness (eval/calibrate-cc.mjs) and unit tests can exercise the
 // filter directly. Threshold choices should be made against Josh's own corpus, not assumed.
-export { assess, buildDigest, DECISION_MARKERS, findSessions, readSession };
+export { assess, buildDigest, DECISION_MARKERS, findSessions, readSession, saveState };
 
 // Only run when invoked directly, so importing the filter does not start a send.
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

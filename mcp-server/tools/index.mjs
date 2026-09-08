@@ -16,6 +16,9 @@
  *   write tools — task 1.3, tools/write.mjs
  *   inspect     — tools/inspect.mjs. The five granted tables the original eleven never reached:
  *                 proposals, outcomes, the calendar, selection runs, and a whole-system status
+ *   sessions    — tools/sessions.mjs. Clause 4.4's input, without an installer. It imports
+ *                 cc-agent's scan rather than repeating it, and posts to worker-triage rather
+ *                 than writing a moment, so the daily cap still applies
  */
 
 import { health } from "./health.mjs";
@@ -24,8 +27,17 @@ import { briefTools } from "./brief.mjs";
 import { writeTools } from "./write.mjs";
 import { inspectTools } from "./inspect.mjs";
 import { visualTools } from "./visual.mjs";
+import { sessionTools } from "./sessions.mjs";
 
-export const tools = [...health, ...readTools, ...briefTools, ...inspectTools, ...visualTools, ...writeTools];
+export const tools = [
+  ...health,
+  ...readTools,
+  ...briefTools,
+  ...inspectTools,
+  ...visualTools,
+  ...sessionTools,
+  ...writeTools,
+];
 
 /** Guards against two tools claiming the same name, which registers silently and shadows one. */
 export function assertUniqueNames(list = tools) {

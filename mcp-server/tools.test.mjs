@@ -26,13 +26,14 @@
 
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 import { createDb } from "./db.mjs";
 import { tools } from "./tools/index.mjs";
 import { verifyDraft } from "../supabase/functions/_shared/claims.ts";
+import { keyKind } from "./tools/sessions.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -279,6 +280,65 @@ test("create_draft refuses a claim whose span is not in the material", async () 
       }],
     }),
     /ledger does not hold|does not appear/i,
+  );
+});
+
+// ── The fourth input, which must not need a privileged key to work ───────────────────────────
+
+test("scan_sessions tells a service key from a public one, whatever it is called", () => {
+  const jwt = (role) =>
+    "x." + Buffer.from(JSON.stringify({ role }), "utf8").toString("base64url") + ".y";
+
+  assert.equal(keyKind(jwt("service_role")), "service_role");
+  assert.equal(keyKind(jwt("anon")), "anon");
+  assert.equal(keyKind("sb_secret_abc123"), "service_role");
+  assert.equal(keyKind("sb_publishable_abc123"), "anon");
+  assert.equal(keyKind(""), "missing");
+  assert.equal(keyKind("not-a-jwt"), "unknown");
+});
+
+test("scan_sessions refuses to upload with a service_role key", async () => {
+  // cc-agent's installer asks Josh for the service_role key and never needed one: worker-triage
+  // builds its own admin client and the caller only has to satisfy verify_jwt. The whole reason
+  // to do this through MCP is that nothing has to be installed — so nothing privileged should
+  // have to be pasted either, and accepting one quietly would give that away for no gain.
+  const before = process.env.CONTENT_SYSTEM_KEY;
+  process.env.CONTENT_SYSTEM_KEY =
+    "x." + Buffer.from(JSON.stringify({ role: "service_role" }), "utf8").toString("base64url") + ".y";
+  try {
+    await assert.rejects(() => call("scan_sessions", {}), /service_role|anon key is enough/i);
+  } finally {
+    if (before === undefined) delete process.env.CONTENT_SYSTEM_KEY;
+    else process.env.CONTENT_SYSTEM_KEY = before;
+  }
+});
+
+test("a dry run sends nothing and leaves the seen-list untouched", async () => {
+  // Saving state on a dry run was a real bug in cc-agent: an empty dry run marked all 558 sessions
+  // as seen, and the next real run had nothing left to look at. The scan was extracted from the
+  // agent partly so that this could be asserted from here rather than trusted.
+  const stateFile = join(process.env.HOME ?? process.env.USERPROFILE ?? "", ".claude", ".content-system-state.json");
+  const stamp = () => {
+    try {
+      return statSync(stateFile).mtimeMs;
+    } catch {
+      return null; // no state file yet is a fine starting point
+    }
+  };
+
+  const before = stamp();
+  const r = await call("scan_sessions", { dry_run: true });
+  assert.equal(stamp(), before, "a dry run rewrote the seen-list");
+
+  // On a machine with no Claude Code sessions the tool says so and asserts nothing further.
+  if (r.scanned === 0 && r.note) return;
+
+  assert.equal(r.dry_run, true);
+  assert.equal(r.sent, undefined, "a dry run reported sending something");
+  assert.ok(Array.isArray(r.would_send), "it says what it would have sent");
+  assert.ok(
+    r.would_send.length <= r.passed_the_filter,
+    "it cannot offer more than passed the filter",
   );
 });
 
