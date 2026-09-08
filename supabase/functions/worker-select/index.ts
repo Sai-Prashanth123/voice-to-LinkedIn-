@@ -566,7 +566,13 @@ async function remindStalledInterviews(db: SupabaseClient): Promise<void> {
     .eq("killed", false)
     .limit(100);
 
-  const waiting: { id: number; ref: string; question: string; about: string }[] = [];
+  const waiting: {
+    id: number;
+    ref: string;
+    question: string;
+    about: string;
+    silentHours: number;
+  }[] = [];
 
   for (const m of open ?? []) {
     // Same guard as closeStaleConversations: queued work means it is not waiting on him.
@@ -609,10 +615,16 @@ async function remindStalledInterviews(db: SupabaseClient): Promise<void> {
       ref: m.ref as string,
       question: String(last.body ?? "").trim(),
       about: String(first?.body ?? "").trim(),
+      silentHours,
     });
   }
 
   if (waiting.length === 0) return;
+
+  // Longest-waiting first, because only `maxListed` of them fit and the query above has no ORDER BY
+  // — which would have made "which three" a question about physical row order. The one that has
+  // been ignored longest is the one closest to being closed unanswered, so it is the one to show.
+  waiting.sort((a, b) => b.silentHours - a.silentHours);
 
   const listed = waiting.slice(0, maxListed);
   const only = listed.length === 1;
