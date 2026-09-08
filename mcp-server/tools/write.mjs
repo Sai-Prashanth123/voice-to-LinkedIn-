@@ -18,15 +18,67 @@
  * invites it to guess, and a wrong library_version would attribute a draft to a standard it was
  * never written against — which is exactly the sort of quiet wrongness clause 8.4 exists to stop.
  * So they are read from the database at insert time and the model is not offered the choice.
+ *
+ * WHY create_draft NOW VERIFIES THE LEDGER ITSELF
+ *
+ * This tool's description has always said the system "verifies these mechanically before any model
+ * gives an opinion, so an unsupported claim is caught whether or not the gate would have noticed".
+ * Until 8 September that sentence was false. `verifyDraft` was never called on this path, the
+ * ledger was stored in a shape it could not read, and `claims_verified` was left null on every
+ * draft Claude Code wrote — 2 of 2, against 19 of 19 checked on the edge-function path.
+ *
+ * Nothing read the column, so nothing ever contradicted the promise. Clause 9.4 is the one rule the
+ * build allows zero tolerance on at acceptance, and on this path it was enforced only by whichever
+ * model happened to be writing being careful — which is exactly the guarantee the ledger exists to
+ * replace.
+ *
+ * WHY THIS REFUSES WHERE THE EDGE FUNCTION STORES
+ *
+ * handlers/draft.ts keeps a draft that fails verification, records a failed `claims_trace` and
+ * retries (9.8). That is right for a worker: there is no one to tell, and attempt two needs to see
+ * attempt one.
+ *
+ * Here the caller is an agent that can fix the ledger and call again in the same breath, so the
+ * draft is refused and the failures come back as the error. The reasoning is the one at the top of
+ * this file: the worst outcome available to a confused model should be a draft nobody asked for,
+ * and an unverifiable draft is worse than none.
  */
 
 import { z } from "zod";
 
+import { verifyDraft } from "../../supabase/functions/_shared/claims.ts";
+import { SOURCE_FIELDS, sourceEntry } from "../../supabase/functions/_shared/entry.ts";
+
+/**
+ * THE LEDGER SHAPE, WHICH IS NOT NEGOTIABLE AND USED TO BE
+ *
+ * This was `{ kind, text, source }` — three keys chosen here, in isolation, that happened to be the
+ * obvious names. `verifyDraft` reads `claim`, `source_field` and `source_span`. Neither side was
+ * wrong on its own and nothing ever compared them, so every draft written through Claude Code
+ * stored a ledger that the verifier could not read a single field of.
+ *
+ * `source_field` is the key that was missing rather than merely misnamed. Verification pins a span
+ * to ONE named field, so that a claim cannot cite a true sentence from an unrelated part of the
+ * entry and pass. With only a free-text `source` there is nothing to pin to, which is why this
+ * could not be fixed by renaming: the shape was missing the fact the check is built on.
+ *
+ * It is an enum rather than a string because these ten fields are the whole of what a drafter is
+ * allowed to see (9.1). A wrong field name now fails at the schema, with the valid ones listed,
+ * rather than at verification with "does not exist in the entry".
+ */
 const CLAIM = z.object({
   kind: z.enum(["quote", "number", "name", "event", "detail"])
     .describe("What sort of claim this is"),
-  text: z.string().describe("The claim exactly as it appears in the draft"),
-  source: z.string().describe("The verbatim span from the moment's material that supports it"),
+  claim: z.string().min(1)
+    .describe("The assertion the draft makes, in the draft's own words"),
+  source_field: z.enum([...SOURCE_FIELDS])
+    .describe("Which field of the moment's material the span below is copied from"),
+  source_span: z.string().min(1)
+    .describe(
+      "The VERBATIM span from that field. Copied exactly, never paraphrased — it is checked as a " +
+      "substring of that field before the draft is stored, so a paraphrase is refused even when " +
+      "it is perfectly accurate.",
+    ),
 });
 
 export const writeTools = [
@@ -35,9 +87,10 @@ export const writeTools = [
     config: {
       title: "Create a draft",
       description:
-        "Store a draft against a moment. Every factual claim must be listed with the verbatim " +
-        "source text it came from — the system verifies these mechanically before any model gives " +
-        "an opinion, so an unsupported claim is caught whether or not the gate would have noticed. " +
+        "Store a draft against a moment. Every factual claim must be listed with the field it rests " +
+        "on and the verbatim span copied out of it. Those spans are checked mechanically before the " +
+        "draft is stored and before any model gives an opinion: if one does not appear in the field " +
+        "it names, nothing is written and the failures come back for you to fix. " +
         "Call get_moment first: the material is the only thing a draft may claim from, and any " +
         "uncleared name must not appear. This creates a draft only — it does not publish, schedule " +
         "or approve anything.",
@@ -76,10 +129,14 @@ export const writeTools = [
         );
       }
 
-      const uncleared = (await db.select("moment_names", {
+      // The whole list, not just the uncleared half: verifyDraft below is handed every real name
+      // with its clearance, because a name's absence from this array reads to it as "no such name
+      // to worry about" rather than "cleared".
+      const realNames = (await db.select("moment_names", {
         select: "name,kind,cleared",
         moment_id: `eq.${args.moment_id}`,
-      })).filter((n) => !n.cleared && n.kind !== "not_a_name");
+      })).filter((n) => n.kind !== "not_a_name");
+      const uncleared = realNames.filter((n) => !n.cleared);
 
       // Checked here as well as at the gate. The gate is a model reading prose and can miss one;
       // this is a string search and cannot. Clause 9.10 makes an uncleared name a hard stop, not a
@@ -92,6 +149,43 @@ export const writeTools = [
           `The draft names ${named.map((n) => n.name).join(", ")}, which ${named.length === 1 ? "is" : "are"} ` +
           `not cleared (9.10). Rewrite without ${named.length === 1 ? "it" : "them"} — a role or a ` +
           `description usually carries the point without the name.`,
+        );
+      }
+
+      // ── The claim ledger, checked before the draft exists (9.4) ──────────────────────────────
+      //
+      // Runs after the guards above on purpose. "You named someone uncleared" and "that label is
+      // reserved" are more useful than a list of unsupported claims, and neither is fixed by
+      // mending a ledger.
+      //
+      // Note this is STRICTER than the name guard above, which matches on word boundaries:
+      // verifyDraft matches on substrings, so an uncleared "Dan" is caught inside "redundant" too.
+      // That is the edge function's behaviour as well, and the two paths now refuse the same drafts.
+      const [material] = await db.select("material", {
+        select: "*",
+        moment_id: `eq.${args.moment_id}`,
+        limit: 1,
+      });
+      const entry = sourceEntry(material);
+      if (Object.keys(entry).length === 0) {
+        throw new Error(
+          `Moment ${args.moment_id} has no mined material, so there is nothing for a claim to rest ` +
+          `on. It needs interviewing first — get_drafting_brief refuses it for the same reason.`,
+        );
+      }
+
+      const verification = verifyDraft(
+        args.body,
+        args.claims,
+        entry,
+        realNames.map((n) => ({ name: n.name, cleared: Boolean(n.cleared) })),
+      );
+      if (!verification.ok) {
+        throw new Error(
+          `The claim ledger does not hold, so nothing was stored (9.4).\n\n` +
+          verification.failures.map((f) => `  · ${f}`).join("\n") +
+          `\n\nEvery span must be copied verbatim out of the field it names. Fix the ledger, or ` +
+          `take the claim out of the post, then call create_draft again.`,
         );
       }
 
@@ -119,6 +213,9 @@ export const writeTools = [
         library_version: library.version,
         model: args.model ?? "claude-code",
         claims: args.claims,
+        // Never null again. Null meant "nobody looked", and it read as indistinguishable from a
+        // draft that had been checked — which is how this path went unverified for its whole life.
+        claims_verified: true,
       });
 
       return {

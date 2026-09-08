@@ -32,6 +32,7 @@ import { dirname, join } from "node:path";
 
 import { createDb } from "./db.mjs";
 import { tools } from "./tools/index.mjs";
+import { verifyDraft } from "../supabase/functions/_shared/claims.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -209,6 +210,75 @@ test("create_draft refuses the label the acceptance harness reserves", async () 
       claims: [],
     }),
     /reserved/i,
+  );
+});
+
+test("the ledger create_draft asks for is the ledger verifyDraft reads", () => {
+  // THE TEST THAT WOULD HAVE CAUGHT IT.
+  //
+  // create_draft asked for { kind, text, source }. verifyDraft reads claim / source_field /
+  // source_span. Each side was coherent on its own, nothing ever put them together, and so every
+  // draft written through Claude Code stored a ledger the verifier could not read one field of —
+  // silently, because nothing reads the stored ledger and nothing set claims_verified.
+  //
+  // Asserting the key names here would only restate today's shape and would have to be edited in
+  // step with any drift. So this feeds the tool's OWN schema output into the real verifier: the
+  // two cannot disagree again without failing here.
+  const schema = tools.find((t) => t.name === "create_draft").config.inputSchema.claims;
+
+  const entry = { the_moment: "The CFO stopped me halfway through the deck." };
+  const ledger = schema.parse([{
+    kind: "event",
+    claim: "The CFO stopped me halfway through the deck.",
+    source_field: "the_moment",
+    source_span: "The CFO stopped me halfway through the deck",
+  }]);
+
+  const v = verifyDraft("The CFO stopped me halfway through the deck.", ledger, entry, []);
+  assert.ok(v.ok, `the verifier could not read the tool's own ledger: ${v.failures.join(" ")}`);
+
+  // And the shape that caused this must not be quietly accepted alongside the right one, or both
+  // live on and the next reader picks whichever it happens to meet first.
+  assert.throws(
+    () => schema.parse([{ kind: "event", text: "x", source: "y" }]),
+    "the superseded { text, source } ledger shape is still accepted",
+  );
+
+  // source_field is an enum of the ten fields a drafter may see (9.1), so a field outside the
+  // entry fails at the schema rather than as "does not exist in the entry" after the fact.
+  assert.throws(
+    () => schema.parse([{
+      kind: "event",
+      claim: "x",
+      source_field: "published_archive",
+      source_span: "something",
+    }]),
+    "a field the drafter is not allowed to see was accepted as a source",
+  );
+});
+
+test("create_draft refuses a claim whose span is not in the material", async () => {
+  const db = createDb(creds);
+  // list_moments excludes killed by default, so this lands on a moment that would otherwise draft.
+  const live = new Set((await call("list_moments", { limit: 200 })).moments.map((m) => m.id));
+  const target = (await db.select("material", { select: "moment_id" }))
+    .map((r) => r.moment_id)
+    .find((id) => live.has(id));
+  if (!target) return; // nothing interviewed on this machine
+
+  await assert.rejects(
+    () => call("create_draft", {
+      moment_id: target,
+      body: "Something happened on a call and it changed how I sell.",
+      framework: "story-lesson",
+      claims: [{
+        kind: "event",
+        claim: "Something happened on a call and it changed how I sell.",
+        source_field: "the_moment",
+        source_span: "a sentence that appears nowhere in anybody's material",
+      }],
+    }),
+    /ledger does not hold|does not appear/i,
   );
 });
 
