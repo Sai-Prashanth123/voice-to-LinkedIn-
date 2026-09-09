@@ -119,6 +119,26 @@ const EXTRACTION = z.object({
   })).default([]).describe("Every person and company he actually mentioned. Nobody he did not."),
 });
 
+/**
+ * One candidate, in the shape TriageSchema defines it.
+ *
+ * `strength` carries the describe() that matters most: the server discards anything under 4 before
+ * Josh sees it, so a caller inflating a score to get something through only wastes its own run.
+ */
+const CANDIDATE = z.object({
+  summary: z.string()
+    .describe("What happened, in a sentence or two. Neutral. Never what Josh concluded."),
+  why_interesting: z.string().describe("Which of the brief's criteria this meets, and how."),
+  strength: z.number().int().min(1).max(5)
+    .describe("Honestly. Anything under 4 is discarded server-side, whatever is claimed for it."),
+  opening_question: z.string()
+    .describe("The one question to put to Josh to start mining this. Stored, not sent."),
+  names: z.array(z.object({
+    name: z.string(),
+    kind: z.enum(["person", "company"]),
+  })).default([]).describe("Every person and company mentioned. Recording one does not clear it."),
+});
+
 export const writeTools = [
   {
     name: "create_draft",
@@ -317,6 +337,54 @@ export const writeTools = [
         throw new Error(`cc-submit ${res.status}: ${JSON.stringify(body).slice(0, 300)}`);
       }
 
+      return body;
+    },
+  },
+
+  {
+    name: "submit_candidates",
+    config: {
+      title: "Surface content candidates from one source",
+      description:
+        "Store what is genuinely worth putting in front of Josh from one call, session or thread " +
+        "(4.3, 4.4). Call get_triage_brief first. AN EMPTY LIST IS THE EXPECTED RESULT most of the " +
+        "time and is never a failed run — a version surfacing ten candidates a day is worse than " +
+        "none, because he stops reading them. The strength bar and the daily cap are applied " +
+        "server-side, so submitting more than there is room for does no harm: the strongest are " +
+        "kept and the rest are simply not surfaced. Nothing here reaches Josh directly; each " +
+        "candidate waits until he next opens a session (4.3.4).",
+      inputSchema: {
+        source: z.enum(["claude_code", "call_transcript", "slack"])
+          .describe("Where this material came from"),
+        source_ref: z.string().min(1)
+          .describe("The id of the call, session or thread. Re-submitting one already triaged does nothing."),
+        candidates: z.array(CANDIDATE)
+          .describe("What is worth asking Josh about. Empty is correct most of the time."),
+      },
+    },
+
+    async handler(args, { url }) {
+      const key = process.env.CONTENT_MCP_KEY;
+      if (!key) throw new Error("CONTENT_MCP_KEY is not set, so candidates cannot be submitted.");
+
+      // Posted rather than inserted: content_mcp cannot write `moments`, and that is the point.
+      // The cap in 4.4.3 is the only thing standing between Josh and a wall of candidates, so it
+      // is applied by the server from the same code worker-triage runs — never by the caller.
+      const res = await fetch(`${url}/functions/v1/cc-submit`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "candidates",
+          source: args.source,
+          source_ref: args.source_ref,
+          candidates: args.candidates,
+        }),
+      });
+
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(`cc-submit ${res.status}: ${JSON.stringify(body).slice(0, 300)}`);
+      }
       return body;
     },
   },

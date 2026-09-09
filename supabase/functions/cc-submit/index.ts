@@ -30,13 +30,19 @@
  * key; there is no reason for this door to be more open than worker-triage's.
  */
 
-import { admin, logEvent } from "../_shared/db.ts";
+import { admin, getSetting, logEvent } from "../_shared/db.ts";
 import { loadSecrets } from "../_shared/secrets.ts";
 import { json } from "../_shared/jobs.ts";
 import { applyExtraction, seedText } from "../_shared/handlers/interview.ts";
 import { loadSession, renderTranscript } from "../_shared/session.ts";
 import { verifyExtraction } from "../_shared/extraction.ts";
 import type { Extraction } from "../_shared/schemas.ts";
+import { applyCandidates, type Candidate, candidateRoom } from "../_shared/triage.ts";
+import type { MomentSource } from "../_shared/types.ts";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+
+/** The three sources 4.3 and 4.4 define. A caller may not invent a fourth. */
+const ALLOWED_SOURCES = new Set(["claude_code", "call_transcript", "slack"]);
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
@@ -44,15 +50,28 @@ Deno.serve(async (req) => {
   const db = admin();
   await loadSecrets(db);
 
-  let body: { kind?: string; moment_id?: number; extracted?: Extraction };
+  // One envelope, two kinds. Typed loosely here and narrowed per route, because the alternative
+  // is a discriminated union whose only job is to satisfy a check the routes already do.
+  let body: {
+    kind?: string;
+    moment_id?: number;
+    extracted?: Extraction;
+    source?: string;
+    source_ref?: string;
+    candidates?: Candidate[];
+  };
   try {
     body = await req.json();
   } catch {
     return json({ error: "body is not JSON" }, 400);
   }
 
+  if (body.kind === "candidates") return await submitCandidates(db, body);
+
   if (body.kind !== "extraction") {
-    return json({ error: `unknown kind "${body.kind ?? ""}". Expected "extraction".` }, 400);
+    return json({
+      error: `unknown kind "${body.kind ?? ""}". Expected "extraction" or "candidates".`,
+    }, 400);
   }
 
   const momentId = Number(body.moment_id);
@@ -129,3 +148,78 @@ Deno.serve(async (req) => {
       : "Applied. The moment is mined and can now be selected for drafting.",
   });
 });
+
+/**
+ * Candidates triaged by Claude Code (4.3, 4.4).
+ *
+ * The model call moved; the two things that protect Josh did not. The daily cap and the strength
+ * bar are applied HERE, from _shared/triage.ts, the same code worker-triage runs — because 4.4.3 is
+ * explicit that a version surfacing ten candidates a day is worse than no version at all, and a
+ * caller that could set its own cap would be no cap.
+ *
+ * A caller cannot raise the cap by asking, cannot lower the strength bar, and cannot write a moment
+ * as anything other than half_mined. It supplies judgement about what is interesting. It supplies
+ * nothing about how much of Josh's attention that is worth.
+ */
+async function submitCandidates(db: SupabaseClient, body: {
+  source?: string;
+  source_ref?: string;
+  candidates?: Candidate[];
+}): Promise<Response> {
+  const source = String(body.source ?? "claude_code") as MomentSource;
+  const sourceRef = String(body.source_ref ?? "").trim();
+
+  if (!ALLOWED_SOURCES.has(source)) {
+    return json({ error: `source must be one of ${[...ALLOWED_SOURCES].join(", ")}` }, 400);
+  }
+  if (!sourceRef) return json({ error: "source_ref is required" }, 400);
+  if (!Array.isArray(body.candidates)) return json({ error: "candidates must be an array" }, 400);
+
+  // Already triaged. worker-triage's ingest checks the same pair before queueing, and without it
+  // here a re-run would surface every candidate a second time — which is the burying-Josh failure
+  // arriving by the one route that skips the queue.
+  const { data: existing } = await db
+    .from("moments").select("id").eq("source", source).eq("source_ref", sourceRef).maybeSingle();
+
+  if (existing) {
+    return json({
+      ok: true,
+      surfaced: 0,
+      reason: `${sourceRef} has already been triaged, so nothing was added.`,
+    });
+  }
+
+  const dailyCap = await getSetting(db, "cc_candidates_per_day", 3);
+  const room = await candidateRoom(db, dailyCap);
+
+  if (room <= 0) {
+    // Not an error. The cap doing its job is the system working.
+    return json({
+      ok: true,
+      surfaced: 0,
+      reason: `The daily cap of ${dailyCap} is already reached. Nothing was surfaced, and that ` +
+        `is the cap working rather than a failure. Try again tomorrow.`,
+    });
+  }
+
+  const surfaced = await applyCandidates(db, { source, source_ref: sourceRef }, body.candidates, room);
+
+  await logEvent(db, "candidates_submitted", "info", {
+    source,
+    source_ref: sourceRef,
+    offered: body.candidates.length,
+    surfaced,
+    room,
+  });
+
+  return json({
+    ok: true,
+    surfaced,
+    offered: body.candidates.length,
+    room_remaining: Math.max(0, room - surfaced),
+    note: surfaced === 0
+      ? "Nothing cleared the bar. Most sessions produce nothing and that is the intended result."
+      : `${surfaced} candidate(s) stored as half_mined. Each needs Josh interviewed before it ` +
+        `can be drafted (4.3.3), and the opening question is stored rather than sent.`,
+  });
+}

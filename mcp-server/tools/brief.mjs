@@ -27,6 +27,9 @@ import {
   GATE_USER,
   LEARN_SYSTEM,
   PROMPT_VERSION,
+  TRIAGE_CLAUDE_CODE_SYSTEM,
+  TRIAGE_SLACK_SYSTEM,
+  TRIAGE_TRANSCRIPT_SYSTEM,
 } from "../../supabase/functions/_shared/prompts.ts";
 import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
 import { parsePillars } from "../../supabase/functions/_shared/library.ts";
@@ -78,6 +81,12 @@ async function libraryText(db, view) {
     // the draft, and "3 missing" does not.
     awaiting_josh: Object.entries(sections).filter(([, body]) => !body).map(([key]) => key),
   };
+}
+
+/** One setting, read the way getSetting reads it, with the same fallback. */
+async function setting(db, key, fallback) {
+  const [row] = await db.select("settings", { select: "value", key: `eq.${key}`, limit: 1 });
+  return row?.value ?? fallback;
 }
 
 export const briefTools = [
@@ -276,6 +285,76 @@ export const briefTools = [
         next: remaining.length > 0
           ? "Judge each check on its own and call record_gate_verdict once per check. When unsure, fail it."
           : "Every check already has a verdict. Nothing to do.",
+      };
+    },
+  },
+
+  {
+    name: "get_triage_brief",
+    config: {
+      title: "Get the standard for surfacing content candidates",
+      description:
+        "The bar something must clear to be worth putting in front of Josh (4.3, 4.4), assembled " +
+        "from prompts.ts so this and worker-triage judge by the same words. Most material produces " +
+        "NOTHING and that is the intended result — a version surfacing ten candidates a day is " +
+        "worse than none, because he stops reading them. Returns the standard and how much room " +
+        "is left under today's cap. Finish by calling submit_candidates.",
+      inputSchema: {
+        source: z.enum(["claude_code", "call_transcript", "slack"])
+          .describe("Where the material came from. Each has its own standard."),
+      },
+    },
+
+    async handler(args, { db }) {
+      const source = args.source;
+
+      const SYSTEMS = {
+        claude_code: TRIAGE_CLAUDE_CODE_SYSTEM,
+        call_transcript: TRIAGE_TRANSCRIPT_SYSTEM,
+        slack: TRIAGE_SLACK_SYSTEM,
+      };
+
+      // The cap counts what Josh has been SHOWN in the last day, across every source — the same
+      // subtraction _shared/triage.ts makes. Reported rather than merely enforced, so a run that
+      // has no room stops before spending anything rather than after.
+      const cap = await setting(db, "cc_candidates_per_day", 3);
+      const since = new Date(Date.now() - 86_400_000).toISOString();
+      const surfacedToday = (await db.select("moments", {
+        select: "id",
+        status: "eq.half_mined",
+        source: "in.(claude_code,call_transcript,slack)",
+        captured_at: `gte.${since}`,
+      })).length;
+
+      const room = Math.max(0, cap - surfacedToday);
+
+      return {
+        source,
+        system: SYSTEMS[source],
+        prompt_version: PROMPT_VERSION,
+
+        daily_cap: cap,
+        surfaced_today: surfacedToday,
+        room_left_today: room,
+
+        the_bar: [
+          "Strength 4 or 5 out of 5. Anything below is discarded before Josh sees it, whatever you say about it.",
+          "Empty is the expected result most of the time. Do not pad the list.",
+          "Summarise what HAPPENED, neutrally. Never what Josh concluded — that is his to say.",
+          "Record every person and company mentioned. None of them is cleared by recording it.",
+          "One opening question per candidate. It is stored, not sent: he sees it when he next opens a session.",
+        ],
+
+        // Stated because a run that cannot tell "nothing was interesting" from "there was no room"
+        // reports the first and means the second.
+        note: room === 0
+          ? `The daily cap of ${cap} is already reached, so nothing submitted now would surface. ` +
+            `Stop here rather than triaging material that would be discarded.`
+          : `Room for ${room} more today.`,
+
+        next: "Call submit_candidates with the source_ref and your candidates. The cap and the " +
+          "strength bar are applied server-side, so submitting more than the room does no harm — " +
+          "the strongest are kept and the rest are simply not surfaced.",
       };
     },
   },

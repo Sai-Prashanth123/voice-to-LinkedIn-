@@ -28,6 +28,7 @@ import {
   TRIAGE_TRANSCRIPT_SYSTEM,
 } from "../_shared/prompts.ts";
 import { TriageSchema } from "../_shared/schemas.ts";
+import { applyCandidates, candidateRoom } from "../_shared/triage.ts";
 import type { MomentSource } from "../_shared/types.ts";
 
 interface Pending {
@@ -96,15 +97,7 @@ async function sweep(db: SupabaseClient): Promise<Response> {
 
   // 4.4.3 — the cap is on candidates SURFACED, counted against what Josh has actually been shown
   // today. It is enforced here in code, because a prompt asked to be selective will drift.
-  const since = new Date(Date.now() - 86_400_000).toISOString();
-  const { count: surfacedToday } = await db
-    .from("moments")
-    .select("*", { count: "exact", head: true })
-    .eq("status", "half_mined")
-    .in("source", ["claude_code", "call_transcript", "slack"])
-    .gte("captured_at", since);
-
-  const room = dailyCap - (surfacedToday ?? 0);
+  const room = await candidateRoom(db, dailyCap);
   if (room <= 0) {
     return json({ ok: true, surfaced: 0, reason: "daily candidate cap reached" });
   }
@@ -195,43 +188,7 @@ async function triageOne(
     promptVersion: PROMPT_VERSION,
   }, { db });
 
-  const candidates = (result.candidates ?? [])
-    .filter((c) => c.strength >= 4) // a high bar, applied after the model's own judgement
-    .sort((a, b) => b.strength - a.strength)
-    .slice(0, room);
-
-  for (const c of candidates) {
-    const { data: moment } = await db.from("moments").insert({
-      source: p.source,
-      source_ref: p.source_ref,
-      // 4.3.2 — stored as half-mined, never as finished material.
-      status: "half_mined",
-      strength: c.strength,
-      notes: `${c.summary}\n\nWhy this might be worth writing: ${c.why_interesting}`,
-    }).select("id").single();
-    if (!moment) continue;
-
-    // 4.3.5 / 9c — every name recorded, none cleared. Slack especially: other people's words in a
-    // place they did not expect to be quoted.
-    for (const n of c.names ?? []) {
-      if (!n.name?.trim()) continue;
-      await db.from("moment_names").upsert(
-        { moment_id: moment.id, name: n.name.trim(), kind: n.kind, cleared: false },
-        { onConflict: "moment_id,name", ignoreDuplicates: true },
-      );
-    }
-
-    // The opening question is stored, not asked. 4.3.4: candidates are raised when Josh next opens
-    // a session, not pushed at him the moment they are found.
-    await db.from("interview_turns").insert({
-      moment_id: moment.id,
-      turn_no: 1,
-      role: "question",
-      body: c.opening_question,
-      depth: "scene",
-      is_pushback: false,
-    });
-  }
-
-  return candidates.length;
+  // The filter, the cap and the writes live in _shared/triage.ts, so the Claude Code path
+  // through cc-submit applies identical rules rather than a second copy of them.
+  return await applyCandidates(db, p, result.candidates ?? [], room);
 }
