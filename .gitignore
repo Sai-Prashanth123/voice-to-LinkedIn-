@@ -34,3 +34,6 @@ app/desk-deploy.zip
 # vehicle, so they stay out of it until he decides whether that is acceptable. They are on disk and
 # in his Drive either way; nothing is lost by waiting for his answer.
 docs/from-josh/transcripts/
+
+# HTTP MCP tokens (mcp-server/mint-http-tokens.mjs). Secrets, never committed.
+mcp-server/.http-tokens

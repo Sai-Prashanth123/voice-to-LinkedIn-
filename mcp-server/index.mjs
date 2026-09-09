@@ -22,48 +22,13 @@
  *   node index.mjs --tools   # list registered tools and exit
  */
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import { loadEnv, note } from "./env.mjs";
-import { createDb, DbError } from "./db.mjs";
+import { createDb } from "./db.mjs";
 import { tools, assertUniqueNames } from "./tools/index.mjs";
+import { build, NAME, VERSION } from "./server.mjs";
 
-const NAME = "content-system";
-const VERSION = "0.1.0";
-
-/**
- * MCP carries a tool's failure as a normal result with isError set, not as a protocol error.
- * That distinction matters: a protocol error is the server saying "I am broken", which ends the
- * exchange, while isError is a tool saying "that did not work, here is why", which the model can
- * read and act on. Almost everything that goes wrong here is the second kind.
- */
-function wrap(tool, context) {
-  return async (args) => {
-    try {
-      const value = await tool.handler(args ?? {}, context);
-      return {
-        content: [{
-          type: "text",
-          text: typeof value === "string" ? value : JSON.stringify(value, null, 2),
-        }],
-      };
-    } catch (err) {
-      const message = err instanceof DbError
-        ? err.message
-        : `${tool.name} failed: ${err?.message ?? String(err)}`;
-      return { content: [{ type: "text", text: message }], isError: true };
-    }
-  };
-}
-
-function build(context) {
-  const server = new McpServer({ name: NAME, version: VERSION });
-  for (const tool of assertUniqueNames(tools)) {
-    server.registerTool(tool.name, tool.config, wrap(tool, context));
-  }
-  return server;
-}
 
 async function main() {
   const args = new Set(process.argv.slice(2));
@@ -110,7 +75,7 @@ async function main() {
 
   // Serving: stdout belongs to the transport from here on. Anything printed to it corrupts the
   // protocol, which is why note() writes to stderr and every log in this package uses it.
-  await build(context).connect(new StdioServerTransport());
+  await build(context, tools).connect(new StdioServerTransport());
   return null; // stays alive on the transport
 }
 
