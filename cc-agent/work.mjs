@@ -28,6 +28,7 @@
  *   node cc-agent/work.mjs --dry-run    # show what it would do, run nothing
  *   node cc-agent/work.mjs --gate-only  # only finish gate runs already started
  *   node cc-agent/work.mjs --once       # a single item, then stop
+ *   node cc-agent/work.mjs --learn      # propose library changes instead (12c)
  *
  * Needs SUPABASE_URL and CONTENT_MCP_KEY, the same pair mcp-server/.env holds.
  */
@@ -53,6 +54,7 @@ const args = new Set(process.argv.slice(2));
 const DRY_RUN = args.has("--dry-run");
 const GATE_ONLY = args.has("--gate-only");
 const ONCE = args.has("--once");
+const LEARN = args.has("--learn");
 
 function env() {
   // mcp-server/.env is the same pair this needs, so it is read rather than duplicated. A real
@@ -107,15 +109,28 @@ async function findWork(creds) {
     query(creds, "gate_runs?select=draft_id,check_key"),
   ]);
 
+  // DISTINCT CHECKS, NOT ROWS.
+  //
+  // This counted rows, and handlers/draft.ts names this exact line as the reason its own bug
+  // mattered: it used to write one gate_runs row per FAILED CLAIM rather than one per check, so
+  // draft 49 carried eight rows across six judged checks. Anything counting rows read it as fully
+  // gated, and this loop would never have come back to finish the two that were never run.
+  //
+  // The gate is eight independent judgements. Eight rows is not the same fact as eight checks, and
+  // only one of them is the one worth acting on.
   const verdicts = new Map();
-  for (const r of runs) verdicts.set(r.draft_id, (verdicts.get(r.draft_id) ?? 0) + 1);
+  for (const r of runs) {
+    if (!verdicts.has(r.draft_id)) verdicts.set(r.draft_id, new Set());
+    verdicts.get(r.draft_id).add(r.check_key);
+  }
+  const judgedCount = (id) => verdicts.get(id)?.size ?? 0;
 
   const drafted = new Set(drafts.map((d) => d.moment_id));
 
   return {
     toGate: drafts
-      .filter((d) => (verdicts.get(d.id) ?? 0) < 8)
-      .map((d) => ({ ...d, judged: verdicts.get(d.id) ?? 0 }))
+      .filter((d) => judgedCount(d.id) < 8)
+      .map((d) => ({ ...d, judged: judgedCount(d.id) }))
       .slice(0, MAX_GATES),
     toDraft: moments.filter((m) => !drafted.has(m.id)).slice(0, MAX_DRAFTS),
   };
@@ -193,8 +208,26 @@ const GATE_PROMPT = (d) =>
   `Use the gate-check skill on draft ${d.id}. Call get_gate_brief, judge each remaining check on ` +
   `its own, and call record_gate_verdict once per check. Run every check even after one fails.`;
 
+/**
+ * 12c, moved off the free tier.
+ *
+ * Same shape as the other two: name the standard's source and say nothing about how to judge. The
+ * brief carries LEARN_SYSTEM verbatim from prompts.ts, so this and worker-learn propose against
+ * identical words rather than two prompts that drift.
+ *
+ * Explicit about proposing nothing because that is the outcome the prompt actually expects most
+ * weeks, and a run told only to "propose changes" will find something to say. Nothing has published
+ * yet, so today it should propose nothing at all — and a loop that cannot report that honestly is
+ * worse than one that does not run.
+ */
+const LEARN_PROMPT =
+  `Call get_learning_brief and follow it exactly. Gather the evidence with the read tools it ` +
+  `names, then call propose_library_change once per proposal, each citing specific posts or ` +
+  `drafts by id. If the evidence does not support a change, propose nothing and say so plainly — ` +
+  `that is a correct outcome, not a failed run.`;
+
 async function main() {
-  title("Content system", DRY_RUN ? "dry run" : "drafting and gating");
+  title("Content system", DRY_RUN ? "dry run" : LEARN ? "learning" : "drafting and gating");
   const creds = env();
 
   let work;
@@ -205,10 +238,15 @@ async function main() {
     return 1;
   }
 
-  const items = [
-    ...work.toGate.map((d) => ({ kind: "gate", id: d.id, label: `draft ${d.id} (${d.judged}/8 judged)`, prompt: GATE_PROMPT(d) })),
-    ...(GATE_ONLY ? [] : work.toDraft.map((m) => ({ kind: "draft", id: m.id, label: `${m.ref}`, prompt: DRAFT_PROMPT(m) }))),
-  ];
+  // --learn runs on its own, never alongside drafting. It reads across every draft and outcome in
+  // the system, so mixing it into a run that is also WRITING drafts would have it reasoning about
+  // a picture that changes underneath it.
+  const items = LEARN
+    ? [{ kind: "learn", id: 0, label: "propose library changes", prompt: LEARN_PROMPT }]
+    : [
+      ...work.toGate.map((d) => ({ kind: "gate", id: d.id, label: `draft ${d.id} (${d.judged}/8 judged)`, prompt: GATE_PROMPT(d) })),
+      ...(GATE_ONLY ? [] : work.toDraft.map((m) => ({ kind: "draft", id: m.id, label: `${m.ref}`, prompt: DRAFT_PROMPT(m) }))),
+    ];
 
   if (items.length === 0) {
     console.log(`${mark.ok} Nothing waiting. ${c.dim("A quiet run is a correct outcome.")}`);

@@ -34,6 +34,7 @@ import { createDb } from "./db.mjs";
 import { tools } from "./tools/index.mjs";
 import { verifyDraft } from "../supabase/functions/_shared/claims.ts";
 import { keyKind } from "./tools/sessions.mjs";
+import { LEARN_SYSTEM } from "../supabase/functions/_shared/prompts.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -281,6 +282,42 @@ test("create_draft refuses a claim whose span is not in the material", async () 
     }),
     /ledger does not hold|does not appear/i,
   );
+});
+
+test("get_learning_brief hands over the same standard worker-learn uses", async () => {
+  // The point of the brief tools is that Claude Code and the edge function judge by identical
+  // words. Asserting the text matches prompts.ts is the only thing that keeps that true — a copy
+  // typed into the tool would look right and drift the first time either was improved.
+  const r = await call("get_learning_brief", {});
+  assert.equal(r.system, LEARN_SYSTEM, "the brief is not LEARN_SYSTEM verbatim");
+
+  // 12.10 and the core-rules ban are enforced elsewhere; the brief still has to state them, or a
+  // model discovers the boundary as a rejection after doing the work.
+  assert.ok(
+    r.constraints.some((c) => /core_rules/.test(c)),
+    "it does not say core_rules is off limits",
+  );
+  assert.ok(Array.isArray(r.already_decided), "it hands over what Josh has already settled");
+  assert.ok(r.gather_evidence_with.length > 0, "it says where the evidence comes from");
+});
+
+test("the learning brief does not claim evidence it does not have", async () => {
+  // A loop that cannot tell "no pattern" from "no data" reports the first and means the second.
+  // Nothing has published, so the brief must say so rather than leaving an empty result to be
+  // read as a finding.
+  const db = createDb(creds);
+  const published = (await db.select("posts", {
+    select: "id",
+    status: "eq.published",
+    body: "not.like.FIXTURE*",
+  })).length;
+
+  const r = await call("get_learning_brief", {});
+  if (published === 0) {
+    assert.match(r.evidence_available, /NOTHING HAS PUBLISHED/);
+  } else {
+    assert.match(r.evidence_available, /published posts/i);
+  }
 });
 
 // ── The fourth input, which must not need a privileged key to work ───────────────────────────

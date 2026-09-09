@@ -24,6 +24,7 @@ import {
   GATE_CHECKS,
   GATE_SYSTEM,
   GATE_USER,
+  LEARN_SYSTEM,
   PROMPT_VERSION,
 } from "../../supabase/functions/_shared/prompts.ts";
 import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
@@ -272,6 +273,83 @@ export const briefTools = [
         next: remaining.length > 0
           ? "Judge each check on its own and call record_gate_verdict once per check. When unsure, fail it."
           : "Every check already has a verdict. Nothing to do.",
+      };
+    },
+  },
+
+  {
+    name: "get_learning_brief",
+    config: {
+      title: "Get the brief for proposing a library change",
+      description:
+        "The standard the learning loop judges by (clause 12c), assembled from prompts.ts so this " +
+        "and worker-learn propose against the same words. Returns the system prompt, what Josh " +
+        "has already decided so a settled question is not raised again, and where to gather the " +
+        "evidence. It does NOT gather it for you: the read tools already return it, and a second " +
+        "assembly here would be a second answer to what the evidence is.",
+      inputSchema: {},
+    },
+
+    async handler(_args, { db }) {
+      // Everything he has already answered. Re-proposing a settled question is the fastest way to
+      // teach him to stop reading these, which the prompt says in as many words — so it is handed
+      // over rather than left to be looked up.
+      const decided = (await db.select("library_proposals", {
+        select: "id,section_key,claim,status,decided_at,decided_reason",
+        status: "neq.open",
+        order: "id.desc",
+        limit: "40",
+      })).map((p) => ({
+        section_key: p.section_key,
+        claim: p.claim,
+        status: p.status,
+        decided_reason: p.decided_reason,
+      }));
+
+      // The same exclusion scripts/smoke.mjs uses, and for the same reason it had to add it: there
+      // is no fixture column on posts, so the two acceptance rows read as published to anything
+      // that does not filter the body prefix. Written the same way here deliberately — a third
+      // answer to "is this a fixture" is how two readers of one fact start disagreeing.
+      const published = (await db.select("posts", {
+        select: "id",
+        status: "eq.published",
+        body: "not.like.FIXTURE*",
+        limit: "1",
+      })).length;
+
+      return {
+        system: LEARN_SYSTEM,
+
+        gather_evidence_with: [
+          "get_outcomes — what published posts did, and the draft-versus-published diff",
+          "list_drafts — every draft with its eight verdicts, so rejection patterns are visible",
+          "get_library — the sections as they currently stand",
+          "list_proposals — the full history, including rejected and reverted",
+        ],
+
+        already_decided: decided,
+
+        // Stated rather than left to be inferred from an empty result. A loop that cannot tell
+        // "no pattern" from "no data" reports the first and means the second.
+        evidence_available: published > 0
+          ? "There are published posts, so outcomes and edit diffs carry real signal."
+          : "NOTHING HAS PUBLISHED. There are no outcomes, no engagement numbers and no " +
+            "draft-versus-published diffs. Gate rejections across drafts are the only evidence " +
+            "that exists, and they are thin ground for a library change. Proposing nothing is " +
+            "very likely the correct answer today — the prompt says a quiet month is honest.",
+
+        // 12.10 and the core-rules ban are enforced in the database and in propose_library_change's
+        // own schema, not by this sentence. It is here because a model that knows the boundary
+        // writes better proposals than one that discovers it as a rejection.
+        constraints: [
+          "Every proposal cites specific posts or drafts by id. No claim without evidence.",
+          "If the evidence is thin, propose nothing.",
+          "You may never propose a change to core_rules. That is refused four ways regardless.",
+          "You propose, Josh decides. Nothing here is applied by proposing it.",
+        ],
+
+        next: "Call propose_library_change once per proposal, with its evidence. Or stop, and say " +
+          "plainly that the evidence did not support one.",
       };
     },
   },
