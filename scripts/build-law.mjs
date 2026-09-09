@@ -396,5 +396,22 @@ if (!APPLY) {
 } else {
   mkdirSync(OUT, { recursive: true });
   for (const [name, body] of Object.entries(files)) writeFileSync(join(OUT, name), body);
-  console.log("\n  Written. voiceprint.{md,json} is built separately by build-voiceprint.mjs.\n");
+
+  /*
+   * The same five files as one JSON, written in the same run.
+   *
+   * The MCP server serves the law set as resources, and it runs in two places: Node on a laptop,
+   * where reading a .md off disk is trivial, and Deno in an Edge Function, where only imported
+   * modules reach the bundle and there is no import attribute for markdown.
+   *
+   * Written HERE rather than by a second script so the two cannot drift: the JSON is a product of
+   * the same generation as the markdown, not a copy taken of it afterwards.
+   */
+  writeFileSync(
+    join(OUT, "law.json"),
+    JSON.stringify({ generated_at: new Date().toISOString(), files }, null, 2),
+  );
+
+  console.log("\n  Written, plus law.json for the MCP resources.");
+  console.log("  voiceprint.{md,json} is built separately by build-voiceprint.mjs.\n");
 }

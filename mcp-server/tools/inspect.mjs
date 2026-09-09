@@ -30,6 +30,9 @@ import { z } from "zod";
 // The same measure that classifies a draft against what Josh published (12.2). Reused so "how
 // much changed" means one thing everywhere, rather than two similar numbers computed two ways.
 import { similarity } from "../../supabase/functions/_shared/diff.ts";
+// 9.1 — the exact set of fields a drafter may see. Reused so a rewrite is shown neither more nor
+// less than the first attempt was.
+import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
 
 /** PostgREST returns rows; a missing table returns a permission error, which is the useful answer. */
 const rows = (db, path) => db.request("/" + path);
@@ -93,6 +96,99 @@ export const inspectTools = [
         note: args.include_bodies
           ? undefined
           : "Bodies omitted. Pass include_bodies to read what a version actually said.",
+      };
+    },
+  },
+
+  {
+    name: "get_rewrite_brief",
+    config: {
+      title: "What to fix on a draft that was rejected",
+      description:
+        "One rejected draft, the exact verdicts against it, and the material it was built from. " +
+        "9.8 says a second attempt is told what the first failed on, or it writes it again — and " +
+        "the most common way a rewrite fails is throwing away a working angle and breaking " +
+        "something new. Fix what was named. Keep what passed.",
+      inputSchema: {
+        draft_id: z.number().int().describe("The draft to rewrite"),
+      },
+    },
+
+    async handler(args, { db }) {
+      const [draft] = await db.select("drafts", {
+        select: "id,moment_id,version,attempt,body,hook,framework,gate_passed,gate_reason",
+        id: `eq.${args.draft_id}`,
+        limit: 1,
+      });
+      if (!draft) throw new Error(`No draft with id ${args.draft_id}.`);
+
+      const runs = await db.select("gate_runs", {
+        select: "check_key,passed,reason",
+        draft_id: `eq.${args.draft_id}`,
+      });
+
+      // Distinct by check, newest wins — the same counting the gate itself uses. Rows are not
+      // checks, which is the bug that let a draft report itself fully judged on six of eight.
+      const byCheck = new Map();
+      for (const r of runs) if (!byCheck.has(r.check_key)) byCheck.set(r.check_key, r);
+      const verdicts = [...byCheck.values()];
+
+      const failed = verdicts.filter((v) => !v.passed);
+      const passed = verdicts.filter((v) => v.passed);
+
+      if (verdicts.length === 0) {
+        throw new Error(
+          `Draft ${args.draft_id} has not been judged yet, so there is nothing to rewrite ` +
+          `against. Run the gate on it first.`,
+        );
+      }
+      if (failed.length === 0) {
+        throw new Error(
+          `Draft ${args.draft_id} passed every check that has been run (${verdicts.length} of 8). ` +
+          `There is nothing to fix.`,
+        );
+      }
+
+      const [material] = await db.select("material", {
+        select: "*",
+        moment_id: `eq.${draft.moment_id}`,
+        limit: 1,
+      });
+      const names = await db.select("moment_names", {
+        select: "name,kind,cleared",
+        moment_id: `eq.${draft.moment_id}`,
+      });
+      const uncleared = names
+        .filter((n) => n.kind !== "not_a_name" && !n.cleared)
+        .map((n) => n.name);
+
+      return {
+        draft_id: draft.id,
+        moment_id: draft.moment_id,
+        framework: draft.framework,
+        the_draft: draft.body,
+
+        fix_these: failed.map((f) => ({ check: f.check_key, why: f.reason })),
+        // Named explicitly, because the failure mode 9.8 warns about is a rewrite that throws
+        // away a working angle and breaks something that was fine.
+        keep_these: passed.map((p) => p.check_key),
+
+        material: sourceEntry(material),
+        must_not_name: uncleared,
+
+        how_to_rewrite: [
+          "Fix what was named, sentence by sentence. Do not start from scratch if the moment and " +
+            "the angle were sound.",
+          "Every check that passed is a constraint on the rewrite, not a free hand.",
+          "Call measure_draft before create_draft — it costs nothing and catches the mechanical " +
+            "faults without a gate run.",
+          "A moment gets three attempts (9.8). After that it parks with a plain reason, which is " +
+            "a correct outcome rather than a failure.",
+        ],
+
+        attempts_so_far: draft.attempt,
+        next: "Write the fixed post, then create_draft with the full claim ledger. It becomes a " +
+          "new version rather than replacing this one — nothing is overwritten (6.3).",
       };
     },
   },

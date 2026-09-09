@@ -143,16 +143,50 @@ test("a moment resource returns only the fields a drafter may see", async () => 
 });
 
 test("resource contents are an array, unlike prompt content", async () => {
-  for (const r of resourcesFor(context)) {
-    const uri = typeof r.uri === "string" ? r.uri : "library://pillars";
-    const out = typeof r.uri === "string"
-      ? await r.read(new URL(uri))
-      : await r.read(new URL(uri), { key: "pillars", id: "3" });
+  // One known-good address per resource, rather than one bag of variables sprayed at all of them.
+  // The bag broke the moment a template used a variable it did not contain, and the failure was a
+  // test problem rather than a code one — which is the worst kind to leave lying around.
+  const SAMPLES = {
+    "library-section": ["library://pillars", { key: "pillars" }],
+    moment: ["moment://3", { id: "3" }],
+    law: ["law://voice", { file: "voice" }],
+    sentinels: ["sentinels://latest", null],
+    voiceprint: ["voiceprint://josh", null],
+  };
+
+  const resources = resourcesFor(context);
+
+  // Every resource must be covered, so adding one without a sample fails here rather than going
+  // untested and looking green.
+  for (const r of resources) {
+    assert.ok(SAMPLES[r.name], `${r.name} has no sample address in this test`);
+  }
+
+  for (const r of resources) {
+    const [uri, variables] = SAMPLES[r.name];
+    const out = variables ? await r.read(new URL(uri), variables) : await r.read(new URL(uri));
 
     assert.ok(Array.isArray(out.contents), `${r.name} did not return a contents array`);
     assert.ok(out.contents[0].uri, `${r.name} did not echo the uri back`);
     assert.ok(out.contents[0].text.length > 0, `${r.name} returned nothing`);
   }
+});
+
+test("the voice brief keeps the transfers split, and is not silently empty", async () => {
+  // renderLibrary takes the view NAME. Passing VIEWS.drafting instead gave it an undefined lookup,
+  // an empty wanted-set, and every section came back blank — no error, just three empty strings
+  // where the voice guide should be. Length is asserted because presence was not enough.
+  const brief = await tools.find((t) => t.name === "get_voice_brief").handler({}, context);
+
+  assert.ok(brief.from_the_library.voice_guide.length > 1000, "the voice guide came back empty");
+  assert.ok(brief.from_the_library.banned_phrases.length > 100, "banned phrases came back empty");
+
+  // The split is the entire reason this tool exists: the spoken rhythm is not a target, and the
+  // comparable numbers must be offered in its place.
+  assert.equal(brief.does_not_transfer.spoken_sentence_sd, 16.3);
+  assert.match(brief.does_not_transfer.why, /not a\s+target/i);
+  assert.ok(Object.keys(brief.does_not_transfer.use_instead.scene_writers_sd).length === 4);
+  assert.ok(brief.transfers_from_speech.signature_terms.length > 0);
 });
 
 test("the voiceprint says which of its numbers do not transfer", async () => {

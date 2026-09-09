@@ -19,6 +19,19 @@ import { isSupplied } from "../supabase/functions/_shared/views.ts";
 import { sourceEntry } from "../supabase/functions/_shared/entry.ts";
 import voiceprint from "../data/josh/law/voiceprint.json" with { type: "json" };
 import sentinels from "../data/josh/sentinels/latest.json" with { type: "json" };
+// The five markdown law files, bundled as JSON by build-law.mjs in the same run that writes them.
+// Markdown has no import attribute, and only imported modules reach the Edge Function bundle.
+import law from "../data/josh/law/law.json" with { type: "json" };
+
+/** One line each, so a listing says what a file is for rather than only what it is called. */
+const LAW_DESCRIPTIONS = {
+  "identity.md": "Who he is, who he sells to, and what he will not claim",
+  "voice.md": "How he builds a thought — from speech, never from the archive (8a)",
+  "receipts.md": "His real numbers and scars, behind a do-not-say list of every client name",
+  "content-plan.md": "The three structures, the backlog and the pillar rotation",
+  "quality-bar.md": "The eight gate checks and the mechanical bans, as a writer would read them",
+  "voiceprint.md": "The measured fingerprint, in prose. The numbers are in voiceprint://josh",
+};
 
 const json = (uri, value) => ({
   contents: [{ uri, mimeType: "application/json", text: JSON.stringify(value, null, 2) }],
@@ -133,6 +146,76 @@ export function resourcesFor(context) {
           material: sourceEntry(material),
           must_not_name: real.filter((n) => !n.cleared).map((n) => n.name),
           cleared_names: real.filter((n) => n.cleared).map((n) => n.name),
+        });
+      },
+    },
+
+    {
+      name: "law",
+      // Listed, because the whole point is that somebody can find these without being told they
+      // exist. Six short files, 18 KB in total — cheap to offer and expensive to be missing.
+      uri: new ResourceTemplate("law://{file}", {
+        list: async () => ({
+          resources: Object.keys(law.files ?? {}).map((name) => ({
+            uri: `law://${name.replace(/\.md$/, "")}`,
+            name,
+            description: LAW_DESCRIPTIONS[name] ?? name,
+            mimeType: "text/markdown",
+          })),
+        }),
+      }),
+      config: {
+        title: "Josh's law set",
+        description:
+          "How he sounds and what he writes about, written for a person to read: identity, voice, " +
+          "receipts, content plan, quality bar. These are the human half of the standard. The " +
+          "library is the half the gate enforces, and the two are allowed to disagree — where " +
+          "they do, say so rather than picking one.",
+        mimeType: "text/markdown",
+      },
+      async read(uri, variables) {
+        const asked = String(variables.file).replace(/\.md$/, "");
+        const key = `${asked}.md`;
+        const body = (law.files ?? {})[key];
+        if (!body) {
+          throw new Error(
+            `No law file "${asked}". Available: ${
+              Object.keys(law.files ?? {}).map((n) => n.replace(/\.md$/, "")).join(", ")
+            }.`,
+          );
+        }
+        return markdown(uri.href, body);
+      },
+    },
+
+    {
+      name: "sentinels",
+      uri: "sentinels://latest",
+      config: {
+        title: "The reference writers, measured",
+        description:
+          "Structural measurements of 59 posts across seven accounts Josh chose: median length, " +
+          "opening length, paragraphs, list rate, opening and closing shapes, sentence-length " +
+          "variation. THEIR WORDS ARE NOT HERE and never will be (8.3) — the derivation refuses " +
+          "to emit anything containing a run of the source text, so a draft cannot quote what " +
+          "this system does not hold.",
+        mimeType: "application/json",
+      },
+      async read(uri) {
+        return json(uri.href, {
+          ...sentinels,
+          how_to_read_this: {
+            structure_only: "Borrow how they get in, what they hold back, where the turn lands. " +
+              "Never their words, cadence or phrasing.",
+            two_modes: "The cut — very short opener, little above the fold, heavy lists. The " +
+              "scene — a longer opening giving real information before the reader commits. " +
+              "Josh writes in the second, so the scene writers are the useful reference and the " +
+              "cut writers are a contrast that would fight his own rules if borrowed.",
+            scene_writers: ["demandjen1", "juliacarter98", "outboundphd", "mattjbarker1"],
+            one_caution: "Matt Barker is not a peer reference — he is where Josh's rules came " +
+              "from. His cadence is the single most likely to leak, because the system is " +
+              "already aligned to his thinking.",
+          },
         });
       },
     },
