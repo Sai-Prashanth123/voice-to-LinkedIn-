@@ -2,21 +2,28 @@
 #
 # WHY THIS EXISTS
 #
-# The desk has been deployed on Vercel since it was built. That account is on the free `hobby`
-# plan, and on 9 September every deployment started coming back BLOCKED before a build even
-# started — no build logs on any of them, which is what said it was the account rather than the
-# code. Unpausing the project was accepted by the API and did not hold. Hobby is also
-# non-commercial only, and this is client work.
+# It was written on 9 September as an escape from Vercel, on a diagnosis that turned out to be
+# wrong. Every deployment that day came back BLOCKED with no build logs, and the account is on the
+# free `hobby` plan, so the plan looked like the cause. It was not.
 #
-# So this is the alternative host, committed rather than described, so moving is a decision
-# somebody makes in one click rather than a piece of work.
+# What the deployment list actually showed, once it was read rather than skimmed: every BLOCKED
+# deployment carried `githubDeployment: "1"`, and every READY one did not. The Vercel project
+# `the-desk` had `link: null` — it was never connected to a repository. Something was firing GitHub
+# deployments at a project with no git link, and Vercel refused them before a build. A one-file probe
+# deployed to the same account and returned READY, which is what ruled the account out.
+#
+# The fix was to link the repository properly. That project is `voice-to-content`, and its first
+# build went green in 47 seconds.
+#
+# So this file is no longer the plan. It is kept because it still works, and because a host with one
+# committed blueprint is a decision somebody makes in one click rather than a piece of work.
 #
 # WHAT IT DOES NOT DO
 #
-# Nothing here moves anything on its own. Render reads this when a Blueprint is created against
-# the repository, and the environment variables below are deliberately `sync: false` — Render
-# prompts for each one rather than this file carrying a value. No key belongs in version control,
-# and the anon key least of all people expect to be the one that leaks.
+# Nothing here moves anything on its own. Render reads this when a Blueprint is created against the
+# repository, and the environment variables below are deliberately `sync: false` — Render prompts for
+# each one rather than this file carrying a value. No key belongs in version control, and the anon key
+# least of all people expect to be the one that leaks.
 #
 # TWO THINGS BREAK IF YOU MOVE AND FORGET THEM
 #
@@ -26,7 +33,7 @@
 #      or the link in the email is refused at the last step — which looks like a broken login
 #      rather than a missing setting.
 #
-# Both are one-line changes and neither announces itself.
+# Both are one-line changes and neither announces itself. Both were needed on the Vercel move too.
 
 services:
   - type: web
