@@ -62,9 +62,25 @@ export const workTools = [
       // counting rows. cc-agent/work.mjs had this bug too.
       const [drafts, runs, mined] = await Promise.all([
         db.select("drafts", {
-          select: "id,moment_id,framework,created_at",
+          select: "id,moment_id,framework,model,created_at",
           order: "id.desc",
           limit: 50,
+          /*
+           * ACCEPTANCE FIXTURES ARE NOT WORK.
+           *
+           * Component test 8 seeds twenty deliberately generic drafts to prove the gate rejects
+           * them, and they sit in the production table because 6.3 forbids removing anything. The
+           * first version of this tool offered draft 27 — "Every B2B company is adding AI to their
+           * pitch right now" — as the next thing to gate.
+           *
+           * Judging one by hand would not merely waste a run: test 8 measures how many of those
+           * fixtures the gate rejected, so adding verdicts of my own changes the number a
+           * component test reports. A tool that hands somebody work which corrupts a passing test
+           * is worse than one that hands over nothing.
+           *
+           * Same exclusion scripts/smoke.mjs uses, and the same label create_draft refuses.
+           */
+          framework: "neq.acceptance-fixture",
         }),
         db.select("gate_runs", { select: "draft_id,check_key" }),
         db.select("moments", {

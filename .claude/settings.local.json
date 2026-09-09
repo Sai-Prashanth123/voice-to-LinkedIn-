@@ -14,7 +14,8 @@
       "Bash(node --check mcp-server/tools/work.mjs)",
       "Bash(node mcp-server/index.mjs --tools)",
       "Bash(node -e ' *)",
-      "Bash(node --test)"
+      "Bash(node --test)",
+      "Bash(npx --yes supabase@latest functions deploy mcp --project-ref uzqvebxcxgmseqjhfpku)"
     ]
   },
   "enabledMcpjsonServers": [

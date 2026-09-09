@@ -229,6 +229,40 @@ test("nothing is annotated destructive, because nothing can be", () => {
 
 // ── Local-only ────────────────────────────────────────────────────────────────────────────────
 
+test("next_work never hands over an acceptance fixture", async () => {
+  // It did. The first version offered draft 27 — "Every B2B company is adding AI to their pitch
+  // right now" — as the next thing to gate. That is one of twenty deliberately generic drafts
+  // seeded for component test 8, which measures how many of them the gate rejected.
+  //
+  // So judging one by hand does not merely waste a run: it changes the number a passing component
+  // test reports. A tool that hands somebody work which corrupts a test is worse than one that
+  // hands over nothing.
+  const db = createDb(creds);
+  const work = await tools.find((t) => t.name === "next_work").handler({}, context);
+
+  if (work.work !== "gate") return; // nothing to gate on this machine; the guard is still below
+
+  const [draft] = await db.select("drafts", {
+    select: "id,framework,model",
+    id: `eq.${work.draft_id}`,
+    limit: 1,
+  });
+
+  assert.notEqual(draft.framework, "acceptance-fixture", "offered a fixture as work");
+  assert.notEqual(draft.model, "acceptance-fixture", "offered a fixture as work");
+});
+
+test("next_work says WHY there is nothing, not just that there is nothing", async () => {
+  // "Everything is done" and "everything is blocked on a person" are different facts and only one
+  // of them is good news. A loop that cannot tell them apart reports the first and means the
+  // second — which is exactly what this system's state is today.
+  const work = await tools.find((t) => t.name === "next_work").handler({}, context);
+  if (work.work !== "none") return;
+
+  assert.ok(work.why && work.why.length > 40, "it did not say why");
+  assert.ok(work.waiting_on_josh, "it did not say what is waiting on a person");
+});
+
 test("scan_sessions is marked local-only", () => {
   // Over HTTP it reads the edge function's own container and answers "nothing to do" forever —
   // indistinguishable from a real quiet result, which is worse than not offering it.
