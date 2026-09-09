@@ -81,6 +81,44 @@ const CLAIM = z.object({
     ),
 });
 
+/**
+ * The extraction, in the shape schemas.ts defines it.
+ *
+ * Written out here rather than imported because ExtractionSchema is `npm:zod@4`, a Deno specifier
+ * Node cannot resolve — the same reason model.mjs writes its own JSON schemas. The edge function is
+ * the authority: it parses against the real schema and validates against the transcript, so this
+ * exists to tell a caller what the fields ARE, not to be the thing that decides.
+ *
+ * Every text field is optional and defaults to empty, because "leave it empty" is the instruction
+ * that matters most and a required field quietly pressures a model to fill it.
+ */
+const TEXT = () => z.string().optional().default("");
+
+const EXTRACTION = z.object({
+  the_moment: TEXT().describe("What happened. Empty if he never gave you a moment."),
+  the_detail: TEXT().describe("The specific detail that makes it real. Empty if absent."),
+  the_realisation: TEXT().describe("What he worked out. Empty if absent."),
+  the_lesson: TEXT().describe("What a reader should take from it. Empty if absent."),
+  what_happened_before: TEXT(),
+  who_was_there: TEXT(),
+  their_actual_words: TEXT()
+    .describe("VERBATIM only. If he paraphrased what someone said, leave this empty."),
+  how_he_felt: TEXT(),
+  what_changed: TEXT(),
+  reader_takeaway: TEXT(),
+  pillar: TEXT().describe("One of the pillars in the brief, or empty."),
+  audience: TEXT().describe("Who this post is for. Empty if you genuinely cannot tell."),
+  audience_known: z.boolean().describe("False when you are guessing. A guessed reader is worse than an admitted gap."),
+  audience_is_buyer: z.boolean(),
+  strength: z.number().int().min(1).max(5).describe("How strong this material is, honestly."),
+  time_sensitive: z.boolean(),
+  decays_in_days: z.number().int().min(0).default(0),
+  names: z.array(z.object({
+    name: z.string(),
+    kind: z.enum(["person", "company"]),
+  })).default([]).describe("Every person and company he actually mentioned. Nobody he did not."),
+});
+
 export const writeTools = [
   {
     name: "create_draft",
@@ -225,6 +263,61 @@ export const writeTools = [
         library_version: row.library_version,
         next: "Run the eight checks and record each with record_gate_verdict.",
       };
+    },
+  },
+
+  {
+    name: "submit_extraction",
+    config: {
+      title: "Record what an interview produced",
+      description:
+        "Turn one finished interview into idea bank material (5.9). Call get_extraction_brief " +
+        "first and follow it exactly. Every field becomes the source of truth a later draft is " +
+        "checked against claim by claim, so LEAVE A FIELD EMPTY rather than filling it with " +
+        "something reasonable — empty is always allowed and is correct whenever Josh did not say " +
+        "it. The quote, the numbers and the names are checked against what he actually said " +
+        "before anything is written, and a submission that fails comes back with reasons rather " +
+        "than being stored badly.",
+      inputSchema: {
+        moment_id: z.number().int().describe("The moment whose interview this records"),
+        extracted: EXTRACTION,
+      },
+    },
+
+    async handler(args, { url }) {
+      // Posted to cc-submit rather than written here, and that is the whole design rather than an
+      // inconvenience. content_mcp has insert on four tables and the idea bank is none of them; the
+      // edge function validates and writes with its own admin client. The model call moved off the
+      // free tier, the write authority did not.
+      const key = process.env.CONTENT_MCP_KEY;
+      if (!key) throw new Error("CONTENT_MCP_KEY is not set, so the extraction cannot be submitted.");
+
+      const res = await fetch(`${url}/functions/v1/cc-submit`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "extraction",
+          moment_id: args.moment_id,
+          extracted: args.extracted,
+        }),
+      });
+
+      const body = await res.json().catch(() => ({}));
+
+      if (res.status === 422) {
+        // The refusal is the useful outcome, so it is raised with its reasons rather than returned
+        // as a result a caller might read as success.
+        throw new Error(
+          `The extraction does not match what Josh said, so nothing was written (5.9).\n\n` +
+          (body.failures ?? []).map((f) => `  · ${f}`).join("\n") +
+          `\n\nFix it against the transcript, or leave the field empty. Empty is always allowed.`,
+        );
+      }
+      if (!res.ok) {
+        throw new Error(`cc-submit ${res.status}: ${JSON.stringify(body).slice(0, 300)}`);
+      }
+
+      return body;
     },
   },
 

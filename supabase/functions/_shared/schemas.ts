@@ -87,6 +87,10 @@ export const ExtractionSchema = z.object({
     .describe("Every person and company mentioned anywhere in the conversation."),
 });
 
+/** The shape applyExtraction() takes, so the Claude Code path and the model path agree on it. */
+export type Extraction = z.infer<typeof ExtractionSchema>;
+
+
 /* ── Drafting ──────────────────────────────────────────────────────────────── */
 
 export const ClaimSchema = z.object({

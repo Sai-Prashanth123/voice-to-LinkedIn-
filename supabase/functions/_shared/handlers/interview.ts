@@ -22,9 +22,9 @@ import {
   PROMPT_VERSION,
 } from "../prompts.ts";
 import { creditSession, recordAsked, syncQuestions } from "../questions.ts";
-import { ExtractionSchema, NextQuestionSchema } from "../schemas.ts";
+import { type Extraction, ExtractionSchema, NextQuestionSchema } from "../schemas.ts";
 import { appendTurn, deepest, loadSession, renderTranscript } from "../session.ts";
-import { joshChatId, sendMessage } from "../telegram.ts";
+import { type Button, joshChatId, sendMessage } from "../telegram.ts";
 import { questionOuts } from "../interviewouts.ts";
 import { sendParked } from "../parked.ts";
 import { isRealName, unclearedNames } from "../names.ts";
@@ -251,6 +251,24 @@ export async function handleInterviewExtract(db: SupabaseClient, job: Job): Prom
     promptVersion: PROMPT_VERSION,
   }, { db });
 
+  await applyExtraction(db, momentId, extracted);
+}
+
+/**
+ * Everything that happens once an extraction exists, whoever produced it.
+ *
+ * Split out so Claude Code can do the reading (12c's sibling: the model call moves, the write
+ * authority does not) without a second copy of the parking rules, the pillar confirmation, the name
+ * clearance question and the seeding advance. Those are five decisions with real consequences, and
+ * a second implementation of them would diverge on the first one anybody improved.
+ *
+ * The caller supplies the extraction. It does NOT supply what happens next.
+ */
+export async function applyExtraction(
+  db: SupabaseClient,
+  momentId: number,
+  extracted: Extraction,
+): Promise<void> {
   const blank = (s: string) => (s && s.trim().length > 0 ? s.trim() : null);
 
   await db.from("material").upsert({
@@ -387,7 +405,7 @@ export async function handleInterviewExtract(db: SupabaseClient, job: Job): Prom
 }
 
 /** What Josh originally sent, whether typed or transcribed. */
-async function seedText(db: SupabaseClient, momentId: number): Promise<string> {
+export async function seedText(db: SupabaseClient, momentId: number): Promise<string> {
   const { data } = await db
     .from("raw_inputs")
     .select("transcript, text_body")

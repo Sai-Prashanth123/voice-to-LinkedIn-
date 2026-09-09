@@ -22,12 +22,15 @@ import {
   DRAFTER_SYSTEM,
   DRAFT_USER,
   GATE_CHECKS,
+  EXTRACT_SYSTEM,
   GATE_SYSTEM,
   GATE_USER,
   LEARN_SYSTEM,
   PROMPT_VERSION,
 } from "../../supabase/functions/_shared/prompts.ts";
 import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
+import { parsePillars } from "../../supabase/functions/_shared/library.ts";
+import { renderTranscript } from "../../supabase/functions/_shared/session.ts";
 import {
   CHECK_NEEDS_SECTION,
   notJudged,
@@ -273,6 +276,93 @@ export const briefTools = [
         next: remaining.length > 0
           ? "Judge each check on its own and call record_gate_verdict once per check. When unsure, fail it."
           : "Every check already has a verdict. Nothing to do.",
+      };
+    },
+  },
+
+  {
+    name: "get_extraction_brief",
+    config: {
+      title: "Get the brief for turning an interview into idea bank material",
+      description:
+        "Everything needed to record what one interview produced (clause 5.9): the extraction " +
+        "standard from prompts.ts, what Josh sent, the whole conversation, and the pillars he has " +
+        "actually defined. This is the same standard worker-dispatch uses. The entry you produce " +
+        "becomes the source of truth every later draft is checked against, claim by claim — so " +
+        "leaving a field empty is always allowed and is correct whenever he did not say it. " +
+        "Finish by calling submit_extraction.",
+      inputSchema: {
+        moment_id: z.number().int().describe("Which moment's interview to record"),
+      },
+    },
+
+    async handler(args, { db }) {
+      const id = args.moment_id;
+
+      const [moment] = await db.select("moments", {
+        select: "id,ref,status,killed",
+        id: `eq.${id}`,
+        limit: 1,
+      });
+      if (!moment) throw new Error(`No moment with id ${id}.`);
+      if (moment.killed) throw new Error(`Moment ${id} has been killed and must not be recorded.`);
+      if (moment.status === "mined") {
+        throw new Error(
+          `Moment ${id} is already mined. Re-extracting would overwrite material a draft may ` +
+          `already have been checked against, so it is refused rather than done quietly.`,
+        );
+      }
+
+      const turns = await db.select("interview_turns", {
+        select: "role,body,turn_no",
+        moment_id: `eq.${id}`,
+        order: "turn_no.asc",
+      });
+
+      const raw = await db.select("raw_inputs", {
+        select: "kind,text_body,created_at",
+        moment_id: `eq.${id}`,
+        order: "created_at.asc",
+      });
+
+      const rows = await db.select("library_sections", {
+        select: "key,title,body,sort_order",
+        order: "sort_order.asc",
+      });
+      const pillarsBody = (rows.find((r) => r.key === "pillars") ?? {}).body ?? "";
+
+      const { prompt: library } = renderLibrary(rows, VIEWS.interview);
+
+      // renderTranscript imported rather than reproduced: the model must read the conversation in
+      // the same shape the validator rebuilds it from, and two renderings of one transcript is
+      // exactly the kind of near-identical pair that drifts without anybody noticing.
+      const transcript = renderTranscript({ turns });
+      const seed = raw.map((r) => String(r.text_body ?? "").trim()).filter(Boolean).join("\n\n");
+
+      return {
+        moment_id: id,
+        moment_ref: moment.ref,
+        prompt_version: PROMPT_VERSION,
+
+        // Only pillars Josh has actually defined. With none, extraction records none rather than
+        // inventing a category that would then be counted in the pillar balance (7.1).
+        system: `${EXTRACT_SYSTEM(parsePillars(pillarsBody))}\n\n${library}`,
+
+        what_josh_sent: seed || "(nothing recorded)",
+        the_conversation: transcript,
+
+        will_be_checked_mechanically: [
+          "their_actual_words must appear verbatim in what Josh said — a paraphrase must be left empty",
+          "every number must appear in what he said, unrounded",
+          "every name recorded must be one he actually mentioned",
+        ],
+        will_not_be_checked: [
+          "the prose fields, which are meant to summarise and cannot be matched verbatim — " +
+          "which is exactly why inventing in them is the thing to avoid on your own account",
+        ],
+
+        next: "Call submit_extraction with the full extraction. It is validated before anything " +
+          "is written, and refused with reasons rather than stored badly.",
       };
     },
   },
