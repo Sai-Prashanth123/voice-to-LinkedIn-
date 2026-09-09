@@ -211,7 +211,10 @@ export const inspectTools = [
         rows(db, "moments?select=id,ref&status=eq.half_mined&killed=is.false&order=id.asc"),
         rows(db, "moments?select=id,ref&status=eq.captured&killed=is.false&order=id.asc"),
         rows(db, "drafts?select=id&order=id.desc&limit=100"),
-        rows(db, "posts?select=id&status=eq.draft"),
+        // moments!inner(killed) — a post on a killed moment is a verification fixture. Counting
+        // them told the operator two posts were waiting on Josh when both were fakes, which is
+        // exactly the wrong thing for a tool whose whole job is "what should I do now".
+        rows(db, "posts?select=id,moments!inner(killed)&status=eq.draft&moments.killed=is.false"),
         rows(db, "library_proposals?select=id&status=eq.open"),
       ]);
 

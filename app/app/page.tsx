@@ -32,8 +32,13 @@ export default async function WeeklyPass() {
   const [{ data: drafts }, { data: recent }, { data: scheduled }, { count: minedCount }] =
     await Promise.all([
       db.from("posts")
-        .select("id, body, moment_id, visual_id, visuals(rendered_path), moments!inner(ref, pillar, audience)")
+        .select("id, body, moment_id, visual_id, visuals(rendered_path), moments!inner(ref, pillar, audience, killed)")
         .eq("status", "draft")
+        // The published query below has filtered killed moments since a fixture post was twice
+        // offered to Josh as something to react to. THIS query never did, so the weekly pass has
+        // been opening with two drafts to review that are both verification fixtures on killed
+        // moments — the same failure, one query along, hidden because the other one was fixed.
+        .eq("moments.killed", false)
         .order("id"),
       db.from("posts")
         .select(

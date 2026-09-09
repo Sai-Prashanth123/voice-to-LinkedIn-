@@ -22,10 +22,24 @@ export default async function Calendar() {
     db.from("posts")
       .select("id, body, status, scheduled_for, published_at, moments!inner(ref, pillar)")
       .in("status", ["scheduled", "published"])
+      // VERIFICATION FIXTURES ARE EXCLUDED, and this page was the last one that did not exclude
+      // them. It claimed two posts had gone out on 18 and 21 August, marked approved by Josh, on
+      // a system where nothing has ever published and LinkedIn is not connected.
+      //
+      // The marker is the KILLED MOMENT, not the body text. Fixtures live in the production tables
+      // because 6.3 forbids deleting a moment — they are killed and labelled instead, which is
+      // exactly what page.tsx already says and filters on. Two of the four fixture posts happen to
+      // start with the word FIXTURE and two do not, so a body-prefix test finds half of them and
+      // looks like it works.
+      .eq("moments.killed", false)
       .gte("scheduled_for", from.toISOString())
       .order("scheduled_for"),
     db.from("settings").select("value").eq("key", "queue_target_posts").maybeSingle(),
-    db.from("posts").select("*", { count: "exact", head: true }).eq("status", "draft"),
+    // The same exclusion. "In hand against the target" counting two fixtures as real work is how
+    // 13.4's low-queue warning stays quiet on an empty queue.
+    db.from("posts").select("*, moments!inner(killed)", { count: "exact", head: true })
+      .eq("status", "draft")
+      .eq("moments.killed", false),
   ]);
 
   const target = Number(setting?.value ?? 10);
