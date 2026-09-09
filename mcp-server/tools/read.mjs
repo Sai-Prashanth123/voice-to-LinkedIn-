@@ -51,6 +51,8 @@ export const readTools = [
         include_killed: z.boolean().optional()
           .describe("Include moments Josh has killed. Off by default — see 6.3"),
         limit: z.number().int().min(1).max(200).optional().describe("Default 25"),
+        cursor: z.string().optional()
+          .describe("next_cursor from a previous call, to continue from where it stopped"),
       },
     },
     async handler(args, { db }) {
@@ -73,16 +75,36 @@ export const readTools = [
         return { count: ordered.length, searched_for: args.search, moments: ordered };
       }
 
+      /*
+       * KEYSET, NOT OFFSET.
+       *
+       * An offset shifts every time something is captured, so a caller walking the bank while the
+       * system is running skips rows and repeats others. Paging on the id it last saw cannot: the
+       * bank only ever grows, and 6.3 means a row never disappears from under a cursor.
+       *
+       * Ordered by id rather than captured_at for the same reason — captured_at is not unique, and
+       * two moments captured in the same second would make a cursor ambiguous.
+       */
       const moments = await db.select("moments", {
         select: MOMENT_FIELDS,
-        order: "captured_at.desc",
+        order: "id.desc",
         limit,
+        ...(args.cursor ? { id: `lt.${Number(args.cursor)}` } : {}),
         ...(args.include_killed ? {} : LIVE_ONLY),
         ...(args.status ? { status: `eq.${args.status}` } : {}),
         ...(args.source ? { source: `eq.${args.source}` } : {}),
         ...(args.pillar ? { pillar: `eq.${args.pillar}` } : {}),
       });
-      return { count: moments.length, moments };
+
+      return {
+        count: moments.length,
+        moments,
+        // Only when a full page came back. Offering a cursor on a short page invites one more
+        // round trip that is certain to return nothing.
+        ...(moments.length === limit
+          ? { next_cursor: String(moments[moments.length - 1].id) }
+          : {}),
+      };
     },
   },
 
@@ -202,18 +224,29 @@ export const readTools = [
         moment_id: z.number().int().optional().describe("Only drafts for this moment"),
         gate_passed: z.boolean().optional().describe("Filter by whether the draft cleared the gate"),
         limit: z.number().int().min(1).max(100).optional().describe("Default 20"),
+        cursor: z.string().optional()
+          .describe("next_cursor from a previous call, to continue from where it stopped"),
       },
     },
     async handler(args, { db }) {
+      const limit = args.limit ?? 20;
+
+      // Keyset on id, for the same reason as list_moments: an offset shifts under a caller as
+      // drafts are written, and drafts are written by four different things.
       const drafts = await db.select("drafts", {
         select: "id,moment_id,version,attempt,body,hook,framework,model," +
           "claims_verified,gate_passed,gate_reason,created_at",
-        order: "created_at.desc",
-        limit: args.limit ?? 20,
+        order: "id.desc",
+        limit,
+        ...(args.cursor ? { id: `lt.${Number(args.cursor)}` } : {}),
         ...(args.moment_id ? { moment_id: `eq.${args.moment_id}` } : {}),
         ...(args.gate_passed === undefined ? {} : { gate_passed: `is.${args.gate_passed}` }),
       });
       if (drafts.length === 0) return { count: 0, drafts: [] };
+
+      const nextCursor = drafts.length === limit
+        ? { next_cursor: String(drafts[drafts.length - 1].id) }
+        : {};
 
       const runs = await db.select("gate_runs", {
         select: "draft_id,check_key,passed,reason",
@@ -228,6 +261,7 @@ export const readTools = [
       return {
         count: drafts.length,
         drafts: drafts.map((d) => ({ ...d, checks: byDraft.get(d.id) ?? [] })),
+        ...nextCursor,
       };
     },
   },

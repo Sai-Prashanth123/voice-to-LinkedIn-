@@ -13,6 +13,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { DbError } from "./db.mjs";
 import { assertUniqueNames } from "./tools/index.mjs";
+import { annotationsFor } from "./auth.mjs";
+import { promptsFor } from "./prompts.mjs";
+import { resourcesFor } from "./resources.mjs";
 
 export const NAME = "content-system";
 export const VERSION = "0.1.0";
@@ -54,8 +57,33 @@ export function wrap(tool, context, onCall) {
  */
 export function build(context, list, onCall) {
   const server = new McpServer({ name: NAME, version: VERSION });
+
   for (const tool of assertUniqueNames(list)) {
-    server.registerTool(tool.name, tool.config, wrap(tool, context, onCall));
+    // Annotations are attached HERE rather than written into each tool's config, so they are
+    // derived from one list instead of hand-maintained in 24 places. A client uses them to decide
+    // what to auto-approve; getting one wrong means something that writes to the bank stops asking.
+    server.registerTool(
+      tool.name,
+      { ...tool.config, annotations: { ...annotationsFor(tool.name), ...tool.config.annotations } },
+      wrap(tool, context, onCall),
+    );
   }
+
+  /*
+   * Prompts and resources are registered HERE, inside build(), and that placement is load-bearing.
+   *
+   * registerPrompt and registerResource call registerCapabilities, which throws outright after
+   * connect(): "Cannot register capabilities after connecting to transport". Both callers already
+   * connect after build() returns, so this is safe — but moving either registration out of this
+   * function would break the server at runtime rather than at import.
+   */
+  for (const p of promptsFor(context)) {
+    server.registerPrompt(p.name, p.config, p.cb);
+  }
+
+  for (const r of resourcesFor(context)) {
+    server.registerResource(r.name, r.uri, r.config, r.read);
+  }
+
   return server;
 }

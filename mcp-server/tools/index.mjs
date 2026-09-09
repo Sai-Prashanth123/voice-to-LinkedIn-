@@ -28,6 +28,7 @@ import { writeTools } from "./write.mjs";
 import { inspectTools } from "./inspect.mjs";
 import { visualTools } from "./visual.mjs";
 import { sessionTools } from "./sessions.mjs";
+import { measureTools } from "./measure.mjs";
 
 export const tools = [
   ...health,
@@ -36,6 +37,7 @@ export const tools = [
   ...inspectTools,
   ...visualTools,
   ...sessionTools,
+  ...measureTools,
   ...writeTools,
 ];
 

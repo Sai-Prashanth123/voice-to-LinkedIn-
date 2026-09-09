@@ -44,6 +44,31 @@ export const WRITE_TOOLS = new Set([
 ]);
 
 /**
+ * The hints a client uses to decide what to auto-approve.
+ *
+ * DERIVED FROM WRITE_TOOLS, NOT HAND-LABELLED
+ *
+ * Two lists of "which tools write" would be two lists that eventually disagree, and the symptom
+ * would be a client silently auto-approving something that writes to Josh's bank. So there is one
+ * list and this reads it.
+ *
+ * `destructiveHint: false` is true of EVERY tool here and is not a nicety: 6.3 is a revoked grant
+ * rather than a policy, and neither the scoped role nor service_role holds DELETE or TRUNCATE on
+ * any table. Nothing this server can do is destructive, and saying so lets a client treat a
+ * refusable write differently from an irreversible one.
+ *
+ * idempotentHint is deliberately omitted rather than guessed. create_draft is not idempotent;
+ * record_gate_verdict is, because it refuses to overwrite a verdict. Claiming it wrongly would be
+ * worse than leaving a client to ask.
+ */
+export function annotationsFor(name) {
+  return {
+    readOnlyHint: !WRITE_TOOLS.has(name),
+    destructiveHint: false,
+  };
+}
+
+/**
  * Constant-time string comparison.
  *
  * Length is compared first and NOT in constant time, which is deliberate and safe: token length is

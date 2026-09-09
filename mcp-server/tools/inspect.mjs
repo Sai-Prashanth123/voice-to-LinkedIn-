@@ -27,11 +27,165 @@
  */
 
 import { z } from "zod";
+// The same measure that classifies a draft against what Josh published (12.2). Reused so "how
+// much changed" means one thing everywhere, rather than two similar numbers computed two ways.
+import { similarity } from "../../supabase/functions/_shared/diff.ts";
 
 /** PostgREST returns rows; a missing table returns a permission error, which is the useful answer. */
 const rows = (db, path) => db.request("/" + path);
 
 export const inspectTools = [
+  {
+    name: "get_section_history",
+    config: {
+      title: "Every version of one library section",
+      description:
+        "What a section used to say, when it changed and why. Clause 12.12 requires a library " +
+        "change to be reversible, and this is the record that makes that true — it answers 'the " +
+        "drafter behaves differently than last week, what changed?', which is otherwise " +
+        "unanswerable without SQL. Bodies are omitted unless asked for, because a section runs to " +
+        "thousands of characters and six of them would bury the reasons.",
+      inputSchema: {
+        key: z.string().describe("The section key, e.g. hooks, voice_guide, banned_phrases"),
+        include_bodies: z.boolean().optional()
+          .describe("Return the full text of each version. Default false."),
+      },
+    },
+
+    async handler(args, { db }) {
+      const versions = await rows(
+        db,
+        `library_section_versions?select=version,body,reason,created_at&key=eq.${
+          encodeURIComponent(args.key)
+        }&order=version.asc`,
+      );
+
+      if (versions.length === 0) {
+        throw new Error(
+          `No history for "${args.key}". Either the key is wrong, or the section has never been ` +
+          `edited since it was created.`,
+        );
+      }
+
+      // similarity() from _shared/diff.ts, the same measure that classifies a draft against what
+      // Josh actually published. Reused rather than reinvented so "how much changed" means one
+      // thing across the system.
+      const history = versions.map((v, i) => {
+        const previous = i > 0 ? versions[i - 1].body : null;
+        const changed = previous === null ? null : 1 - similarity(previous ?? "", v.body ?? "");
+        return {
+          version: v.version,
+          at: v.created_at,
+          reason: v.reason ?? "(no reason recorded)",
+          words: String(v.body ?? "").trim().split(/\s+/).filter(Boolean).length,
+          changed_from_previous: changed === null
+            ? "first version"
+            : `${Math.round(changed * 100)}% different`,
+          ...(args.include_bodies ? { body: v.body } : {}),
+        };
+      });
+
+      return {
+        key: args.key,
+        versions: history.length,
+        current_version: history[history.length - 1].version,
+        history,
+        note: args.include_bodies
+          ? undefined
+          : "Bodies omitted. Pass include_bodies to read what a version actually said.",
+      };
+    },
+  },
+
+  {
+    name: "next_action",
+    config: {
+      title: "The one thing most worth doing now",
+      description:
+        "Reads the whole system and returns the single highest-value action, with the reason. " +
+        "Answers 'what should I do now' in one call rather than six reads the caller has to " +
+        "interpret. It names what is BLOCKING, not what is merely incomplete — most of this " +
+        "system is waiting on one thing at a time.",
+      inputSchema: {},
+    },
+
+    async handler(_args, { db }) {
+      const [mined, halfMined, captured, unjudged, waiting, openProposals] = await Promise.all([
+        rows(db, "moments?select=id&status=eq.mined&killed=is.false"),
+        rows(db, "moments?select=id,ref&status=eq.half_mined&killed=is.false&order=id.asc"),
+        rows(db, "moments?select=id,ref&status=eq.captured&killed=is.false&order=id.asc"),
+        rows(db, "drafts?select=id&order=id.desc&limit=100"),
+        rows(db, "posts?select=id&status=eq.draft"),
+        rows(db, "library_proposals?select=id&status=eq.open"),
+      ]);
+
+      // Ordered by what unblocks the most. A draft waiting on Josh is worth more than a new draft,
+      // because nothing publishes without him and an unreviewed pile is not progress.
+      const actions = [];
+
+      if (waiting.length > 0) {
+        actions.push({
+          do: `Review ${waiting.length} post(s) waiting on Josh`,
+          where: "the desk's This week, or /review in Telegram",
+          why: "Approval is the only thing that authorises publishing, and it is enforced four " +
+            "ways in the database. Nothing downstream of it can happen until he passes.",
+        });
+      }
+
+      if (mined.length > 0) {
+        actions.push({
+          do: `Draft ${mined.length} mined moment(s)`,
+          where: "the draft-post prompt, or worker-select on its four-hourly tick",
+          why: "These have material and no draft. This is the only state where writing is possible.",
+        });
+      }
+
+      if (halfMined.length > 0) {
+        actions.push({
+          do: `Answer the interview on ${halfMined.length} candidate(s) — start with ${halfMined[0].ref}`,
+          where: "Telegram",
+          why: "A candidate cannot be drafted until Josh has been interviewed about it (4.3.3). " +
+            "With nothing mined, this is what everything else is waiting on.",
+        });
+      }
+
+      if (openProposals.length > 0) {
+        actions.push({
+          do: `Decide ${openProposals.length} library proposal(s)`,
+          where: "the desk's Proposals",
+          why: "The system proposes and Josh decides (12.10). Nothing changes until he does.",
+        });
+      }
+
+      if (captured.length > 0) {
+        actions.push({
+          do: `${captured.length} input(s) captured but never mined`,
+          where: "Telegram",
+          why: "The interview stalled or never finished on these. They expire on their own after " +
+            "7 to 14 days, taking whatever they have.",
+        });
+      }
+
+      return {
+        next: actions[0] ?? {
+          do: "Nothing is blocked",
+          where: "—",
+          why: "Nothing is waiting on a person and nothing is ready to write. Send something in.",
+        },
+        // The rest, so a reader can disagree with the ordering rather than be told.
+        then: actions.slice(1),
+        counts: {
+          ready_to_draft: mined.length,
+          awaiting_interview: halfMined.length,
+          just_arrived: captured.length,
+          drafts_waiting_on_josh: waiting.length,
+          open_proposals: openProposals.length,
+          drafts_total: unjudged.length,
+        },
+      };
+    },
+  },
+
   {
     name: "list_proposals",
     config: {

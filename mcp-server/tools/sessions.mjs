@@ -98,6 +98,16 @@ function uploadCredentials() {
 export const sessionTools = [
   {
     name: "scan_sessions",
+
+    /*
+     * THIS MACHINE ONLY. Dropped from the HTTP surface by http.mjs.
+     *
+     * It reads ~/.claude/projects, which over stdio is the caller's own machine and is the whole
+     * point. Served remotely it would read the edge function's container and answer "nothing to
+     * do" forever — indistinguishable from a real quiet result, which is worse than not offering
+     * it at all.
+     */
+    localOnly: true,
     config: {
       title: "Scan Claude Code sessions for content candidates",
       description:

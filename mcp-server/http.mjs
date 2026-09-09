@@ -66,17 +66,35 @@ function rpcError(status, message) {
 export async function handleMcpRequest(request, options = {}) {
   const env = options.env ?? process.env;
 
-  const auth = authorise(request.headers.get("authorization"), env);
+  /*
+   * The token may arrive in the header OR in the query string, and the second is a concession
+   * rather than a preference.
+   *
+   * claude.ai's custom-connector dialog takes a name and a URL. It expects a server that speaks
+   * OAuth 2.1 and gives no field for a static header, so a header-only server simply cannot be
+   * added there — it answers 401 and the connector fails with nothing the person can do about it.
+   *
+   * WHAT THIS COSTS, PLAINLY
+   *
+   * A token in a URL is a token in browser history, in the connector's stored configuration, and
+   * in whatever proxy logs the request line. A header is none of those. So the header is checked
+   * FIRST and is the documented way in; the query string exists so one specific client can connect
+   * at all, and the right long-term answer is OAuth rather than this.
+   */
+  const url = new URL(request.url);
+  const fromQuery = url.searchParams.get("token") ?? url.searchParams.get("key");
+
+  const auth = authorise(request.headers.get("authorization") ?? fromQuery, env);
   if (!auth.ok) return rpcError(auth.status, auth.error);
 
-  const url = (env.SUPABASE_URL ?? "").replace(/\/+$/, "");
+  const project = (env.SUPABASE_URL ?? "").replace(/\/+$/, "");
   const key = env.CONTENT_MCP_KEY ?? "";
-  if (!url || !key) {
+  if (!project || !key) {
     return rpcError(503, "The server is not configured: SUPABASE_URL and CONTENT_MCP_KEY are required.");
   }
 
-  const db = createDb({ url, key });
-  const context = { db, url };
+  const db = createDb({ url: project, key });
+  const context = { db, url: project };
 
   // The audit row is written on a best-effort basis and never blocks the answer. A logging failure
   // must not turn a working tool call into an error — but it is reported to the host's console, so
@@ -89,7 +107,20 @@ export async function handleMcpRequest(request, options = {}) {
     }).catch((err) => console.error(`mcp audit failed: ${err?.message ?? err}`));
   };
 
-  const server = build(context, toolsForScope(tools, auth.scope), audit);
+  /*
+   * Local-only tools are dropped from the remote surface.
+   *
+   * scan_sessions reads ~/.claude/projects. Over stdio that is the caller's own machine, which is
+   * the entire point of it. Here it would read this container's filesystem and answer "no Claude
+   * Code sessions, nothing to do" every single time — a tool that looks like it worked and did
+   * nothing, which is the failure this build keeps removing rather than adding.
+   *
+   * Hidden rather than left to fail politely, because a model shown a tool will use it, and the
+   * empty answer it gets back is indistinguishable from a genuine quiet result.
+   */
+  const reachable = toolsForScope(tools, auth.scope).filter((t) => !t.localOnly);
+
+  const server = build(context, reachable, audit);
 
   // Stateless: a new transport per request, no session id, no event store. Vercel and every other
   // serverless host may route the next request to a different instance, so a session held in
