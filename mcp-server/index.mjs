@@ -20,6 +20,7 @@
  *   node index.mjs           # serve over stdio — how Claude Code starts it
  *   node index.mjs --check   # verify credentials and connectivity, print, exit
  *   node index.mjs --tools   # list registered tools and exit
+ *   node index.mjs --capabilities  # tools, prompts and resources; proves it all registers
  */
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -28,20 +29,61 @@ import { loadEnv, note } from "./env.mjs";
 import { createDb } from "./db.mjs";
 import { tools, assertUniqueNames } from "./tools/index.mjs";
 import { build, NAME, VERSION } from "./server.mjs";
+import { annotationsFor } from "./auth.mjs";
+import { promptsFor } from "./prompts.mjs";
+import { resourcesFor } from "./resources.mjs";
 
 
 async function main() {
   const args = new Set(process.argv.slice(2));
 
   if (args.has("--help") || args.has("-h")) {
-    note("Usage: node index.mjs [--check | --tools]");
+    note("Usage: node index.mjs [--check | --tools | --capabilities]");
     return 0;
   }
 
   if (args.has("--tools")) {
     assertUniqueNames(tools);
     note(`${tools.length} tool${tools.length === 1 ? "" : "s"}:`);
-    for (const t of tools) note(`  ${t.name.padEnd(24)} ${t.config.title ?? ""}`);
+    for (const t of tools) {
+      const scope = annotationsFor(t.name).readOnlyHint ? "read " : "WRITE";
+      const where = t.localOnly ? " (this machine only)" : "";
+      note(`  ${scope}  ${t.name.padEnd(24)} ${t.config.title ?? ""}${where}`);
+    }
+    return 0;
+  }
+
+  /*
+   * What this server offers beyond tools.
+   *
+   * --tools answered "what can it do" for two thirds of one capability. Prompts and resources are
+   * registered inside build(), which needs credentials, so neither shows up in a flag that
+   * deliberately runs without them — and for a while the only way to know whether a prompt had
+   * registered was to connect a client and look.
+   */
+  if (args.has("--capabilities")) {
+    const env = loadEnv();
+    const context = { db: createDb(env), url: env.url };
+
+    const prompts = promptsFor(context);
+    const resources = resourcesFor(context);
+
+    note(`tools      ${tools.length} (${tools.filter((t) => t.localOnly).length} local-only)`);
+    note(`prompts    ${prompts.length}`);
+    for (const p of prompts) {
+      const params = Object.keys(p.config.argsSchema ?? {}).join(", ");
+      note(`  ${p.name.padEnd(20)} ${params}`);
+    }
+    note(`resources  ${resources.length}`);
+    for (const r of resources) {
+      const uri = typeof r.uri === "string" ? r.uri : r.uri.uriTemplate.toString();
+      const listed = typeof r.uri === "string" || r.uri.listCallback ? "listed" : "template only";
+      note(`  ${uri.padEnd(22)} ${listed}`);
+    }
+
+    // Proves the whole thing assembles, which is the question this flag is really asked.
+    build(context, tools);
+    note("\nbuild() succeeded — everything registers.");
     return 0;
   }
 
