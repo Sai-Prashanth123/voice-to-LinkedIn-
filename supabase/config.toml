@@ -19,6 +19,18 @@ project_id = "uzqvebxcxgmseqjhfpku"
 [functions.telegram-webhook]
 verify_jwt = false
 
+# The MCP endpoint carries its OWN auth: clients send `Authorization: Bearer <mcp token>`, and
+# Supabase's JWT check would reject exactly the header the protocol uses.
+#
+# Pinned here rather than passed as --no-verify-jwt on the command line, because a bulk
+# `supabase functions deploy` with no flag would otherwise silently close this door and every
+# remote client would start getting 401s with nothing in the repository explaining why.
+#
+# It is not an open door. auth.mjs compares a bearer token in constant time and refuses everything
+# when no token is configured — 12 tests cover that, including the fail-closed case.
+[functions.mcp]
+verify_jwt = false
+
 [functions.transcript-webhook]
 verify_jwt = false
 

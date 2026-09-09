@@ -43,16 +43,46 @@ function token(): string {
   return t;
 }
 
-/** Only Josh may talk to this bot. */
-export function isAuthorised(chatId: number): boolean {
-  const allowed = secret("TELEGRAM_CHAT_ID");
-  return !!allowed && String(chatId) === allowed;
+/**
+ * Only Josh may talk to this bot — but "Josh" may be more than one chat.
+ *
+ * WHY A LIST
+ *
+ * TELEGRAM_CHAT_ID was a single value, so the bot answered exactly one chat and silently ignored
+ * every other — no reply, and nothing logged either, because an unauthorised update returns
+ * `{ok:true}` and stops. Handing the bot over therefore meant taking it away from whoever was
+ * testing it, and the person on the losing end could not tell the difference between "not
+ * authorised" and "broken".
+ *
+ * A comma-separated list makes handover additive: the operator's chat and Josh's can both work
+ * during a changeover. It is still an allowlist, not an open door — an id absent from it is
+ * refused exactly as before.
+ *
+ * FAILS CLOSED. An unset or empty variable authorises nobody, which is the same behaviour as
+ * before and the opposite of the mistake the desk's own middleware made for months.
+ */
+function allowedChatIds(): string[] {
+  return String(secret("TELEGRAM_CHAT_ID") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
+export function isAuthorised(chatId: number): boolean {
+  return allowedChatIds().includes(String(chatId));
+}
+
+/**
+ * Where the system SENDS.
+ *
+ * The first id in the list, deliberately: a message has one recipient, and broadcasting a draft to
+ * every authorised chat would put Josh's unpublished writing in front of whoever else was testing.
+ * Reading is shared during a handover; writing is not.
+ */
 export function joshChatId(): number {
-  const id = secret("TELEGRAM_CHAT_ID");
-  if (!id) throw new Error("TELEGRAM_CHAT_ID is not set");
-  return Number(id);
+  const [first] = allowedChatIds();
+  if (!first) throw new Error("TELEGRAM_CHAT_ID is not set");
+  return Number(first);
 }
 
 /** A row of tappable buttons under a message. `data` is capped at 64 bytes by Telegram. */
