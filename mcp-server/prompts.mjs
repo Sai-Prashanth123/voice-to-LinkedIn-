@@ -287,5 +287,44 @@ export function promptsFor(context) {
         );
       },
     },
+
+    {
+      name: "scrub-draft",
+      config: {
+        title: "Strip the AI traits out of a draft",
+        description:
+          "Run every AI-tell rule against a post and rewrite what it finds, in his voice rather " +
+          "than into flatness. Paste the draft as the argument.",
+        argsSchema: {
+          body: z.string().describe("The draft to scrub"),
+        },
+      },
+      async cb({ body }) {
+        // Always inline. Unlike the other five this prompt carries its subject with it, and a thin
+        // version would say "call scrub_draft on the post" to a client that does not have the post.
+        const result = await viaTool("scrub_draft", { body: body ?? "" }, context);
+
+        const found = result.findings.length
+          ? result.findings
+            .map((f) => `  · line ${f.line} — [${f.rule}] ${f.name}\n      "${f.matched}"\n      ${f.fix}`)
+            .join("\n")
+          : "  (nothing mechanical)";
+
+        return text(
+          `Rewrite this draft with the AI traits removed. ${result.verdict}\n\n` +
+          `FOUND\n${found}\n\n` +
+          `ALSO CHECK — these need reading, not a regex:\n` +
+          result.judgement_rules.map((j) => `  · [${j.id}] ${j.ask}`).join("\n") +
+          `\n\nDO NOT "FIX" THESE — they are measured in his own speech:\n` +
+          result.voice_exemptions.exempt.map((e) => `  · ${e.term} (${e.evidence})`).join("\n") +
+          `\n\nHOW TO REWRITE\n` +
+          result.rewrite_discipline.map((d) => `  · ${d}`).join("\n") +
+          `\n\nTHE STANDARD\n\n${result.library?.banned_phrases ?? "(banned-phrases section empty)"}` +
+          `\n\n---\n\nReturn the rewritten post, then a short list of what you changed and which ` +
+          `rule each change answers. Where a finding was a judgement call you decided not to act ` +
+          `on, say so rather than leaving it silently unaddressed.`,
+        );
+      },
+    },
   ];
 }

@@ -148,6 +148,10 @@ export const workTools = [
             "Missing detail stays missing. Write around a gap; never fill one.",
             "Call measure_draft before create_draft — it costs nothing and catches the mechanical " +
               "faults that otherwise take a whole gate run to find.",
+            "Then call scrub_draft and rewrite what it finds. It runs every AI-tell rule line by " +
+              "line, which is the one thing a model cannot do to its own output: reading a draft " +
+              "back, it will tell you it checked and it will be wrong. Rewrite in his voice — the " +
+              "tool hands you the voice guide alongside the findings for exactly that reason.",
             "Finish with create_draft, every claim carrying the verbatim span it rests on.",
           ],
           then: "Call next_work again — the draft you just wrote will come back to be gated.",

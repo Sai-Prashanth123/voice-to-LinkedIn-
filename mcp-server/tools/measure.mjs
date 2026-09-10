@@ -33,6 +33,7 @@
 import { z } from "zod";
 
 import { measurePost, per1k, tokens } from "../../scripts/lib/prose.mjs";
+import { scan, HIGH_CONFIDENCE } from "../aitells.mjs";
 import voiceprint from "../../data/josh/law/voiceprint.json" with { type: "json" };
 import sentinels from "../../data/josh/sentinels/latest.json" with { type: "json" };
 
@@ -130,6 +131,23 @@ export const measureTools = [
         );
       }
 
+      /*
+       * The AI-tell rules that are as decidable as an em dash.
+       *
+       * Only the high-confidence subset reaches `flags`, because this tool is read in passing and a
+       * writer who sees fifteen lines here stops reading all fifteen. The rest — rule of three,
+       * filler words, uniform paragraphs, the judgement questions — live in scrub_draft, which is
+       * called by somebody who has asked for the full pass.
+       *
+       * Every one of these is a construction that is simply wrong rather than merely worth noticing,
+       * and the fix is mechanical. "It's not X, it's Y" has no version that survives review.
+       */
+      const tells = scan(body);
+      const loud = tells.findings.filter((f) => HIGH_CONFIDENCE.has(f.rule));
+      for (const f of loud) {
+        flags.push(`${f.rule} ${f.name} — "${f.matched}" (line ${f.line}). ${f.fix}`);
+      }
+
       return {
         words: m.words,
         paragraphs: m.paragraphs,
@@ -168,6 +186,16 @@ export const measureTools = [
         lexicon: {
           signature_terms_used: signature,
           peer_words_used: avoided,
+        },
+
+        ai_tells: {
+          total: tells.counts.total,
+          by_rule: tells.counts.by_rule,
+          in_flags_above: loud.length,
+          note: tells.counts.total > loud.length
+            ? `${tells.counts.total - loud.length} further finding(s) are reported by scrub_draft, ` +
+              `along with the rules that need a judgement rather than a regex.`
+            : "Call scrub_draft for the full pass, including the rules a regex cannot decide.",
         },
 
         flags,
