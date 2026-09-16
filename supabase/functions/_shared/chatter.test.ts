@@ -96,3 +96,38 @@ test("a greeting attached to a real thought is still material", () => {
     assert.equal(isChatter(t), false, `"${t}" must still become a moment`);
   }
 });
+
+/**
+ * A greeting opens a conversation; an acknowledgement closes one.
+ *
+ * Both are chatter and neither becomes a moment. They need opposite replies, and the first version
+ * of this could not tell them apart — so "hi", "hello", "hi" in a row got three silences, which
+ * reads as a dead bot rather than a tactful one.
+ *
+ * Mirrors isGreeting in telegram-webhook/index.ts. Imported, not copied: this file used to carry a
+ * duplicate of isChatter and test the copy, which passed happily while the real one let "Hello"
+ * through twice.
+ */
+import { isGreeting } from "../telegram-webhook/index.ts";
+
+test("an opener gets answered", () => {
+  for (const t of ["hi", "Hello", "hey", "yo", "good morning", "morning", "Hey there", "hiya"]) {
+    assert.equal(isGreeting(t), true, `"${t}" should be answered, not ignored`);
+  }
+});
+
+test("an acknowledgement is left alone", () => {
+  // Answering these starts a loop that ends only when somebody gives up. "thanks" wants silence.
+  for (const t of ["thanks", "ok", "okay", "perfect", "cheers", "np", "👍", "good", "yep"]) {
+    assert.equal(isGreeting(t), false, `"${t}" closes the conversation and needs no reply`);
+  }
+});
+
+test("a greeting carrying a real thought is neither", () => {
+  // These are material, so they never reach the greeting check at all — but if the word set ever
+  // widens carelessly, this is what would break first.
+  for (const t of ["Hi, we lost the renewal today", "morning — the CFO stopped me four minutes in"]) {
+    assert.equal(isChatter(t), false, `"${t}" must still become a moment`);
+    assert.equal(isGreeting(t), false, `"${t}" is not a greeting`);
+  }
+});

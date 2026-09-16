@@ -407,12 +407,24 @@ async function triageAndHandle(
     return;
   }
 
-  // Free and certain: every word is an acknowledgement.
+  /*
+   * Chatter is not captured. Chatter is still ANSWERED.
+   *
+   * The first version treated those as the same decision and said nothing at all — three greetings
+   * in a row got silence, which reads as a dead bot rather than a tactful one. They are different
+   * questions. isChatter exists so a greeting does not become a permanent idea-bank entry (6.3); it
+   * was never a reason to ignore somebody.
+   *
+   * A greeting opens a conversation and wants a reply. An acknowledgement CLOSES one — "thanks",
+   * "ok", a thumbs up — and answering it starts a loop that only ends when one side gives up.
+   */
   if (isChatter(text)) {
     await setState(db, "nothing", null);
-    // A greeting on the very first message deserves a reply. On the hundredth it deserves silence,
-    // which is what the original filter was built for.
-    if (first) await sendMessage(chatId, orientation(first));
+    if (first) {
+      await sendMessage(chatId, orientation(first));
+    } else if (isGreeting(text)) {
+      await sendMessage(chatId, await greetingReply(db, await displayName(db, chatId)));
+    }
     return;
   }
 
@@ -1952,4 +1964,48 @@ function orientation(name: string): string {
     `sentence is enough to start.\n\n` +
     `You can also just ask me things: what is waiting on you, what is ready to write, what ` +
     `happened to a draft. /help has the rest.`;
+}
+
+/**
+ * A greeting opens a conversation. An acknowledgement closes one.
+ *
+ * Both are chatter and neither becomes a moment, but they want opposite replies: "hi" wants an
+ * answer, "thanks" wants to be left alone. Treating them alike meant three greetings in a row got
+ * silence.
+ */
+export function isGreeting(text: string): boolean {
+  const words = text.trim().toLowerCase().split(/[^a-z]+/).filter(Boolean);
+  if (words.length === 0 || words.length > 3) return false;
+  const OPENERS = new Set([
+    "hi", "hey", "hello", "hiya", "yo", "howdy", "morning", "afternoon", "evening", "gm",
+    "there", "good", "you",
+  ]);
+  // "good" and "you" are in the set so "good morning" and "hey you" match, but a message made only
+  // of those is not a greeting — "good" on its own is somebody agreeing with something.
+  const STANDALONE = new Set(["hi", "hey", "hello", "hiya", "yo", "howdy", "gm", "morning"]);
+  return words.every((w) => OPENERS.has(w)) && words.some((w) => STANDALONE.has(w));
+}
+
+/**
+ * What to say back, which depends on whether anything is actually waiting for them.
+ *
+ * A bot that answers "hello" with "hello" has wasted the exchange. If there is something on their
+ * plate this is the cheapest moment to mention it, and if there is not, the honest answer is an
+ * invitation rather than a status report nobody asked for.
+ */
+async function greetingReply(db: SupabaseClient, name: string | null): Promise<string> {
+  const who = name ? ` ${name}` : "";
+  const p = await picture(db);
+
+  const waiting: string[] = [];
+  if (p.candidates > 0) waiting.push(`${p.candidates} waiting on a few questions from you`);
+  if (p.draftsWaiting > 0) waiting.push(`${p.draftsWaiting} draft(s) to look at`);
+  if (p.readyToWrite > 0) waiting.push(`${p.readyToWrite} ready to write up`);
+
+  if (waiting.length === 0) {
+    return `Hello${who}. Nothing waiting on you — send me anything worth remembering and I will ` +
+      `take it from there.`;
+  }
+  return `Hello${who}. There is ${waiting.join(", and ")}. Say the word and I will bring it up, ` +
+    `or send me something new.`;
 }
