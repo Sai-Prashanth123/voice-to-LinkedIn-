@@ -597,7 +597,7 @@ function tighten(node: unknown): unknown {
  * deploy. Splits on commas or whitespace so a pasted list works however it was pasted, which is the
  * same reasoning the Telegram chat-id list uses.
  */
-function keysFor(p: CompatProvider): string[] {
+export function keysFor(p: CompatProvider): string[] {
   return requireSecret(p.keyName).split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
 }
 
@@ -630,10 +630,29 @@ async function postWithKeys(
   let lastStatus = 0;
   let lastDetail = "";
 
-  for (let i = 0; i < keys.length; i++) {
+  /*
+   * WHERE THE RING STARTS, AND WHY IT IS RANDOM.
+   *
+   * Starting at 0 every time makes the first key carry all the traffic and the rest carry only its
+   * failures — four keys, one of them working for a living. Worse, the whole account hits its
+   * per-minute limit on key one while three idle keys sit behind it, and every caller discovers
+   * this at the same moment.
+   *
+   * A counter would spread it evenly and cannot be kept: Edge Functions are short-lived and there
+   * is no shared memory between invocations, so a module-level index resets to 0 constantly and
+   * behaves exactly like starting at 0. Persisting one would mean a database write on the hot path
+   * of every model call to save a few cents of imbalance.
+   *
+   * So: random start, then walk the ring. Uniform across many calls, needs no state, and the
+   * failover behaviour below is unchanged — every key still gets tried before anything gives up.
+   */
+  const start = Math.floor(Math.random() * keys.length);
+
+  for (let n = 0; n < keys.length; n++) {
+    const key = keys[(start + n) % keys.length];
     const res = await fetch(p.url, {
       method: "POST",
-      headers: { Authorization: `Bearer ${keys[i]}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     if (res.ok) return res;
