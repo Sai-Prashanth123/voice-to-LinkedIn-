@@ -28,6 +28,7 @@ import { writeTools } from "./write.mjs";
 import { inspectTools } from "./inspect.mjs";
 import { visualTools } from "./visual.mjs";
 import { sessionTools } from "./sessions.mjs";
+import { trackingTools } from "./tracking.mjs";
 import { measureTools } from "./measure.mjs";
 import { scrubTools } from "./scrub.mjs";
 import { sentinelTools, voiceTools } from "./voice.mjs";
@@ -43,6 +44,7 @@ export const tools = [
   ...inspectTools,
   ...visualTools,
   ...sessionTools,
+  ...trackingTools,
   ...measureTools,
   ...scrubTools,
   ...voiceTools,

@@ -34,6 +34,7 @@ import { createDb } from "./db.mjs";
 import { tools } from "./tools/index.mjs";
 import { build } from "./server.mjs";
 import { authorise, toolsForScope } from "./auth.mjs";
+import { SCANNER_FILES } from "./generated/scanner-files.mjs";
 
 function jsonResponse(body, status) {
   return new Response(JSON.stringify(body), {
@@ -94,7 +95,18 @@ export async function handleMcpRequest(request, options = {}) {
   }
 
   const db = createDb({ url: project, key });
-  const context = { db, url: project };
+
+  // setup_session_tracking hands back an install command, and that command needs the connector's
+  // address and a token to report with. The caller already holds this token — it just used it — so
+  // echoing it back discloses nothing new. A read token is never echoed: it could not report anyway.
+  const presented = String(request.headers.get("authorization") ?? fromQuery ?? "")
+    .replace(/^Bearer\s+/i, "").trim();
+  const context = {
+    db,
+    url: project,
+    endpoint: `${project}/functions/v1/mcp`,
+    token: auth.scope === "write" ? presented : null,
+  };
 
   // The audit row is written on a best-effort basis and never blocks the answer. A logging failure
   // must not turn a working tool call into an error — but it is reported to the host's console, so
@@ -149,4 +161,116 @@ export function describe() {
     auth: "Authorization: Bearer <token>",
     note: "This endpoint speaks MCP. Point an MCP client at it rather than a browser.",
   }, 200);
+}
+
+/* ── Session tracking (4.4) ───────────────────────────────────────────────── */
+
+const MAX_DIGESTS = 10;
+const MAX_DIGEST_CHARS = 8000;
+
+/**
+ * The two plain HTTP routes the session scanner uses. Returns null for anything else, so the MCP
+ * handler still owns every other request.
+ *
+ *   GET  …/mcp/scanner/<file>   the scanner, for the install command. Public: it holds no secret.
+ *   POST …/mcp/sessions         a scanner reporting in. Write token only.
+ *
+ * WHY A ROUTE AND NOT A TOOL
+ *
+ * The scanner runs from a scheduler at 3am, with no model and no MCP client in sight. It needs one
+ * POST, not a protocol handshake.
+ *
+ * WHY EVERY RUN IS RECORDED, INCLUDING EMPTY ONES
+ *
+ * This input was silent for a month and nobody could tell a broken reader from a quiet week, because
+ * a quiet week also sends nothing. A `session_scan` event per run is what tells them apart.
+ */
+export async function handleSessionRoutes(request, options = {}) {
+  const env = options.env ?? process.env;
+  const url = new URL(request.url);
+
+  const file = url.pathname.match(/\/scanner\/([a-z]+\.mjs)$/)?.[1];
+  if (request.method === "GET" && file) {
+    const body = SCANNER_FILES[file];
+    if (!body) return new Response("not found", { status: 404 });
+    return new Response(body, {
+      status: 200,
+      headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
+
+  if (!/\/sessions\/?$/.test(url.pathname)) return null;
+  if (request.method !== "POST") return rpcError(405, "POST only.");
+
+  const auth = authorise(request.headers.get("authorization"), env);
+  if (!auth.ok) return rpcError(auth.status, auth.error);
+  if (auth.scope !== "write") {
+    return rpcError(403, "Reporting sessions writes to the idea bank, so it needs the write token.");
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return rpcError(400, "The body is not JSON.");
+  }
+
+  const digests = (Array.isArray(body?.digests) ? body.digests : [])
+    .filter((d) => d && typeof d.session_id === "string" && typeof d.digest === "string")
+    .slice(0, MAX_DIGESTS)
+    .map((d) => ({
+      session_id: d.session_id.slice(0, 200),
+      digest: d.digest.slice(0, MAX_DIGEST_CHARS),
+      started_at: typeof d.started_at === "string" ? d.started_at : undefined,
+    }));
+
+  const project = (env.SUPABASE_URL ?? "").replace(/\/+$/, "");
+  const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY ?? env.CONTENT_MCP_KEY ?? "";
+  if (!project || !serviceKey) return rpcError(503, "The server is not configured.");
+
+  // worker-triage's ingest, not a direct insert: it skips sessions already in the bank, and its
+  // sweep applies the second filter and the daily cap (4.4.3) that a direct write would skip.
+  let queued = 0;
+  let triageError = null;
+  if (digests.length > 0) {
+    try {
+      const res = await fetch(`${project}/functions/v1/worker-triage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+        body: JSON.stringify({ source: "claude_code", digests }),
+      });
+      const answer = await res.json().catch(() => ({}));
+      if (!res.ok) triageError = `worker-triage answered ${res.status}`;
+      queued = Number(answer.queued ?? 0);
+    } catch (err) {
+      triageError = err?.message ?? String(err);
+    }
+  }
+
+  const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const detail = {
+    machine: String(body?.machine ?? "unknown").slice(0, 120),
+    platform: String(body?.platform ?? "").slice(0, 20),
+    available: body?.available !== false,
+    sessions_changed: num(body?.sessions_changed),
+    passed: digests.length,
+    set_aside: num(body?.set_aside),
+    held_back_by_cap: num(body?.held_back_by_cap),
+    bar: num(body?.bar),
+    calibrated: body?.calibrated === true,
+    highest_score: num(body?.highest_score),
+    session_ids: digests.map((d) => d.session_id),
+    queued,
+    error: triageError,
+  };
+
+  const db = createDb({ url: project, key: serviceKey });
+  await db.insert("system_events", {
+    kind: "session_scan",
+    severity: triageError ? "warn" : "info",
+    detail,
+  }, { returning: false }).catch((err) => console.error(`session_scan event failed: ${err?.message ?? err}`));
+
+  if (triageError) return rpcError(502, `The digests could not be queued: ${triageError}`);
+  return jsonResponse({ ok: true, received: digests.length, queued }, 200);
 }

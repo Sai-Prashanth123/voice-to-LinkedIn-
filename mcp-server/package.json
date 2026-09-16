@@ -10,7 +10,8 @@
   "scripts": {
     "start": "node index.mjs",
     "check": "node index.mjs --check",
-    "test": "node --test"
+    "test": "node --test",
+    "embed:scanner": "node scripts/embed-scanner.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.22.0",

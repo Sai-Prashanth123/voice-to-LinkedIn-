@@ -31,7 +31,7 @@
  * protocol uses. auth.mjs fails closed when no token is configured.
  */
 
-import { describe, handleMcpRequest } from "../../../mcp-server/http.mjs";
+import { describe, handleMcpRequest, handleSessionRoutes } from "../../../mcp-server/http.mjs";
 
 /**
  * The tools reach Postgres with CONTENT_MCP_KEY, which is what mcp-server/.env holds on a laptop
@@ -52,6 +52,11 @@ function environment(): Record<string, string> {
 }
 
 Deno.serve(async (req: Request) => {
+  // The session scanner's download and report routes (4.4). Checked first because the download is
+  // an unauthenticated GET, which would otherwise get the browser description below.
+  const session = await handleSessionRoutes(req, { env: environment() });
+  if (session) return session;
+
   // A person who opens the URL in a browser gets a sentence, not a protocol error.
   if (req.method === "GET" && !req.headers.get("authorization")) return describe();
 

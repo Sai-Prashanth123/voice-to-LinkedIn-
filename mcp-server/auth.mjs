@@ -44,6 +44,8 @@ export const WRITE_TOOLS = new Set([
   "capture_thought",
   "answer_interview",
   "scan_sessions",
+  // Returns a command that installs a scheduled reporter holding this token.
+  "setup_session_tracking",
 ]);
 
 /**

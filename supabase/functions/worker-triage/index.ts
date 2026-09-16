@@ -75,11 +75,15 @@ async function ingestDigests(db: SupabaseClient, body: {
       .maybeSingle();
     if (existing) continue; // already seen this session
 
-    await db.from("jobs").insert({
+    // A session the scanner sees again (it keeps changing while it is open) hits the dedupe key.
+    // That is the intended refusal, and counting it as queued told the machine it had sent a new
+    // idea every two hours.
+    const { error } = await db.from("jobs").insert({
       type: "triage_digest",
       payload: { source, source_ref: d.session_id, digest: d.digest },
       dedupe_key: `triage:${source}:${d.session_id}`,
     });
+    if (error) continue;
     queued++;
   }
 

@@ -289,6 +289,27 @@ export function promptsFor(context) {
     },
 
     {
+      name: "track-my-sessions",
+      config: {
+        title: "Track my Claude Code sessions",
+        description:
+          "Install the session scanner on this computer so ideas from Claude Code sessions reach " +
+          "the idea bank automatically, then confirm it reported in.",
+        argsSchema: {},
+      },
+      async cb() {
+        return text(
+          "Set up Claude Code session tracking on this computer.\n\n" +
+          "1. Call setup_session_tracking with the platform of this machine.\n" +
+          "2. If you have a shell, run the commands it returns, in order. If you do not, show them " +
+          "and ask me to paste them into a terminal.\n" +
+          "3. Call session_tracking_status and tell me in two sentences whether this machine " +
+          "reported in, how many sessions it read, and the bar it chose.",
+        );
+      },
+    },
+
+    {
       name: "scrub-draft",
       config: {
         title: "Strip the AI traits out of a draft",

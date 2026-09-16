@@ -77,7 +77,7 @@ const BORING_MARKERS = [
  * sends; the caller decides both. That is not tidiness — saving state here was a real bug, where an
  * empty dry run marked all 558 sessions as seen and the next real run had nothing left to look at.
  */
-export async function scan() {
+export async function scan({ bar = MIN_SCORE, lookbackDays = LOOKBACK_DAYS, ignoreSeen = false } = {}) {
   if (!fs.existsSync(PROJECTS_DIR)) {
     return {
       available: false,
@@ -92,12 +92,12 @@ export async function scan() {
   }
 
   const state = loadState();
-  const cutoff = Date.now() - LOOKBACK_DAYS * 86_400_000;
+  const cutoff = Date.now() - lookbackDays * 86_400_000;
   const files = findSessions(PROJECTS_DIR).filter((f) => {
     const stat = fs.statSync(f);
     if (stat.mtimeMs < cutoff) return false;
     const seen = state.seen[f];
-    return !seen || seen.mtime !== stat.mtimeMs;
+    return ignoreSeen || !seen || seen.mtime !== stat.mtimeMs;
   });
 
   const digests = [];
@@ -110,7 +110,7 @@ export async function scan() {
 
     try {
       const session = await readSession(file);
-      const verdict = assess(session);
+      const verdict = assess(session, bar);
       allScores.push(verdict.score ?? 0);
       if (!verdict.interesting) {
         skipped++;
@@ -308,7 +308,7 @@ async function readSession(file) {
  * Returns a score so the caller can rank and take only the strongest few, which holds the line even
  * if this calibration drifts again (4.4.3).
  */
-function assess(s) {
+function assess(s, bar = MIN_SCORE) {
   const text = s.userMessages.join(" ").toLowerCase();
 
   // Too short to be anything, or too little of Josh in it to know what he thought.
@@ -350,7 +350,7 @@ function assess(s) {
   score -= boring * 4;
   score = Math.round(score * 10) / 10;
 
-  return { interesting: score >= MIN_SCORE, reasons, score };
+  return { interesting: score >= bar, reasons, score };
 }
 
 /**
@@ -431,7 +431,48 @@ function saveState(state) {
 
 // Exported so the calibration harness (eval/calibrate-cc.mjs) and unit tests can exercise the
 // filter directly. Threshold choices should be made against Josh's own corpus, not assumed.
-export { assess, buildDigest, DECISION_MARKERS, findSessions, readSession, saveState };
+export { assess, buildDigest, DECISION_MARKERS, findSessions, LOOKBACK_DAYS, MIN_SCORE, readSession, saveState };
+
+/**
+ * The bar for ONE machine, chosen from that machine's own sessions.
+ *
+ * The default of 12 was set against a corpus that was not Josh's. On the first machine this was
+ * installed on, the best session in three days scored 4.4, so the default meant nothing would ever
+ * pass and the input would stay silent while looking finished.
+ *
+ * Target: about `perWeek` sessions a week over the scored window (4.4.3 — a few a week, never ten a
+ * day). Only scores above zero count: zero means no reflective language, which assess() already
+ * refuses outright, so no bar can let those through.
+ *
+ * A machine with FEWER reflective sessions than the target gets a bar every one of them clears. An
+ * earlier version kept the default of 12 whenever there were under ten, and the first real machine
+ * — three reflective sessions a month — was installed, scheduled and reporting, with a bar nothing
+ * on it could ever reach. Three a month is already under the target, so there is nothing to hold
+ * back. Only a machine with no reflective session at all keeps the default.
+ */
+export function pickBar(scores, { spanDays, perWeek = 2 } = {}) {
+  const positive = scores.filter((n) => n > 0).sort((a, b) => b - a);
+  if (positive.length === 0) {
+    return {
+      bar: MIN_SCORE,
+      calibrated: false,
+      sample: 0,
+      why: `no session in ${spanDays} days had reflective language yet, so the default bar of ${MIN_SCORE} stays until the next calibration`,
+    };
+  }
+  const target = Math.max(1, Math.round(perWeek * Math.max(spanDays / 7, 1)));
+  // Ties at the boundary all pass. Stepping above them could shut out every session when the scores
+  // are bunched, and the per-run and daily caps already hold the volume.
+  const bar = positive[Math.min(target, positive.length) - 1];
+  return {
+    bar,
+    calibrated: true,
+    sample: positive.length,
+    why: positive.length <= target
+      ? `${positive.length} reflective sessions in ${spanDays} days is under ${perWeek} a week, so all of them clear it`
+      : `about ${perWeek} a week, measured across ${positive.length} reflective sessions in ${spanDays} days`,
+  };
+}
 
 // Only run when invoked directly, so importing the filter does not start a send.
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
