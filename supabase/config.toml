@@ -34,6 +34,12 @@ verify_jwt = false
 [functions.transcript-webhook]
 verify_jwt = false
 
+# Written down rather than left to the default, because a deploy that forgot the flag once already
+# turned this off. cc-submit is the write door to the idea bank: it applies extractions, records
+# interview answers and creates moments. It must never be reachable without a project key.
+[functions.cc-submit]
+verify_jwt = true
+
 [functions.worker-dispatch]
 verify_jwt = true
 

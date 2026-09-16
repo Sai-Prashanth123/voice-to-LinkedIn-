@@ -30,7 +30,8 @@ import { visualTools } from "./visual.mjs";
 import { sessionTools } from "./sessions.mjs";
 import { measureTools } from "./measure.mjs";
 import { scrubTools } from "./scrub.mjs";
-import { voiceTools } from "./voice.mjs";
+import { sentinelTools, voiceTools } from "./voice.mjs";
+import { interviewTools } from "./interview.mjs";
 // Imported last and registered last: it calls the brief tools through the same registry, so it
 // must not be pulled in while that registry is still being assembled.
 import { workTools } from "./work.mjs";
@@ -45,7 +46,9 @@ export const tools = [
   ...measureTools,
   ...scrubTools,
   ...voiceTools,
+  ...sentinelTools,
   ...workTools,
+  ...interviewTools,
   ...writeTools,
 ];
 

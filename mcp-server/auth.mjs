@@ -40,6 +40,9 @@ export const WRITE_TOOLS = new Set([
   "create_visual",
   "submit_extraction",
   "submit_candidates",
+  // The interview, from a surface that is not Telegram. Both write turns to the idea bank.
+  "capture_thought",
+  "answer_interview",
   "scan_sessions",
 ]);
 

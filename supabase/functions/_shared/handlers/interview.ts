@@ -30,21 +30,78 @@ import { sendParked } from "../parked.ts";
 import { isRealName, unclearedNames } from "../names.ts";
 import type { InterviewDepth, Job } from "../types.ts";
 
+/**
+ * What choosing the next question decided. Returned rather than sent.
+ *
+ * WHY THIS SPLIT EXISTS
+ *
+ * handleInterviewExtract was split into a pure applyExtraction for exactly this reason, and that
+ * split is what made cc-submit — and therefore Claude Code extraction — possible. handleInterviewStep
+ * never got the same treatment, so asking a question and putting it on Telegram were one function.
+ *
+ * That was fine while Telegram was the only surface. It stopped being fine the day Josh's Claude
+ * session showed him "Waiting on an interview with you (6)" and gave him no way to answer one: the
+ * bot could ask but could not reach him, and Claude could reach him but could not ask. All six
+ * expired at seven days and parked.
+ *
+ * So the decision is here and delivery is the caller's. The alternative — duplicating this logic in
+ * a second surface — would duplicate the three hard limits below, every one of which is written up
+ * in this file as a bug found in production.
+ */
+export interface NextStep {
+  /** asked = a question is waiting. finished/parked = the interview is over. nothing = no-op. */
+  action: "asked" | "finished" | "parked" | "nothing";
+  momentId: number;
+  /** The question itself, when action is "asked". Already recorded as a turn. */
+  question?: string;
+  /** "3 of at most 8." Counted in code; a model asked to report it would eventually report it wrong. */
+  progress?: string;
+  /** 5.12 — said only when an answer earned it. */
+  encouragement?: string;
+  parkReason?: string;
+  /** Why nothing happened, for a caller that has to explain itself to a person. */
+  note?: string;
+}
+
+/** The Telegram job. Chooses, then delivers. */
 export async function handleInterviewStep(db: SupabaseClient, job: Job): Promise<void> {
-  const momentId = Number(job.payload.moment_id);
+  const step = await chooseNextQuestion(db, Number(job.payload.moment_id));
+  await deliverQuestion(db, step);
+}
+
+/**
+ * Everything that decides what happens next, and nothing that sends anything.
+ *
+ * Every write it performs — the turn, depth_reached, the park, the extract job — is work that must
+ * happen regardless of which surface asked. Only the telling is left out.
+ */
+export async function chooseNextQuestion(
+  db: SupabaseClient,
+  momentId: number,
+): Promise<NextStep> {
   const session = await loadSession(db, momentId);
   const maxQuestions = await getSetting(db, "interview_max_questions", 8);
 
   const { data: moment } = await db.from("moments").select("*").eq("id", momentId).single();
-  if (!moment || moment.killed) return;
+  if (!moment) return { action: "nothing", momentId, note: "No such moment." };
+  if (moment.killed) return { action: "nothing", momentId, note: "That moment was killed." };
   if (["mined", "parked", "queued", "drafted", "gated", "scheduled", "published"].includes(moment.status)) {
-    return; // already finished with; a retried job must not reopen it
+    // already finished with; a retried job must not reopen it
+    return {
+      action: "nothing",
+      momentId,
+      note: `That interview is already finished — the moment is ${moment.status}.`,
+    };
   }
 
   // 5.8 — take what you have and move on rather than running the session into the ground.
   if (session.questionsAsked >= maxQuestions) {
     await enqueue(db, "interview_extract", { moment_id: momentId });
-    return;
+    return {
+      action: "finished",
+      momentId,
+      note: `${maxQuestions} questions is the limit (5.8). Extracting what it has.`,
+    };
   }
 
   // 6.4 — the first question of a re-opened session is not the model's to choose.
@@ -55,8 +112,8 @@ export async function handleInterviewStep(db: SupabaseClient, job: Job): Promise
   // tapped the button because he DOES remember more; he simply has not said it yet. Asking is the
   // whole of what the button offered, so it is asked directly rather than requested from a model.
   if (session.reopened && session.questionsAsked === 0) {
-    await askReopeningQuestion(db, momentId);
-    return;
+    const question = await askReopeningQuestion(db, momentId);
+    return { action: "asked", momentId, question, progress: `1 of at most ${maxQuestions}.` };
   }
 
   const library = await loadLibrary(db, "interview");
@@ -95,22 +152,20 @@ export async function handleInterviewStep(db: SupabaseClient, job: Job): Promise
   const isPushback = next.is_pushback && !session.pushbackUsed;
   if (next.is_pushback && session.pushbackUsed) {
     await enqueue(db, "interview_extract", { moment_id: momentId });
-    return;
+    return {
+      action: "finished",
+      momentId,
+      note: "One pushback per interview is the limit (5.3). Extracting what it has.",
+    };
   }
 
   if (next.action === "park") {
     // None of the three depths produced anything. That is a real answer (clause 5), and the depth
     // reached is genuinely none however many rungs were tried.
+    const reason = next.park_reason || "No specific moment behind this yet.";
     await db.from("moments").update({ depth_reached: "none" }).eq("id", momentId);
-    await park(db, momentId, next.park_reason || "No specific moment behind this yet.");
-    await advanceSeeding(db);
-    await sendParked(
-      db,
-      momentId,
-      `Parked that one — ${next.park_reason || "there is no story behind it yet"}.\n\n` +
-        `It stays in the bank. Something that is not ready now is often the right post later.`,
-    );
-    return;
+    await park(db, momentId, reason);
+    return { action: "parked", momentId, parkReason: reason };
   }
 
   if (next.action === "finish") {
@@ -125,7 +180,7 @@ export async function handleInterviewStep(db: SupabaseClient, job: Job): Promise
       depth_reached: deepest(session.depthReached, next.depth as InterviewDepth),
     }).eq("id", momentId);
     await enqueue(db, "interview_extract", { moment_id: momentId });
-    return;
+    return { action: "finished", momentId, note: "Enough material. Extracting it." };
   }
 
   const questionKey = next.question_key?.trim() || null;
@@ -166,9 +221,41 @@ export async function handleInterviewStep(db: SupabaseClient, job: Job): Promise
     ? "One more after this, at most."
     : `${askedNow} of at most ${maxQuestions}.`;
 
-  const text = (next.encouragement?.trim()
-    ? `${next.encouragement.trim()}\n\n${next.question}`
-    : next.question) + `\n\n${progress}`;
+  return {
+    action: "asked",
+    momentId,
+    question: next.question,
+    progress,
+    encouragement: next.encouragement?.trim() || undefined,
+  };
+}
+
+/**
+ * Putting a chosen question on Telegram. The only Telegram-aware half of the old function.
+ *
+ * A surface that is not Telegram — the MCP interview tools — calls chooseNextQuestion and skips
+ * this entirely, which is the whole point of the split.
+ */
+export async function deliverQuestion(db: SupabaseClient, step: NextStep): Promise<void> {
+  const { action, momentId } = step;
+
+  if (action === "parked") {
+    // These two were inside the park branch before. They are Telegram, so they live here now.
+    await advanceSeeding(db);
+    await sendParked(
+      db,
+      momentId,
+      `Parked that one — ${step.parkReason || "there is no story behind it yet"}.\n\n` +
+        `It stays in the bank. Something that is not ready now is often the right post later.`,
+    );
+    return;
+  }
+
+  if (action !== "asked" || !step.question) return;
+
+  const text = (step.encouragement
+    ? `${step.encouragement}\n\n${step.question}`
+    : step.question) + (step.progress ? `\n\n${step.progress}` : "");
 
   /*
    * Every question carries a way out that is not silence.
@@ -605,7 +692,7 @@ export async function startNextSeedMoment(db: SupabaseClient): Promise<void> {
 
 
 /** The one fixed question in the system: what he came back to say. */
-async function askReopeningQuestion(db: SupabaseClient, momentId: number): Promise<void> {
+async function askReopeningQuestion(db: SupabaseClient, momentId: number): Promise<string> {
   const question = "What came back to you about this one?";
 
   await appendTurn(db, momentId, {
@@ -618,14 +705,7 @@ async function askReopeningQuestion(db: SupabaseClient, momentId: number): Promi
     is_pushback: false,
   });
 
-  const messageId = await sendMessage(joshChatId(), question);
-  if (messageId) {
-    await db.from("sent_messages").insert({
-      telegram_message_id: messageId,
-      kind: "question",
-      moment_id: momentId,
-    });
-  }
-
-  await pointStateAtMoment(db, momentId);
+  // Recorded, not sent. deliverQuestion puts it on Telegram when that is the surface; the MCP
+  // interview tools return it to whoever asked instead.
+  return question;
 }

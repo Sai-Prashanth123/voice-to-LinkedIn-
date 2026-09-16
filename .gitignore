@@ -37,3 +37,10 @@ docs/from-josh/transcripts/
 
 # HTTP MCP tokens (mcp-server/mint-http-tokens.mjs). Secrets, never committed.
 mcp-server/.http-tokens
+
+# Supabase CLI scratch — project ref and service versions, rewritten on every command.
+supabase/.temp/
+
+# Exported session transcripts. They contain whatever was pasted into the session, which has
+# included API keys more than once.
+20*-this-session-is-being-continued-*.txt

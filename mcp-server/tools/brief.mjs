@@ -399,7 +399,7 @@ export const briefTools = [
       });
 
       const raw = await db.select("raw_inputs", {
-        select: "kind,text_body,created_at",
+        select: "kind,text_body,transcript,created_at",
         moment_id: `eq.${id}`,
         order: "created_at.asc",
       });
@@ -416,7 +416,16 @@ export const briefTools = [
       // the same shape the validator rebuilds it from, and two renderings of one transcript is
       // exactly the kind of near-identical pair that drifts without anybody noticing.
       const transcript = renderTranscript({ turns });
-      const seed = raw.map((r) => String(r.text_body ?? "").trim()).filter(Boolean).join("\n\n");
+      // TRANSCRIPT FIRST, THEN text_body.
+      //
+      // This read text_body alone. For a voice note — the input the whole system is built around —
+      // the words live in `transcript` and text_body is null, so `what_josh_sent` came back empty
+      // and the extractor was handed a conversation with no opening. It had the answers and not the
+      // thing being answered about.
+      const seed = raw
+        .map((r) => String(r.transcript ?? r.text_body ?? "").trim())
+        .filter(Boolean)
+        .join("\n\n");
 
       return {
         moment_id: id,

@@ -177,13 +177,33 @@ const PRICING: Record<string, { in: number; out: number }> = {
   "gemini-3.1-flash-lite": { in: 0, out: 0 },
 };
 
-export type ProviderName = "anthropic" | "groq" | "huggingface" | "gemini";
+
+/**
+ * OpenRouter, the first provider here that is not a free tier wearing a disguise.
+ *
+ * Every other compat entry exists because it was free, and every one of them bought that with a
+ * limit that shaped the system around it: Groq caps tokens per minute, Gemini caps REQUESTS PER DAY
+ * at twenty on the models worth using. Acceptance test 8 needs eighty gate checks and could not
+ * finish inside four days of Gemini quota, which is why claims_trace has been failing for weeks.
+ *
+ * These are the real Claude models, priced per token, reached through one OpenAI-compatible
+ * endpoint. Pinned rather than aliased for the same reason as GEMINI_MODELS: 8.4 records which model
+ * wrote each draft, and an alias makes that record mean something different next month.
+ */
+const OPENROUTER_MODELS: Record<Role, string> = {
+  STRONG: "anthropic/claude-opus-5",
+  MID: "anthropic/claude-sonnet-5",
+  CHEAP: "anthropic/claude-haiku-4.5",
+};
+
+export type ProviderName = "anthropic" | "groq" | "huggingface" | "gemini" | "openrouter";
 
 export function provider(): ProviderName {
   const set = secret("LLM_PROVIDER");
   if (set === "groq") return "groq";
   if (set === "huggingface" || set === "hf") return "huggingface";
   if (set === "gemini" || set === "google") return "gemini";
+  if (set === "openrouter" || set === "or") return "openrouter";
   return "anthropic";
 }
 
@@ -374,7 +394,7 @@ async function anthropicText(opts: CallOptions, acc: Accounting): Promise<string
  * this account, so a null budget means "do not clamp the completion to fit a minute".
  */
 export interface CompatProvider {
-  name: "groq" | "huggingface" | "gemini";
+  name: "groq" | "huggingface" | "gemini" | "openrouter";
   url: string;
   keyName: string;
   models: Record<Role, string>;
@@ -397,7 +417,7 @@ export interface CompatProvider {
   minCompletionTokens?: number;
 }
 
-export const COMPAT: Record<"groq" | "huggingface" | "gemini", CompatProvider> = {
+export const COMPAT: Record<"groq" | "huggingface" | "gemini" | "openrouter", CompatProvider> = {
   groq: {
     name: "groq",
     url: "https://api.groq.com/openai/v1/chat/completions",
@@ -438,6 +458,25 @@ export const COMPAT: Record<"groq" | "huggingface" | "gemini", CompatProvider> =
     // Measured: 2,874 tokens for one gate-sized verdict, almost all of it reasoning before the
     // two fields that were actually asked for.
     minCompletionTokens: 6000,
+  },
+  openrouter: {
+    name: "openrouter",
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    keyName: "OPENROUTER_API_KEY",
+    models: OPENROUTER_MODELS,
+    // Paid per token rather than rationed, so none of the accommodations the free tiers needed
+    // apply. No per-minute token budget, no spacing, and the eight gate checks can finally run the
+    // way gate.ts always wanted to run them.
+    tpmBudget: null,
+    maxConcurrent: 8,
+    spacingMs: 0,
+    // Claude models carry image blocks, which is what makes clause 10 possible at all. Two images
+    // are sitting in raw_inputs right now with transcript null, deferred because the configured
+    // provider could not see them; worker-select rebuilds those the moment a vision-capable
+    // provider is configured, without anyone remembering to ask.
+    vision: true,
+    // No downgrade needed: the role model can see the image itself.
+    visionModel: null,
   },
 };
 
@@ -550,6 +589,68 @@ function tighten(node: unknown): unknown {
   return node;
 }
 
+/**
+ * Every key configured for this provider, in order.
+ *
+ * One name holding a comma-separated list rather than KEY_1, KEY_2, KEY_3 — because the number of
+ * keys is not a thing the code should have an opinion about, and adding a fourth should not be a
+ * deploy. Splits on commas or whitespace so a pasted list works however it was pasted, which is the
+ * same reasoning the Telegram chat-id list uses.
+ */
+function keysFor(p: CompatProvider): string[] {
+  return requireSecret(p.keyName).split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * POST to the provider, moving to the next key when the current one cannot serve the request.
+ *
+ * WHY THIS EXISTS
+ *
+ * Free and trial keys do not degrade, they stop. A key with no credit answers 402 to every request
+ * forever, and until now that surfaced as the whole pipeline failing with no way back except
+ * somebody noticing and editing a secret. Three keys were supplied at once, which is somebody
+ * saying out loud that they expect them to run out.
+ *
+ * ONLY THREE STATUSES ROTATE, and the distinction matters:
+ *
+ *   401  this key is wrong        — the next one might not be
+ *   402  this key is out of money — the next one might have some
+ *   429  this key is rate limited — the next one has its own limit
+ *
+ * Anything else is about the REQUEST, not the key: a 400 schema error or a 500 upstream fault will
+ * fail identically on every key, so retrying would turn one clear error into three slow ones and
+ * hide which key was actually in use.
+ */
+async function postWithKeys(
+  p: CompatProvider,
+  payload: unknown,
+): Promise<Response> {
+  const keys = keysFor(p);
+  const ROTATE = new Set([401, 402, 429]);
+  let lastStatus = 0;
+  let lastDetail = "";
+
+  for (let i = 0; i < keys.length; i++) {
+    const res = await fetch(p.url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${keys[i]}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) return res;
+
+    lastStatus = res.status;
+    lastDetail = (await res.text()).slice(0, 300);
+    if (!ROTATE.has(res.status)) break;
+  }
+
+  // Says how many were tried, because "402" on its own reads as "no credit" when the real news is
+  // "no credit on any of the three".
+  const tried = keys.length > 1 ? ` (tried ${keys.length} keys)` : "";
+  throw new Error(
+    `${isTransient(lastStatus, lastDetail) ? "TRANSIENT " : ""}${p.name} ${lastStatus}${tried}: ${lastDetail}`,
+  );
+}
+
 async function compatStructured<S extends z.ZodType>(
   p: CompatProvider,
   schema: S,
@@ -561,26 +662,15 @@ async function compatStructured<S extends z.ZodType>(
   const jsonSchema = tighten(z.toJSONSchema(schema, { io: "output" }));
 
   try {
-    const res = await fetch(p.url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${requireSecret(p.keyName)}`,
-        "Content-Type": "application/json",
+    const res = await postWithKeys(p, {
+      model,
+      max_completion_tokens: clampCompletion(p, opts.system, opts.messages, opts.maxTokens ?? 4000),
+      messages: toOpenAIMessages(opts.system, opts.messages, p.vision),
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "result", strict: true, schema: jsonSchema },
       },
-      body: JSON.stringify({
-        model,
-        max_completion_tokens: clampCompletion(p, opts.system, opts.messages, opts.maxTokens ?? 4000),
-        messages: toOpenAIMessages(opts.system, opts.messages, p.vision),
-        response_format: {
-          type: "json_schema",
-          json_schema: { name: "result", strict: true, schema: jsonSchema },
-        },
-      }),
     });
-    if (!res.ok) {
-      const detail = (await res.text()).slice(0, 300);
-      throw new Error(`${isTransient(res.status, detail) ? "TRANSIENT " : ""}${p.name} ${res.status}: ${detail}`);
-    }
 
     const data = await res.json();
     await record(acc.db, opts, model, normaliseUsage(data), started, null);
@@ -625,22 +715,11 @@ async function compatText(p: CompatProvider, opts: CallOptions, acc: Accounting)
   const model = modelFor(p, opts);
 
   try {
-    const res = await fetch(p.url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${requireSecret(p.keyName)}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        max_completion_tokens: clampCompletion(p, opts.system, opts.messages, opts.maxTokens ?? 2000),
-        messages: toOpenAIMessages(opts.system, opts.messages, p.vision),
-      }),
+    const res = await postWithKeys(p, {
+      model,
+      max_completion_tokens: clampCompletion(p, opts.system, opts.messages, opts.maxTokens ?? 2000),
+      messages: toOpenAIMessages(opts.system, opts.messages, p.vision),
     });
-    if (!res.ok) {
-      const detail = (await res.text()).slice(0, 300);
-      throw new Error(`${isTransient(res.status, detail) ? "TRANSIENT " : ""}${p.name} ${res.status}: ${detail}`);
-    }
 
     const data = await res.json();
     await record(acc.db, opts, model, normaliseUsage(data), started, null);

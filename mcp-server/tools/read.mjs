@@ -19,6 +19,7 @@
 import { z } from "zod";
 import { gatherAll } from "../../eval/gather.mjs";
 import { score, overall, summarise } from "../../supabase/functions/_shared/acceptance.ts";
+import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
 
 const MOMENT_FIELDS =
   "id,ref,source,status,depth_reached,pillar,audience,strength,pinned,killed," +
@@ -154,7 +155,14 @@ export const readTools = [
 
       return {
         moment,
-        material: material[0] ?? null,
+        // sourceEntry, not the raw row — 9.1 defines exactly what a drafter may see.
+        //
+        // This returned `material[0]` for months, which handed back search_text and every other
+        // column alongside the ten fields. The moment:// resource has always narrowed it and
+        // capabilities.test.mjs asserts that it does; the same assertion was never written for the
+        // tool, so the resource was careful and the tool beside it was not. A model reads whichever
+        // one it reaches first.
+        material: sourceEntry(material[0] ?? null),
         raw_inputs: raw,
         interview: turns,
         names,

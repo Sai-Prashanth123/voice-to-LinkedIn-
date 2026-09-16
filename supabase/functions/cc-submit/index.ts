@@ -32,9 +32,13 @@
 
 import { admin, getSetting, logEvent } from "../_shared/db.ts";
 import { loadSecrets } from "../_shared/secrets.ts";
-import { json } from "../_shared/jobs.ts";
-import { applyExtraction, seedText } from "../_shared/handlers/interview.ts";
-import { loadSession, renderTranscript } from "../_shared/session.ts";
+import { enqueue, json } from "../_shared/jobs.ts";
+import {
+  applyExtraction,
+  chooseNextQuestion,
+  seedText,
+} from "../_shared/handlers/interview.ts";
+import { appendTurn, loadSession, renderTranscript } from "../_shared/session.ts";
 import { verifyExtraction } from "../_shared/extraction.ts";
 import type { Extraction } from "../_shared/schemas.ts";
 import { applyCandidates, type Candidate, candidateRoom } from "../_shared/triage.ts";
@@ -54,6 +58,8 @@ Deno.serve(async (req) => {
   // is a discriminated union whose only job is to satisfy a check the routes already do.
   let body: {
     kind?: string;
+    text?: string;
+    answer?: string;
     moment_id?: number;
     extracted?: Extraction;
     source?: string;
@@ -67,10 +73,14 @@ Deno.serve(async (req) => {
   }
 
   if (body.kind === "candidates") return await submitCandidates(db, body);
+  if (body.kind === "capture") return await capture(db, body);
+  if (body.kind === "interview_next") return await interviewNext(db, body);
+  if (body.kind === "interview_answer") return await interviewAnswer(db, body);
 
   if (body.kind !== "extraction") {
     return json({
-      error: `unknown kind "${body.kind ?? ""}". Expected "extraction" or "candidates".`,
+      error: `unknown kind "${body.kind ?? ""}". Expected "extraction", "candidates", ` +
+        `"capture", "interview_next" or "interview_answer".`,
     }, 400);
   }
 
@@ -222,4 +232,131 @@ async function submitCandidates(db: SupabaseClient, body: {
       : `${surfaced} candidate(s) stored as half_mined. Each needs Josh interviewed before it ` +
         `can be drafted (4.3.3), and the opening question is stored rather than sent.`,
   });
+}
+
+/* ── The interview, off Telegram ───────────────────────────────────────────────────────────────
+ *
+ * WHY THESE EXIST
+ *
+ * Josh's Claude session told him "Waiting on an interview with you (6)" and gave him no way to
+ * answer one. Telegram could ask but was not reaching him; Claude was reaching him but could not
+ * ask. All six questions expired at seven days and parked, which is every call transcript he has
+ * ever sent.
+ *
+ * The write authority argument is unchanged from the top of this file: content_mcp holds no INSERT
+ * on moments, raw_inputs or interview_turns, and it should not. The model decides; this writes.
+ */
+
+/** 4.1 — a thought, from a surface that is not Telegram. */
+async function capture(db: SupabaseClient, body: { text?: string }) {
+  const text = String(body.text ?? "").trim();
+  if (!text) return json({ error: "text is required" }, 400);
+
+  const { data: moment, error } = await db.from("moments").insert({
+    source: "raw_capture",
+    status: "captured",
+  }).select("id, ref").single();
+  if (error || !moment) return json({ error: `could not create moment: ${error?.message}` }, 500);
+
+  await db.from("raw_inputs").insert({
+    moment_id: moment.id,
+    kind: "text",
+    text_body: text,
+  });
+
+  // Same as Telegram capture: the interview starts itself. Without this the moment sits at
+  // `captured` with no turns, which is exactly the state seven of them are in right now.
+  await enqueue(db, "interview_step", { moment_id: moment.id });
+  await logEvent(db, "captured_via_mcp", "info", { moment_id: moment.id, ref: moment.ref });
+
+  return json({
+    ok: true,
+    moment_id: moment.id,
+    moment_ref: moment.ref,
+    next: "The first question is being written. Call next_interview_question in a moment to get it.",
+  });
+}
+
+/** The open question for a moment, asking a new one if there is room. */
+async function interviewNext(db: SupabaseClient, body: { moment_id?: number }) {
+  const momentId = Number(body.moment_id);
+  if (!Number.isInteger(momentId)) return json({ error: "moment_id must be an integer" }, 400);
+
+  // A question already waiting is NOT re-asked. Calling this twice must not burn two of the eight
+  // (5.8), and must not leave two unanswered questions pointing at one moment.
+  const session = await loadSession(db, momentId);
+  const last = session.turns[session.turns.length - 1];
+  if (last?.role === "question") {
+    return json({
+      ok: true,
+      action: "asked",
+      moment_id: momentId,
+      question: last.body,
+      already_open: true,
+      progress: `${session.questionsAsked} of at most 8 asked so far.`,
+      next: "Answer it with answer_interview. It was already waiting, so no new question was spent.",
+    });
+  }
+
+  const step = await chooseNextQuestion(db, momentId);
+  return json({ ok: true, ...step, moment_id: momentId, next: nextFor(step.action) });
+}
+
+/** Record an answer, then take the next step — all of it, without Telegram. */
+async function interviewAnswer(db: SupabaseClient, body: { moment_id?: number; answer?: string }) {
+  const momentId = Number(body.moment_id);
+  if (!Number.isInteger(momentId)) return json({ error: "moment_id must be an integer" }, 400);
+
+  const answer = String(body.answer ?? "").trim();
+  if (!answer) return json({ error: "answer is required" }, 400);
+
+  const { data: moment } = await db
+    .from("moments").select("id, ref, status, killed").eq("id", momentId).maybeSingle();
+  if (!moment) return json({ error: `no moment with id ${momentId}` }, 404);
+  if (moment.killed) return json({ error: `moment ${momentId} has been killed` }, 409);
+
+  // An answer with no question is a thought, not an answer — and filing it as one would put it in a
+  // transcript under a question nobody asked.
+  const session = await loadSession(db, momentId);
+  const last = session.turns[session.turns.length - 1];
+  if (last?.role !== "question") {
+    return json({
+      error: "There is no open question on that moment.",
+      moment_ref: moment.ref,
+      next: "Call next_interview_question first, or capture_thought if this is something new.",
+    }, 409);
+  }
+
+  await appendTurn(db, momentId, {
+    role: "answer",
+    body: answer,
+    question_key: null,
+    depth: null,
+    is_pushback: false,
+  });
+
+  // Synchronous rather than enqueued, deliberately. `enqueue("interview_step")` would work and the
+  // next question would go to TELEGRAM, which is the surface this whole route exists to avoid.
+  const step = await chooseNextQuestion(db, momentId);
+
+  await logEvent(db, "interview_answered_via_mcp", "info", {
+    moment_id: momentId,
+    ref: moment.ref,
+    action: step.action,
+  });
+
+  return json({ ok: true, ...step, moment_id: momentId, moment_ref: moment.ref, next: nextFor(step.action) });
+}
+
+function nextFor(action: string): string {
+  if (action === "asked") return "Answer it with answer_interview.";
+  if (action === "finished") {
+    return "The interview is over and extraction is queued. It will become material on its own; " +
+      "call get_moment in a minute to see what it produced.";
+  }
+  if (action === "parked") {
+    return "Parked, which is a real outcome and not a failure (clause 5). It stays in the bank and " +
+      "reopens if he adds to it.";
+  }
+  return "Nothing to do on that moment.";
 }

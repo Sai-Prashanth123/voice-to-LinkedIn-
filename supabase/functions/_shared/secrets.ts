@@ -45,6 +45,7 @@ export const SECRET_NAMES = [
   "LINKEDIN_CLIENT_SECRET",
   "HUGGINGFACE_API_KEY",
   "GEMINI_API_KEY",
+  "OPENROUTER_API_KEY",
   // 11.4 — where The desk is reachable. Read by rewriteLink so the "Rewrite it" button in the
   // weekly pass hands Josh a working link rather than the words "open The desk".
   "APP_URL",

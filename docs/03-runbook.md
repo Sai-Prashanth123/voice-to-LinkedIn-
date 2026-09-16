@@ -91,6 +91,10 @@ supabase db push                      # applies supabase/migrations in order
 select vault.create_secret('https://<ref>.supabase.co/functions/v1', 'functions_base_url');
 select vault.create_secret('<service_role_key>', 'service_role_key');
 
+# Telegram access
+# After migration 0035 and the webhook deploy, a new person sends /start and is registered
+# automatically. Approved users share the same bank and drafts; no Vault edit is needed per user.
+
 # 3. Edge function environment
 supabase secrets set \
   ANTHROPIC_API_KEY=... \

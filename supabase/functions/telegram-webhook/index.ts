@@ -17,6 +17,12 @@ import type { Awaiting } from "../_shared/types.ts";
 import { admin, getSetting, logEvent, park } from "../_shared/db.ts";
 import { loadSecrets, secret } from "../_shared/secrets.ts";
 import { approveAccess, isApproved, requestAccess } from "../_shared/telegram-access.ts";
+import {
+  displayName,
+  readName,
+  setDisplayName,
+  triageMessage,
+} from "../_shared/handlers/chat.ts";
 import { enqueue, json, nudge } from "../_shared/jobs.ts";
 import { pushBack } from "../_shared/pushback.ts";
 import { recordVerdict } from "../_shared/outcome.ts";
@@ -338,7 +344,85 @@ async function route(db: SupabaseClient, msg: Message): Promise<void> {
     }
   }
 
-  // ── Nothing pending: this is a new moment (4.1) ────────────────────────────
+  // ── Nothing pending: work out what this actually is ────────────────────────
+  //
+  // This used to be `captureNewMoment` alone, which made "anything I do not recognise is a moment"
+  // the system's answer to every message. See handlers/chat.ts for what that produced.
+  await triageAndHandle(db, chatId, msg, text);
+}
+
+/**
+ * The default branch, which used to be a single line.
+ *
+ * Ordered cheapest-first so the model is consulted only for messages that genuinely need judgement.
+ * Every rung above it is free and decidable, and each one was put there by something that actually
+ * happened rather than something imagined.
+ */
+async function triageAndHandle(
+  db: SupabaseClient,
+  chatId: number,
+  msg: Message,
+  text: string,
+): Promise<void> {
+  const voice = msg.voice ?? msg.audio;
+
+  // Audio is always material. Nobody records a voice note to say hello, and sending one through a
+  // classifier would spend a model call to learn that.
+  if (voice) {
+    await captureNewMoment(db, chatId, msg, text);
+    return;
+  }
+
+  if (text.length === 0) return;
+
+  // WHO IS THIS? Asked once per chat, and answered by the next message rather than by a state
+  // machine — conversation_state is still one row shared by every chat, so putting an `awaiting`
+  // here would be building on that bug rather than around it.
+  const known = await displayName(db, chatId);
+  if (!known) {
+    const name = readName(text);
+    if (name) {
+      await setDisplayName(db, chatId, name);
+      await sendMessage(
+        chatId,
+        `Thanks ${name}. Send me anything worth remembering — a voice note while you are walking ` +
+          `is the intended way. Ask me what is waiting any time, or /help for the rest.`,
+      );
+      return;
+    }
+    await sendMessage(chatId, `Before we start — what should I call you?`);
+    return;
+  }
+
+  // A slash command that got this far is one the bot does not have. It used to become a moment,
+  // so /ideas filed an idea-bank entry containing the word "/ideas".
+  if (text.startsWith("/")) {
+    await sendMessage(chatId, `I do not have that one. /help lists what I can do.`);
+    return;
+  }
+
+  // Free and certain: every word is an acknowledgement.
+  if (isChatter(text)) {
+    await setState(db, "nothing", null);
+    return;
+  }
+
+  const { intent, reply } = await triageMessage(db, text);
+
+  if (intent === "question" && reply) {
+    await sendMessage(chatId, reply);
+    await logEvent(db, "telegram_question_answered", "info", {
+      chat_id: chatId,
+      question: text.slice(0, 200),
+    });
+    return;
+  }
+
+  if (intent === "chatter") {
+    await setState(db, "nothing", null);
+    return;
+  }
+
   await captureNewMoment(db, chatId, msg, text);
 }
 
@@ -542,9 +626,17 @@ async function captureNewMoment(
  * Acknowledgements, not material. Matched whole-string and deliberately narrow: "lost a deal today"
  * is short too, and must still become a moment. Only messages that are ENTIRELY courtesy are dropped.
  */
-function isChatter(text: string): boolean {
+export function isChatter(text: string): boolean {
   const t = text.trim();
   if (t.length === 0) return true;
+
+  // A bare @handle: somebody told to message @userinfobot who pasted it here instead. It happened
+  // twice and both are permanent entries in the bank, because 6.3 does not care how it got there.
+  if (/^@[A-Za-z0-9_]{3,}$/.test(t)) return true;
+
+  // A typo correction on its own line — "post*", "*posts". Only when the whole message is one
+  // starred word: "post* ideas" is somebody correcting themselves mid-thought and is material.
+  if (/^\*?[\p{L}]+\*$|^\*[\p{L}]+$/u.test(t)) return true;
 
   // Emoji-only replies ("👍") are acknowledgements too.
   if (/^[\p{Extended_Pictographic}\p{Emoji_Component}\s]+$/u.test(t)) return true;
@@ -558,6 +650,11 @@ function isChatter(text: string): boolean {
     "ok", "okay", "k", "kk", "thanks", "thank", "you", "thankyou", "ty", "ta", "cool", "nice",
     "great", "good", "got", "it", "sure", "fine", "yep", "yup", "yeah", "yes", "no", "nope",
     "done", "perfect", "lovely", "cheers", "np", "worries", "alright", "brilliant", "super",
+    // GREETINGS, absent until "Hello" became M-000030 and then M-000033. The set was built from
+    // acknowledgement-after-the-fact — "okay thanks" — and at that point nobody had said hello to
+    // it. A list assembled from one incident only covers that incident.
+    "hi", "hey", "hello", "hiya", "yo", "morning", "afternoon", "evening", "gm", "howdy",
+    "there", "sorry", "please", "welcome", "bye", "goodbye", "night",
   ]);
 
   const words = t.toLowerCase().split(/[^a-z]+/).filter(Boolean);

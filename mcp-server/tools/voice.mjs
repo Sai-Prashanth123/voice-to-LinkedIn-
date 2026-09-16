@@ -221,3 +221,66 @@ export const voiceTools = [
     },
   },
 ];
+
+/**
+ * The reference measurements, as a TOOL rather than only a resource.
+ *
+ * sentinels://latest has existed since the resources were added, and a model cannot reach it. A
+ * resource is something a PERSON browses and attaches; a tool is something a model decides to call.
+ * So the measured shape of the seven writers Josh chose was visible to him and invisible to anything
+ * doing the writing — which is the half that needed it.
+ *
+ * get_voice_brief and compare_to_references already expose fragments: four sd values, a ranked
+ * distance. Neither returns the opening shapes, the close shapes, the above-fold lengths or the list
+ * rates, which are the measurements that answer "how do these posts actually get in".
+ */
+export const sentinelTools = [
+  {
+    name: "get_sentinels",
+    config: {
+      title: "The reference writers, measured",
+      description:
+        "Structural measurements of 59 posts by the seven accounts Josh chose: median length, " +
+        "how much sits above the fold, opening and closing shapes, paragraph counts, list rate and " +
+        "sentence-length variation. Use it to answer how a post should be SHAPED — where the turn " +
+        "lands, how long the opening runs, whether a list belongs. " +
+        "THEIR WORDS ARE NOT HERE and never will be (8.3): the derivation refuses to emit anything " +
+        "containing a run of the source text, so a draft cannot quote what this system does not " +
+        "hold. Structure only.",
+      inputSchema: {
+        group: z.enum(["scene", "cut", "all"]).optional().describe(
+          "scene = the four whose structure matches Josh's own rules (prose, a scene before the " +
+            "fold). cut = the three that do the opposite: very short openers, heavy lists, " +
+            "everything below the fold. Default all.",
+        ),
+      },
+    },
+
+    async handler(args) {
+      const group = args.group ?? "all";
+      const rows = (sentinels.report ?? []).filter((r) =>
+        group === "all" ? true : group === "scene" ? SCENE.has(r.handle) : !SCENE.has(r.handle)
+      );
+
+      return {
+        measured_at: sentinels.measured_at ?? null,
+        accounts: rows.length,
+        posts: rows.reduce((n, r) => n + (r.posts_measured ?? 0), 0),
+        writers: rows.map((r) => ({ ...r, group: SCENE.has(r.handle) ? "scene" : "cut" })),
+
+        how_to_read_this: {
+          structure_only:
+            "8.3 — shapes, never sentences. Nothing here may be quoted, near-quoted or paraphrased " +
+            "into a draft. Josh's voice comes from the voice guide and nowhere else.",
+          the_split:
+            "The scene/cut split is a judgement recorded in the reference_posts library section, " +
+            "not something the numbers decided. measure_draft compares rhythm against the scene " +
+            "four only, because the other three are a different kind of post.",
+          not_a_target:
+            "A range is what seven people who all work happen to do. Their medians run from 53 to " +
+            "408 words and every one of them works, so there is no correct length to hit.",
+        },
+      };
+    },
+  },
+];

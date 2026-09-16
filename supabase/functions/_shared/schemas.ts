@@ -218,3 +218,30 @@ export const RetellingSchema = z.object({
     .describe("Which prior post or moment, quoted enough to recognise. Empty when neither is true."),
   reasoning: z.string().describe("One or two sentences. Read by a person when a block looks wrong."),
 });
+
+/**
+ * What an arriving Telegram message actually is (4.1, and the reason the bank filled with junk).
+ *
+ * Three intents rather than two, because "not a moment" collapses two different things that need
+ * opposite handling: a question deserves an answer, a greeting deserves silence, and treating
+ * either as material is how "Hello" became M-000033.
+ *
+ * The bias is stated in the field description rather than left to the model's taste. A swallowed
+ * thought is invisible and unrecoverable; a wrongly-filed one is neither.
+ */
+export const ChatTriageSchema = z.object({
+  intent: z
+    .enum(["capture", "question", "chatter"])
+    .describe(
+      "capture = a thought or something that happened to him, however short. question = he is " +
+        "asking the system something and wants an answer. chatter = greeting, thanks, typo " +
+        "correction, stray handle. When torn between capture and question, choose capture.",
+    ),
+  reply: z
+    .string()
+    .describe(
+      "The answer, written only from the supplied snapshot. Empty unless intent is 'question'. " +
+        "Where the snapshot does not hold the answer, say which part is not visible rather than " +
+        "estimating it.",
+    ),
+});
