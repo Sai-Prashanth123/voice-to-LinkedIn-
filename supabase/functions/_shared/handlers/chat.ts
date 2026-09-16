@@ -200,8 +200,31 @@ export async function setDisplayName(
   chatId: number,
   name: string,
 ): Promise<void> {
+  /*
+   * UPSERT, NOT UPDATE. THIS WAS A BUG AND IT LOOPED FOREVER.
+   *
+   * telegram_access only holds chats that ASKED for access. The owner chat never asks — it is
+   * authorised by being in the TELEGRAM_CHAT_ID list, and no row is ever written for it. So an
+   * UPDATE here matched nothing, returned no error, and the name was silently discarded:
+   *
+   *   "hi"        -> Thanks hi. Send me anything worth remembering...
+   *   "what is my chat id" -> Before we start, what should I call you?
+   *   "Prashanth" -> Thanks Prashanth...
+   *   "start a new conversation about my moment" -> Before we start, what should I call you?
+   *
+   * Every message answered the same question and none of the answers stuck. An UPDATE that matches
+   * nothing is the quietest failure in SQL — it is indistinguishable from success at the call site.
+   */
+  const now = new Date().toISOString();
   await db
     .from("telegram_access")
-    .update({ display_name: name, updated_at: new Date().toISOString() })
-    .eq("chat_id", chatId);
+    .upsert({
+      chat_id: chatId,
+      display_name: name,
+      // The owner is approved by configuration; writing the row must not imply it needed approving,
+      // and it must not leave a chat that DID need it sitting at pending.
+      status: "approved",
+      approved_at: now,
+      updated_at: now,
+    }, { onConflict: "chat_id" });
 }

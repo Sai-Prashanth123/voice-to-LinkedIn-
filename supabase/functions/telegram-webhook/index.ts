@@ -57,6 +57,9 @@ import {
 interface Message {
   message_id: number;
   chat: { id: number };
+  // Telegram sends this on every message and it was never declared, so the bot asked people what to
+  // call them while already holding the answer. Optional because a channel post has no sender.
+  from?: { id: number; is_bot?: boolean; first_name?: string; last_name?: string; username?: string };
   text?: string;
   caption?: string;
   voice?: { file_id: string; duration: number; mime_type?: string };
@@ -375,25 +378,6 @@ async function triageAndHandle(
 
   if (text.length === 0) return;
 
-  // WHO IS THIS? Asked once per chat, and answered by the next message rather than by a state
-  // machine — conversation_state is still one row shared by every chat, so putting an `awaiting`
-  // here would be building on that bug rather than around it.
-  const known = await displayName(db, chatId);
-  if (!known) {
-    const name = readName(text);
-    if (name) {
-      await setDisplayName(db, chatId, name);
-      await sendMessage(
-        chatId,
-        `Thanks ${name}. Send me anything worth remembering — a voice note while you are walking ` +
-          `is the intended way. Ask me what is waiting any time, or /help for the rest.`,
-      );
-      return;
-    }
-    await sendMessage(chatId, `Before we start — what should I call you?`);
-    return;
-  }
-
   // A slash command that got this far is one the bot does not have. It used to become a moment,
   // so /ideas filed an idea-bank entry containing the word "/ideas".
   if (text.startsWith("/")) {
@@ -401,9 +385,34 @@ async function triageAndHandle(
     return;
   }
 
+  /*
+   * NOBODY IS ASKED THEIR NAME. TELEGRAM ALREADY SENT IT.
+   *
+   * The first version asked "what should I call you?" and would not proceed until it got an answer
+   * it liked. Four messages in a row were answered with that same question, and none of the answers
+   * stuck, because the write was an UPDATE against a row the owner chat has never had.
+   *
+   * Both halves of that were wrong. The bug was the UPDATE; the DESIGN was asking at all. Every
+   * message carries from.first_name — the field existed, was simply never declared in the type, and
+   * the bot interrogated people while holding the answer in its hand.
+   *
+   * So the name is learned silently on first contact and nothing is ever blocked on it.
+   */
+  const first = await ensureKnown(db, chatId, msg);
+
+  // "what is my chat id" — reasonable, and unanswerable by the triage model because the chat id is
+  // deliberately not in its snapshot. Free and certain.
+  if (/\bchat\s*id\b/i.test(text)) {
+    await sendMessage(chatId, `This chat's id is ${chatId}.`);
+    return;
+  }
+
   // Free and certain: every word is an acknowledgement.
   if (isChatter(text)) {
     await setState(db, "nothing", null);
+    // A greeting on the very first message deserves a reply. On the hundredth it deserves silence,
+    // which is what the original filter was built for.
+    if (first) await sendMessage(chatId, orientation(first));
     return;
   }
 
@@ -607,7 +616,15 @@ async function captureNewMoment(
 
     await enqueue(db, "transcribe", { raw_input_id: raw!.id, moment_id: moment.id });
     // 4.1.4 — he knows it landed, immediately, without waiting for transcription.
-    await sendMessage(chatId, `Got it (${voice.duration}s). Saved as ${moment.ref}.`);
+    //
+    // Says what happens next, which the old one did not. "Got it (14s). Saved as M-000033." is
+    // accurate and tells a person nothing: the reference is the least useful thing in the sentence
+    // and it was the whole sentence.
+    await sendMessage(
+      chatId,
+      `Got that — ${voice.duration}s. Transcribing it now, then I will ask you a couple of ` +
+        `questions about it. (${moment.ref})`,
+    );
   } else {
     await db.from("raw_inputs").insert({
       moment_id: moment.id,
@@ -616,7 +633,11 @@ async function captureNewMoment(
       telegram_message_id: msg.message_id,
     });
     await enqueue(db, "interview_step", { moment_id: moment.id });
-    await sendMessage(chatId, `Got it. Saved as ${moment.ref}.`);
+    await sendMessage(
+      chatId,
+      `Got it. I will ask you a couple of questions about this one in a moment — answer them ` +
+        `whenever suits. (${moment.ref})`,
+    );
   }
 
   await setState(db, "answer", moment.id);
@@ -1892,4 +1913,43 @@ async function askedPositiveRecently(db: SupabaseClient): Promise<boolean> {
     .eq("detail->>form", "positive")
     .gte("created_at", since);
   return (count ?? 0) > 0;
+}
+
+/**
+ * Learn who this is, once, without asking.
+ *
+ * Returns their name only on FIRST contact, so the orientation is sent once and never again. A
+ * returning chat gets null and the conversation simply continues, which is what a returning chat
+ * wants.
+ */
+async function ensureKnown(
+  db: SupabaseClient,
+  chatId: number,
+  msg: Message,
+): Promise<string | null> {
+  const existing = await displayName(db, chatId);
+  if (existing) return null;
+
+  // Telegram's own name for them. readName is kept for the rare case where it is missing — a
+  // channel post, or a client that strips it — and even then nothing is blocked on the answer.
+  const given = (msg.from?.first_name ?? "").trim();
+  const name = given ? given.slice(0, 40) : readName(msg.text ?? "") ?? "";
+  if (!name) return null;
+
+  await setDisplayName(db, chatId, name);
+  return name;
+}
+
+/**
+ * What to say once, to somebody who has just arrived.
+ *
+ * Three sentences, because the bot's whole job has to be guessable from its first message and the
+ * previous version explained nothing — it asked a question and then asked it again.
+ */
+function orientation(name: string): string {
+  return `Hello ${name}. Send me anything worth remembering and I will ask a few questions to ` +
+    `turn it into a post — a voice note while you are walking is the intended way, and half a ` +
+    `sentence is enough to start.\n\n` +
+    `You can also just ask me things: what is waiting on you, what is ready to write, what ` +
+    `happened to a draft. /help has the rest.`;
 }

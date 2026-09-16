@@ -27,7 +27,9 @@ export interface TelegramUpdate {
     message_id: number;
     date: number;
     chat: { id: number };
-    from?: { id: number; is_bot: boolean };
+    // first_name and username are sent by Telegram on every message and were simply never declared
+    // here. The bot asked people what to call them while holding the answer in its hand.
+    from?: { id: number; is_bot: boolean; first_name?: string; last_name?: string; username?: string };
     text?: string;
     caption?: string;
     voice?: { file_id: string; duration: number; mime_type?: string };
