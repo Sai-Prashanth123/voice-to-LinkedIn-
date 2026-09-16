@@ -16,6 +16,7 @@ import { noteProvider } from "../_shared/providers.ts";
 import type { Awaiting } from "../_shared/types.ts";
 import { admin, getSetting, logEvent, park } from "../_shared/db.ts";
 import { loadSecrets, secret } from "../_shared/secrets.ts";
+import { approveAccess, isApproved, requestAccess } from "../_shared/telegram-access.ts";
 import { enqueue, json, nudge } from "../_shared/jobs.ts";
 import { pushBack } from "../_shared/pushback.ts";
 import { recordVerdict } from "../_shared/outcome.ts";
@@ -81,11 +82,26 @@ Deno.serve(async (req) => {
   // A tap on a weekly-pass button. Handled before messages because it is a different update shape.
   if (update.callback_query) {
     const cq = update.callback_query;
-    if (!isAuthorised(cq.message?.chat.id ?? cq.from.id)) return json({ ok: true });
+    const callbackChatId = cq.message?.chat.id ?? cq.from.id;
+    if (!isAuthorised(callbackChatId) && !await isApproved(db, callbackChatId)) {
+      return json({ ok: true });
+    }
 
     // Acknowledged first: Telegram spins on Josh's phone until this returns.
     await answerCallback(cq.id);
     try {
+      if (cq.data?.startsWith("access:approve:")) {
+        const ownerChatId = joshChatId();
+        if (callbackChatId !== ownerChatId) return json({ ok: true });
+        const requestedChatId = Number(cq.data.slice("access:approve:".length));
+        if (!Number.isSafeInteger(requestedChatId)) return json({ ok: true });
+        await approveAccess(db, requestedChatId);
+        await sendMessage(requestedChatId, "Your access was approved. Send /start to begin.");
+        if (cq.message) {
+          await replaceMessage(callbackChatId, cq.message.message_id, `Approved chat ${requestedChatId}.`);
+        }
+        return json({ ok: true });
+      }
       await handleTap(db, cq);
     } catch (err) {
       await logEvent(db, "telegram_tap_failed", "error", {
@@ -102,11 +118,42 @@ Deno.serve(async (req) => {
   // Rejecting an unknown chat is correct and must stay silent to the sender (15.4). But it is also
   // what a total credential failure looks like from the outside, which is how a real message got
   // dropped while this returned 200. Recording it means the two are distinguishable.
-  if (!isAuthorised(msg.chat.id)) {
-    await logEvent(db, "telegram_unauthorised", "warn", {
-      chat_id: msg.chat.id,
-      expected_configured: secret("TELEGRAM_CHAT_ID") !== null,
-    });
+  if (!isAuthorised(msg.chat.id) && !await isApproved(db, msg.chat.id)) {
+    /*
+     * A STRANGER ASKS. THEY DO NOT LET THEMSELVES IN.
+     *
+     * This called registerAccess, which writes status 'approved' outright — so every unknown chat
+     * was admitted on its first message and then fell straight through to route() below. The
+     * migration that created this table says the opposite in its own header: "they cannot reach the
+     * shared workspace until the owner approves them." Two readers of one rule, disagreeing.
+     *
+     * It matters more here than on the desk. The desk is read-only to a visitor; the bot WRITES.
+     * An admitted stranger can put material into the bank and answer interview questions as though
+     * they were Josh, and 15.4 exists because that bank holds his clients' material.
+     *
+     * So: record the request as pending, ask the owner, and stop. requestAccess returns true only
+     * when it created the row, which keeps a stranger sending ten messages from sending ten
+     * notifications.
+     */
+    try {
+      const isNew = await requestAccess(db, msg.chat.id);
+      if (isNew) {
+        await logEvent(db, "telegram_access_requested", "warn", { chat_id: msg.chat.id });
+        await sendRich(
+          joshChatId(),
+          `An unknown Telegram chat (<code>${msg.chat.id}</code>) messaged the bot and is waiting ` +
+            `for access. Approve only if you recognise it — an approved chat can add material and ` +
+            `answer interview questions.`,
+          [[{ text: "Approve this chat", data: `access:approve:${msg.chat.id}` }]],
+        );
+      }
+    } catch (err) {
+      await logEvent(db, "telegram_access_registration_failed", "error", {
+        chat_id: msg.chat.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    // Silent to the sender either way (15.4): an unknown chat learns nothing about what this is.
     return json({ ok: true });
   }
 
