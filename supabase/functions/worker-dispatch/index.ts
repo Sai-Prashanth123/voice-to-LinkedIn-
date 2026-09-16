@@ -29,9 +29,25 @@ const HANDLERS: Record<string, (db: SupabaseClient, job: Job) => Promise<void>> 
   draft_digest: sendDraftDigest,
 };
 
+/*
+ * DRAFTS ARE WRITTEN IN CLAUDE. THE SERVER ONLY JUDGES THEM.
+ *
+ * `draft` is left out of the types this worker claims. The jobs are still queued — by selection,
+ * by a gate rejection, by Josh pushing back — and they wait, pending, carrying exactly the context a
+ * rewrite needs: the previous body, the gate's reasons, his note. That pending queue IS Claude's
+ * writing list; next_work reads it and create_draft closes each job it answers.
+ *
+ * Everything after the writing is unchanged. applyDraft files a Claude draft exactly as the server
+ * filed its own, and queues the eight checks, which this worker still runs.
+ *
+ * handleDraft stays registered so a job that is already running when this deploys still completes,
+ * and so turning server drafting back on is removing one word from the filter below.
+ */
+const CLAIMED = Object.keys(HANDLERS).filter((type) => type !== "draft");
+
 Deno.serve(() =>
   runWorker(
-    { name: "worker-dispatch", types: Object.keys(HANDLERS), batch: 3, chain: true },
+    { name: "worker-dispatch", types: CLAIMED, batch: 3, chain: true },
     async (db, job) => {
       const handler = HANDLERS[job.type];
       if (!handler) throw new Error(`no handler for job type "${job.type}"`);

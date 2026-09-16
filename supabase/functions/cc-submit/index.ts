@@ -40,6 +40,8 @@ import {
 } from "../_shared/handlers/interview.ts";
 import { appendTurn, loadSession, renderTranscript } from "../_shared/session.ts";
 import { verifyExtraction } from "../_shared/extraction.ts";
+import { applyDraft } from "../_shared/handlers/draft.ts";
+import type { Claim } from "../_shared/claims.ts";
 import type { Extraction } from "../_shared/schemas.ts";
 import { applyCandidates, type Candidate, candidateRoom } from "../_shared/triage.ts";
 import type { MomentSource } from "../_shared/types.ts";
@@ -74,13 +76,14 @@ Deno.serve(async (req) => {
 
   if (body.kind === "candidates") return await submitCandidates(db, body);
   if (body.kind === "capture") return await capture(db, body);
+  if (body.kind === "draft") return await fileDraft(db, body as unknown as DraftBody);
   if (body.kind === "interview_next") return await interviewNext(db, body);
   if (body.kind === "interview_answer") return await interviewAnswer(db, body);
 
   if (body.kind !== "extraction") {
     return json({
       error: `unknown kind "${body.kind ?? ""}". Expected "extraction", "candidates", ` +
-        `"capture", "interview_next" or "interview_answer".`,
+        `"capture", "draft", "interview_next" or "interview_answer".`,
     }, 400);
   }
 
@@ -359,4 +362,114 @@ function nextFor(action: string): string {
       "reopens if he adds to it.";
   }
   return "Nothing to do on that moment.";
+}
+
+/* ── A draft, written in Claude ────────────────────────────────────────────────────────────────
+ *
+ * Drafting moved to Claude and judging stayed on the server. This is the seam between them.
+ *
+ * The draft is filed by applyDraft — the same function the server's own drafter uses — so the claim
+ * ledger, the one-row-per-check rule, the three-strike retry and the eight checks afterwards are all
+ * exactly what they were. Only who holds the pen changed.
+ */
+
+interface DraftBody {
+  moment_id?: number;
+  body?: string;
+  hook?: string;
+  framework?: string;
+  claims?: Claim[];
+  model?: string;
+}
+
+async function fileDraft(db: SupabaseClient, body: DraftBody) {
+  const momentId = Number(body.moment_id);
+  if (!Number.isInteger(momentId)) return json({ error: "moment_id must be an integer" }, 400);
+
+  const text = String(body.body ?? "").trim();
+  if (!text) return json({ error: "body is required" }, 400);
+  if (!Array.isArray(body.claims)) return json({ error: "claims must be an array (it may be empty)" }, 400);
+
+  const { data: moment } = await db
+    .from("moments").select("id, ref, status, killed").eq("id", momentId).maybeSingle();
+  if (!moment) return json({ error: `no moment with id ${momentId}` }, 404);
+  if (moment.killed) return json({ error: `moment ${momentId} has been killed`, ref: moment.ref }, 409);
+
+  // Mined or queued is a first draft; drafted is a rewrite. Anything earlier has not been
+  // interviewed (4.3.3), and anything later has already left the writing stage.
+  if (!["mined", "queued", "drafted"].includes(moment.status)) {
+    return json({
+      error: `${moment.ref} is ${moment.status}, so it cannot be drafted yet.`,
+      next: moment.status === "captured" || moment.status === "half_mined"
+        ? "It has not been interviewed. Run the interview first with next_interview_question."
+        : "It has already moved past drafting.",
+    }, 409);
+  }
+
+  /*
+   * THE WAITING JOB, IF THERE IS ONE.
+   *
+   * A draft job left pending for Claude carries the attempt number and the near-miss warning. The
+   * attempt matters: it is what makes the third failure park the moment (9.8) instead of looping
+   * forever. Taking it from the job rather than the caller means a caller cannot reset the count by
+   * saying "attempt 1".
+   */
+  const { data: job } = await db
+    .from("jobs")
+    .select("id, payload")
+    .eq("type", "draft")
+    .eq("status", "pending")
+    .eq("payload->>moment_id", String(momentId))
+    .order("id", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const payload = (job?.payload ?? {}) as Record<string, unknown>;
+  const attempt = Number(payload.attempt ?? 1);
+  const nearMiss = (payload.near_miss as string | null | undefined) ?? null;
+
+  const { data: library } = await db
+    .from("library_versions").select("version").order("version", { ascending: false }).limit(1).maybeSingle();
+
+  const filed = await applyDraft(db, {
+    momentId,
+    attempt,
+    nearMiss,
+    body: text,
+    hook: String(body.hook ?? "").trim(),
+    framework: String(body.framework ?? "").trim(),
+    claims: body.claims,
+    // 8.4 — what wrote it. "claude-code" when the caller does not say, never a role name.
+    model: String(body.model ?? "claude-code").trim() || "claude-code",
+    libraryVersion: (library?.version as number | undefined) ?? null,
+  });
+
+  // The job is answered. Left pending it would be offered as work again, and written twice.
+  if (job) {
+    await db.from("jobs").update({ status: "done", updated_at: new Date().toISOString() }).eq("id", job.id);
+  }
+
+  await logEvent(db, "draft_written_in_claude", "info", {
+    moment_id: momentId,
+    ref: moment.ref,
+    draft_id: filed.draftId,
+    attempt,
+    verified: filed.verified,
+  });
+
+  return json({
+    ok: true,
+    moment_ref: moment.ref,
+    draft_id: filed.draftId,
+    attempt,
+    claims_verified: filed.verified,
+    failures: filed.failures,
+    next: filed.gateQueued
+      ? "Filed. The server is running the eight checks now. If it is rejected, it comes back to " +
+        "next_work with the reasons attached."
+      : attempt >= 3
+      ? "The claim ledger failed on the third attempt, so the idea has been parked (9.8)."
+      : "The claim ledger failed, so the checks were not run. It is back on next_work with the " +
+        "failures attached — fix those claims against what he actually said.",
+  });
 }

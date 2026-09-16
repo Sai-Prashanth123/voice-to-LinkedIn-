@@ -144,7 +144,33 @@ export const briefTools = [
         limit: 1,
       });
       let previousAttempt;
-      if (previous && previous.gate_passed === false) {
+
+      /*
+       * THE WAITING JOB FIRST, BECAUSE IT HOLDS WHAT THE DRAFTS TABLE DOES NOT.
+       *
+       * A rejected draft's reasons can be rebuilt from gate_runs, which is what the fallback below
+       * does. Josh pushing back from Telegram cannot: his note is not a gate verdict and lives only
+       * on the draft job it created. Now that drafts are written in Claude, that job waits here for
+       * a writer — and a brief that ignored it would hand over a rewrite with the one instruction
+       * that mattered missing.
+       */
+      const [waiting] = await db.select("jobs", {
+        select: "payload",
+        type: "eq.draft",
+        status: "eq.pending",
+        "payload->>moment_id": `eq.${id}`,
+        order: "id.asc",
+        limit: 1,
+      });
+      const jobFailures = Array.isArray(waiting?.payload?.failures) ? waiting.payload.failures : [];
+      if (waiting?.payload?.previous_body || jobFailures.length > 0) {
+        previousAttempt = {
+          body: waiting.payload.previous_body ?? previous?.body ?? "",
+          failures: jobFailures.length > 0 ? jobFailures : [previous?.gate_reason ?? "rejected"],
+        };
+      }
+
+      if (!previousAttempt && previous && previous.gate_passed === false) {
         const runs = await db.select("gate_runs", {
           select: "check_key,passed,reason",
           draft_id: `eq.${previous.id}`,

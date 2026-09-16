@@ -150,8 +150,11 @@ export const writeTools = [
         "draft is stored and before any model gives an opinion: if one does not appear in the field " +
         "it names, nothing is written and the failures come back for you to fix. " +
         "Call get_moment first: the material is the only thing a draft may claim from, and any " +
-        "uncleared name must not appear. This creates a draft only — it does not publish, schedule " +
-        "or approve anything.",
+        "uncleared name must not appear. " +
+        "Drafts are written HERE, in Claude — the server no longer writes them, it only judges them. " +
+        "Once filed, the server runs the eight quality checks by itself; do not run them yourself. " +
+        "If the draft is rejected it returns to next_work with the reasons attached. " +
+        "This creates a draft only — it does not publish, schedule or approve anything.",
       inputSchema: {
         moment_id: z.number().int().describe("The moment this draft is written from"),
         body: z.string().min(1).describe("The post itself, as it would appear on LinkedIn"),
@@ -163,7 +166,7 @@ export const writeTools = [
         model: z.string().optional().describe("What wrote it. Defaults to claude-code."),
       },
     },
-    async handler(args, { db }) {
+    async handler(args, { db, url }) {
       // 6.3 again: a killed moment is one Josh has already said no to.
       const [moment] = await db.select("moments", {
         select: "id,killed,status,ref",
@@ -247,42 +250,41 @@ export const writeTools = [
         );
       }
 
-      const [{ version: latest } = {}] = await db.select("drafts", {
-        select: "version",
-        moment_id: `eq.${args.moment_id}`,
-        order: "version.desc",
-        limit: 1,
-      });
+      /*
+       * FILED BY THE SERVER, THEN GATED BY THE SERVER.
+       *
+       * This used to insert the row itself and hand back "run the eight checks and record each with
+       * record_gate_verdict" — so a draft written here was the only kind the server never judged.
+       * The checks above stay because they are instant; the filing moved to cc-submit, which runs
+       * the same applyDraft the server's own drafter uses and queues the gate afterwards.
+       *
+       * It also closes the waiting draft job for this idea, which carries the attempt number. That
+       * number is what parks an idea after its third failed draft (9.8), and reading it from the job
+       * rather than from here means it cannot be reset by calling this again.
+       */
+      const key = process.env.CONTENT_MCP_KEY;
+      if (!key) throw new Error("CONTENT_MCP_KEY is not set, so the draft cannot be filed.");
 
-      const [library] = await db.select("library_versions", {
-        select: "version",
-        order: "version.desc",
-        limit: 1,
+      const res = await fetch(`${url}/functions/v1/cc-submit`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "draft",
+          moment_id: args.moment_id,
+          body: args.body,
+          hook: args.hook ?? "",
+          framework: args.framework,
+          claims: args.claims,
+          model: args.model ?? "claude-code",
+        }),
       });
-      if (!library) throw new Error("The library has no versions, so a draft cannot be attributed.");
+      const filed = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = filed.error ?? `cc-submit ${res.status}`;
+        throw new Error(filed.next ? `${detail}\n\n${filed.next}` : detail);
+      }
 
-      const [row] = await db.insert("drafts", {
-        moment_id: args.moment_id,
-        version: (latest ?? 0) + 1,
-        attempt: 1,
-        body: args.body,
-        hook: args.hook ?? null,
-        framework: args.framework,
-        library_version: library.version,
-        model: args.model ?? "claude-code",
-        claims: args.claims,
-        // Never null again. Null meant "nobody looked", and it read as indistinguishable from a
-        // draft that had been checked — which is how this path went unverified for its whole life.
-        claims_verified: true,
-      });
-
-      return {
-        draft_id: row.id,
-        moment_ref: moment.ref,
-        version: row.version,
-        library_version: row.library_version,
-        next: "Run the eight checks and record each with record_gate_verdict.",
-      };
+      return { ...filed, moment_ref: moment.ref };
     },
   },
 

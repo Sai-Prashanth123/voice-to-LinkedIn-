@@ -222,6 +222,34 @@ Deno.serve(async () => {
     await writeBack(db, candidate, []);
   }
 
+  /*
+   * TELL HIM THERE IS SOMETHING TO WRITE, BECAUSE NOTHING ELSE WILL.
+   *
+   * When the server wrote drafts, choosing an idea was followed within minutes by a draft arriving
+   * in Telegram, and that arrival was the notification. Drafting moved to Claude, so choosing an
+   * idea now only puts a job in a queue that nobody is watching — and a queue nobody is watching is
+   * the same as no queue.
+   *
+   * One message per run, however many were chosen: ten "ready to write" messages from one selection
+   * would be the notification equivalent of the ten-candidates-a-day failure 4.4.3 warns about.
+   */
+  if (wrote > 0) {
+    try {
+      await sendMessage(
+        joshChatId(),
+        `${wrote === 1 ? "An idea is" : `${wrote} ideas are`} ready to write.\n\n` +
+          `Open Claude and say "write the next one" — it will pick ${wrote === 1 ? "it" : "them"} ` +
+          `up with everything you told me, and I will check each draft before it reaches you.`,
+      );
+    } catch (err) {
+      // A notification failure must not undo a selection that already happened.
+      await logEvent(db, "ready_to_write_notice_failed", "warn", {
+        wrote,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   const ranShort = wrote < need;
   await recordRun(db, {
     target,

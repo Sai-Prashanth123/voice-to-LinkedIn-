@@ -83,10 +83,74 @@ export async function handleDraft(db: SupabaseClient, job: Job): Promise<void> {
     promptVersion: PROMPT_VERSION,
   }, { db });
 
+  await applyDraft(db, {
+    momentId,
+    attempt,
+    nearMiss,
+    body: result.body,
+    hook: result.hook,
+    framework: result.framework,
+    claims: result.claims as Claim[],
+    model: modelName(MODELS.OPUS),
+    libraryVersion: library.version,
+  });
+}
+
+export interface DraftToFile {
+  momentId: number;
+  attempt: number;
+  nearMiss: string | null;
+  body: string;
+  hook: string;
+  framework: string;
+  claims: Claim[];
+  /** The model that actually wrote it. 8.4: a draft records what wrote it, not a role name. */
+  model: string;
+  libraryVersion: number | null;
+}
+
+export interface FiledDraft {
+  draftId: number;
+  verified: boolean;
+  failures: string[];
+  /** true when the eight checks were queued; false when the claim ledger failed first. */
+  gateQueued: boolean;
+}
+
+/**
+ * Everything that happens to a draft once it exists, whoever wrote it.
+ *
+ * WHY THIS IS ITS OWN FUNCTION
+ *
+ * Drafting moved to Claude. The server no longer writes posts; it judges them. That only stays true
+ * if a draft Claude writes is filed EXACTLY as one the server wrote was — the same claim ledger, the
+ * same one-gate-row-per-check rule, the same three-strike retry, the same gate afterwards.
+ *
+ * Before this split those steps lived inside handleDraft, after the model call. The MCP create_draft
+ * tool had grown its own, shorter version: it inserted the row and told the caller to run the eight
+ * checks itself. Two paths to the same table, and only one of them was ever gated by the server.
+ *
+ * So this is the one place a draft is filed. handleDraft calls it after its model call; cc-submit
+ * calls it when Claude posts a draft. The source is rebuilt from the database here, never taken from
+ * the caller — a caller that could supply its own source could verify any claim it liked.
+ */
+export async function applyDraft(db: SupabaseClient, d: DraftToFile): Promise<FiledDraft> {
+  const { momentId, attempt, nearMiss } = d;
+
+  const material = await getMaterial(db, momentId);
+  const entry = sourceEntry(material);
+
+  const cleared = await clearedNames(db, momentId);
+  const clearedSet = new Set(cleared);
+  const names = (await getNames(db, momentId)).map((n) => ({
+    ...n,
+    cleared: clearedSet.has(n.name),
+  }));
+
   // ── The claim ledger, checked before any model opinion is involved ──────────
   const verification = verifyDraft(
-    result.body,
-    result.claims as Claim[],
+    d.body,
+    d.claims,
     entry,
     names.map((n) => ({ name: n.name, cleared: n.cleared })),
   );
@@ -97,14 +161,14 @@ export async function handleDraft(db: SupabaseClient, job: Job): Promise<void> {
     moment_id: momentId,
     version: nextVersion,
     attempt,
-    body: result.body,
-    hook: result.hook,
-    framework: result.framework,
-    library_version: library.version,
+    body: d.body,
+    hook: d.hook,
+    framework: d.framework,
+    library_version: d.libraryVersion,
     // The model, not the role — see the note in gate.ts. 8.4 pins the library version a draft
     // was written against; the model that wrote it deserves the same treatment.
-    model: modelName(MODELS.OPUS),
-    claims: result.claims,
+    model: d.model,
+    claims: d.claims,
     claims_verified: verification.ok,
   }).select("id").single();
   if (error || !inserted) throw new Error(`could not store draft: ${error?.message}`);
@@ -146,11 +210,12 @@ export async function handleDraft(db: SupabaseClient, job: Job): Promise<void> {
       failures: verification.failures,
     });
 
-    await retryOrPark(db, momentId, attempt, result.body, verification.failures, nearMiss);
-    return;
+    await retryOrPark(db, momentId, attempt, d.body, verification.failures, nearMiss);
+    return { draftId: inserted.id, verified: false, failures: verification.failures, gateQueued: false };
   }
 
   await enqueue(db, "gate", { draft_id: inserted.id, moment_id: momentId, attempt, near_miss: nearMiss });
+  return { draftId: inserted.id, verified: true, failures: [], gateQueued: true };
 }
 
 /**

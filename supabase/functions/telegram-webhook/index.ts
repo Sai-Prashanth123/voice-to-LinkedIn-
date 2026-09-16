@@ -51,7 +51,6 @@ import {
   holdPost,
   parseAction,
   recordConversation,
-  rewriteLink,
   schedulePost,
   startWeeklyPass,
   verdictPrompt,
@@ -965,13 +964,26 @@ async function handleTap(
     }
 
     case "rewrite": {
-      // Editing long prose belongs in a textarea, not a chat box.
-      const link = rewriteLink(action.postId);
+      /*
+       * REWRITES HAPPEN IN CLAUDE. THIS USED TO SEND A LINK TO THE DESK.
+       *
+       * "Open it here to rewrite: <link>" pointed at a textarea on the web app, and for a while at
+       * a dead deployment. The desk is now a read-only view, and drafting moved to Claude — so the
+       * button says how a rewrite actually happens, and both routes end in the same place: a
+       * pending draft job carrying his note, which Claude picks up through next_work.
+       */
+      const { data: post } = await db
+        .from("posts").select("draft_id, drafts(moment_id, moments(ref))").eq("id", action.postId)
+        .maybeSingle();
+      // deno-lint-ignore no-explicit-any
+      const ref = (post as any)?.drafts?.moments?.ref as string | undefined;
+
       await sendMessage(
         chatId,
-        link
-          ? `Open it here to rewrite:\n${link}`
-          : "Open The desk to rewrite this one — the web app is where editing works properly.",
+        `Two ways to rewrite ${ref ?? "this one"}:\n\n` +
+          `Reply to the draft above with what you would change. I will queue the rewrite with your ` +
+          `note attached.\n\n` +
+          `Or open Claude and say "rewrite ${ref ?? "this draft"}" to work through it there.`,
       );
       return;
     }

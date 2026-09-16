@@ -1,28 +1,31 @@
 /**
- * One tool that hands over a complete unit of work.
+ * One tool that hands over a complete unit of writing work.
  *
- * WHY THIS EXISTS WHEN cc-agent/work.mjs ALREADY DOES IT
+ * WHO DOES WHAT, NOW
  *
- * work.mjs decides what to work on, spawns `claude --print`, and lets the run post back through
- * this server. That is a scheduler's shape: it needs Node, the repository, a shell and something to
- * start it. On a machine with none of those — a browser, a phone, a client that only speaks MCP —
- * there was no way to do a piece of work at all.
+ * Drafts are written in Claude. The server does not write them any more — worker-dispatch leaves
+ * `draft` jobs pending — but it still judges every draft, running the eight checks by itself the
+ * moment one is filed. So the work this tool hands out is writing, and only writing.
  *
- * This is the same decision, as a tool. Ask for the next piece of work and you get the item AND the
- * brief for it in one answer, so a single sentence in any client drives the whole loop.
+ * It used to hand out gating first, on the grounds that a half-judged draft blocks everything
+ * downstream. That was right when the server did not gate Claude's drafts. It does now, and offering
+ * the same checks here would judge each draft twice, with two sets of verdicts on one row.
+ *
+ * WHERE THE WORK COMES FROM
+ *
+ * The pending `draft` jobs. Every route that decides something should be written ends in one:
+ * selection choosing an idea, the gate rejecting a draft, Josh pushing back from Telegram. Each job
+ * carries what a rewrite needs — the previous body, the reasons it failed, his note — so reading the
+ * queue rather than scanning idea statuses is what keeps that context attached to the work.
+ *
+ * Scanning statuses was also wrong on its own terms: selection moves an idea from `mined` to
+ * `queued`, so a tool that only looked for `mined` could never see the ideas selection had actually
+ * chosen.
  *
  * WHAT IT STILL CANNOT DO
  *
- * Start on its own. An MCP server only ever responds; it has no loop and no timer, and over the
- * stateless HTTP transport it cannot even push a notification. Something has to ask. If that
- * something is a person typing "do the next piece of work", this is the whole mechanism. If it has
- * to happen at 09:15 with nobody there, that is cc-agent/install.mjs and always will be.
- *
- * THE ORDER, AND WHY GATING COMES FIRST
- *
- * The same order work.mjs uses, for the same reason: a draft stuck at six of eight checks is the
- * cheapest work available and it is BLOCKING — nothing downstream of it can happen. Writing a new
- * draft while an old one sits unjudged adds to the pile rather than clearing it.
+ * Start on its own. An MCP server only responds; something has to ask. That something is a person
+ * in Claude saying "do the next piece of work".
  */
 
 import { z } from "zod";
@@ -40,153 +43,107 @@ export const workTools = [
   {
     name: "next_work",
     config: {
-      title: "Get the next piece of work, with its brief",
+      title: "Get the next draft to write, with its brief",
       description:
-        "Finds the highest-value unfinished item and returns it WITH the brief needed to do it, " +
-        "in one call. Gating comes before drafting because a half-judged draft blocks everything " +
-        "downstream of it. Do the work, call the tool it names, then ask again. This is how the " +
-        "whole pipeline runs from a client with no repository, no shell and no scheduler.",
-      inputSchema: {
-        kind: z.enum(["gate", "draft"]).optional()
-          .describe("Force a kind rather than taking the highest-value item"),
-      },
+        "Returns the next idea waiting to be written — first drafts and rewrites alike — WITH the " +
+        "brief needed to write it, in one call. A rewrite comes with what the last draft said and " +
+        "why it was rejected or what Josh asked to change. Write it, file it with create_draft, " +
+        "then ask again. The server runs the eight quality checks on its own after filing; do not " +
+        "run them here.",
+      inputSchema: {},
     },
 
-    async handler(args, context) {
+    async handler(_args, context) {
       const { db } = context;
 
-      // ── What is waiting ──────────────────────────────────────────────────────────────────────
-      //
-      // DISTINCT CHECKS, not rows. handlers/draft.ts once wrote one gate_runs row per failed claim,
-      // so a draft could carry eight rows across six judged checks and read as finished to anything
-      // counting rows. cc-agent/work.mjs had this bug too.
-      const [drafts, runs, mined] = await Promise.all([
-        db.select("drafts", {
-          select: "id,moment_id,framework,model,created_at",
-          order: "id.desc",
-          limit: 50,
-          /*
-           * ACCEPTANCE FIXTURES ARE NOT WORK.
-           *
-           * Component test 8 seeds twenty deliberately generic drafts to prove the gate rejects
-           * them, and they sit in the production table because 6.3 forbids removing anything. The
-           * first version of this tool offered draft 27 — "Every B2B company is adding AI to their
-           * pitch right now" — as the next thing to gate.
-           *
-           * Judging one by hand would not merely waste a run: test 8 measures how many of those
-           * fixtures the gate rejected, so adding verdicts of my own changes the number a
-           * component test reports. A tool that hands somebody work which corrupts a passing test
-           * is worse than one that hands over nothing.
-           *
-           * Same exclusion scripts/smoke.mjs uses, and the same label create_draft refuses.
-           */
-          framework: "neq.acceptance-fixture",
-        }),
-        db.select("gate_runs", { select: "draft_id,check_key" }),
-        db.select("moments", {
-          select: "id,ref,status",
-          status: "eq.mined",
-          killed: "is.false",
-          order: "id.asc",
-        }),
-      ]);
+      // Oldest first. A rewrite Josh asked for yesterday should not wait behind a first draft that
+      // arrived this morning.
+      const jobs = await db.select("jobs", {
+        select: "id,payload,created_at",
+        type: "eq.draft",
+        status: "eq.pending",
+        order: "id.asc",
+        limit: 50,
+      });
 
-      const judged = new Map();
-      for (const r of runs) {
-        if (!judged.has(r.draft_id)) judged.set(r.draft_id, new Set());
-        judged.get(r.draft_id).add(r.check_key);
-      }
-      const checksOn = (id) => judged.get(id)?.size ?? 0;
-
-      const toGate = drafts.filter((d) => checksOn(d.id) < 8);
-      const drafted = new Set(drafts.map((d) => d.moment_id));
-      const toDraft = mined.filter((m) => !drafted.has(m.id));
-
-      const wanted = args.kind;
-
-      // ── Gating ───────────────────────────────────────────────────────────────────────────────
-      if (toGate.length > 0 && wanted !== "draft") {
-        const d = toGate[0];
-        const brief = await viaTool("get_gate_brief", { draft_id: d.id }, context);
-
-        return {
-          work: "gate",
-          draft_id: d.id,
-          moment_id: d.moment_id,
-          progress: `${checksOn(d.id)} of 8 checks judged`,
-          also_waiting: {
-            drafts_to_gate: toGate.length - 1,
-            moments_to_draft: toDraft.length,
-          },
-          brief,
-          how: [
-            "Judge each remaining check against its own rubric alone. Do not average across them.",
-            "Be adversarial: find the failure. If you are genuinely unsure, that is a FAIL.",
-            "Call record_gate_verdict once per check, naming the sentence rather than the rule.",
-            "Run every check even after one fails — Josh should see everything wrong at once.",
-          ],
-          then: "Call next_work again.",
-        };
+      // One job per idea. Two pending jobs on the same idea — a gate retry landing next to a
+      // pushback — are one piece of writing, answered by one draft.
+      const seen = new Set();
+      const queue = [];
+      for (const j of jobs) {
+        const momentId = Number(j.payload?.moment_id);
+        if (!Number.isInteger(momentId) || seen.has(momentId)) continue;
+        seen.add(momentId);
+        queue.push({ job: j, momentId });
       }
 
-      // ── Drafting ─────────────────────────────────────────────────────────────────────────────
-      if (toDraft.length > 0 && wanted !== "gate") {
-        const m = toDraft[0];
-        const brief = await viaTool("get_drafting_brief", { moment_id: m.id }, context);
+      for (const { job, momentId } of queue) {
+        const [moment] = await db.select("moments", {
+          select: "id,ref,status,killed",
+          id: `eq.${momentId}`,
+          limit: 1,
+        });
+        // A killed or parked idea can still have a job waiting from before. Skipping it here is
+        // the difference between offering work and offering something Josh already said no to.
+        if (!moment || moment.killed || moment.status === "parked") continue;
+
+        const brief = await viaTool("get_drafting_brief", { moment_id: momentId }, context);
+        const failures = Array.isArray(job.payload?.failures) ? job.payload.failures : [];
+        const isRewrite = Boolean(job.payload?.previous_body) || failures.length > 0;
 
         return {
-          work: "draft",
-          moment_id: m.id,
-          moment_ref: m.ref,
-          also_waiting: {
-            drafts_to_gate: toGate.length,
-            moments_to_draft: toDraft.length - 1,
-          },
+          work: isRewrite ? "rewrite" : "draft",
+          moment_id: momentId,
+          moment_ref: moment.ref,
+          attempt: Number(job.payload?.attempt ?? 1),
+          also_waiting: queue.length - 1,
+          ...(isRewrite
+            ? {
+              rewrite: {
+                previous_body: job.payload?.previous_body ?? null,
+                // Josh's pushback arrives as a failure beginning "Josh's note on the previous
+                // version:". It is the most important line here and is listed with the rest so
+                // nothing has to be reassembled.
+                what_to_fix: failures,
+                near_miss: job.payload?.near_miss ?? null,
+              },
+            }
+            : {}),
           brief,
           how: [
-            "Follow the brief exactly. You have two sources: the moment's material and the library.",
+            "Write from the brief only: the idea's material and the library. Nothing else.",
             "Missing detail stays missing. Write around a gap; never fill one.",
-            "Call measure_draft before create_draft — it costs nothing and catches the mechanical " +
-              "faults that otherwise take a whole gate run to find.",
-            "Then call scrub_draft and rewrite what it finds. It runs every AI-tell rule line by " +
-              "line, which is the one thing a model cannot do to its own output: reading a draft " +
-              "back, it will tell you it checked and it will be wrong. Rewrite in his voice — the " +
-              "tool hands you the voice guide alongside the findings for exactly that reason.",
-            "Finish with create_draft, every claim carrying the verbatim span it rests on.",
+            ...(isRewrite
+              ? ["This is a rewrite. Fix exactly what_to_fix names — do not write a different post."]
+              : []),
+            "Call measure_draft and scrub_draft before filing. Both are free and catch what the " +
+              "checks would otherwise reject.",
+            "File it with create_draft, every claim carrying the verbatim span it rests on.",
           ],
-          then: "Call next_work again — the draft you just wrote will come back to be gated.",
+          then: "Call next_work again. The server gates what you filed; if it is rejected it comes " +
+            "back here with the reasons.",
         };
       }
 
-      // ── Nothing ──────────────────────────────────────────────────────────────────────────────
-      //
-      // Said with the reason, because "nothing to do" and "everything is blocked on a person" are
-      // different facts and only one of them is good news.
-      const [halfMined, captured] = await Promise.all([
-        db.select("moments", {
-          select: "id",
-          status: "eq.half_mined",
-          killed: "is.false",
-        }),
+      // Nothing queued. Said with the reason, because "nothing to do" and "everything is waiting on
+      // a person" are different facts and only one of them is good news.
+      const [halfMined, captured, drafted] = await Promise.all([
+        db.select("moments", { select: "id", status: "eq.half_mined", killed: "is.false" }),
         db.select("moments", { select: "id", status: "eq.captured", killed: "is.false" }),
+        db.select("moments", { select: "id", status: "eq.drafted", killed: "is.false" }),
       ]);
 
       return {
         work: "none",
         why: halfMined.length > 0 || captured.length > 0
-          ? `Nothing can be written yet. ${halfMined.length} candidate(s) need Josh interviewed ` +
-            `before they can be drafted (4.3.3), and ${captured.length} input(s) are still being ` +
-            `asked about. A moment must reach 'mined' before anything downstream is possible.`
-          : "Every draft is fully judged and every mined moment has a draft. The bank is empty of " +
-            "work — send something in.",
+          ? `Nothing is waiting to be written. ${halfMined.length + captured.length} idea(s) still ` +
+            `need Josh's answers before they can be drafted (4.3.3) — run their interviews with ` +
+            `next_interview_question.`
+          : "Nothing is waiting to be written, and no idea is waiting on an interview.",
         waiting_on_josh: {
-          candidates_needing_an_interview: halfMined.length,
-          inputs_still_being_asked_about: captured.length,
+          ideas_needing_answers: halfMined.length + captured.length,
+          drafts_with_the_gate_or_for_review: drafted.length,
         },
-        note: "This tool covers drafting and gating, which have unambiguous ready-states. " +
-          "Extraction and triage are available as submit_extraction and submit_candidates, but " +
-          "WHEN to run them is a judgement rather than a queue state — the interviewer decides it " +
-          "has enough, and worker-dispatch claims that job within a minute.",
       };
     },
   },
