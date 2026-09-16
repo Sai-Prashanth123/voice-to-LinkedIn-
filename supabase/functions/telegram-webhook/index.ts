@@ -18,6 +18,7 @@ import { admin, getSetting, logEvent, park } from "../_shared/db.ts";
 import { loadSecrets, secret } from "../_shared/secrets.ts";
 import { approveAccess, isApproved, requestAccess } from "../_shared/telegram-access.ts";
 import {
+  type BotAction,
   displayName,
   readName,
   setDisplayName,
@@ -32,7 +33,9 @@ import { loadLibrary, parsePillars } from "../_shared/library.ts";
 import { appendTurn, lastQuestionAt, loadSession } from "../_shared/session.ts";
 import {
   answerCallback,
+  type Button,
   downloadFile,
+  esc,
   isAuthorised,
   joshChatId,
   parseCommand,
@@ -421,17 +424,36 @@ async function triageAndHandle(
   if (isChatter(text)) {
     await setState(db, "nothing", null);
     if (first) {
-      await sendMessage(chatId, orientation(first));
+      await sendRich(chatId, esc(orientation(first)), await quickButtons(db));
     } else if (isGreeting(text)) {
-      await sendMessage(chatId, await greetingReply(db, await displayName(db, chatId)));
+      await sendRich(
+        chatId,
+        esc(await greetingReply(db, await displayName(db, chatId))),
+        await quickButtons(db),
+      );
     }
     return;
   }
 
-  const { intent, reply } = await triageMessage(db, text);
+  const name = await displayName(db, chatId);
+  const { intent, action, reply } = await triageMessage(db, text, name);
+
+  /*
+   * "Interview me", "what's waiting?", "review my drafts" — things the bot has always been able to do,
+   * but only if you knew the slash command. Said in plain words they used to become ideas in the
+   * bank. Now they do the thing.
+   */
+  if (intent === "action" && action !== "none") {
+    if (reply) await sendMessage(chatId, reply);
+    await handleCommand(db, chatId, ACTION_TO_COMMAND[action]);
+    await logEvent(db, "telegram_action_by_words", "info", { chat_id: chatId, action });
+    return;
+  }
 
   if (intent === "question" && reply) {
-    await sendMessage(chatId, reply);
+    // Every answer ends with something to tap. A reply you can only read is a dead end; the menu is
+    // what turns "how does this work?" into actually starting.
+    await sendRich(chatId, esc(reply), await quickButtons(db));
     await logEvent(db, "telegram_question_answered", "info", {
       chat_id: chatId,
       question: text.slice(0, 200),
@@ -445,6 +467,30 @@ async function triageAndHandle(
   }
 
   await captureNewMoment(db, chatId, msg, text);
+}
+
+/** The words the model hears, mapped to the commands the bot already had. One list, no new paths. */
+const ACTION_TO_COMMAND: Record<Exclude<BotAction, "none">, string> = {
+  start_interview: "interview_me",
+  show_waiting: "candidates",
+  review_drafts: "review",
+  status: "status",
+  help: "help",
+  stop: "stop",
+};
+
+/**
+ * The same buttons /help shows, attached to an answer.
+ *
+ * Reused from helpMessage rather than written again, so a button added to the menu appears here too
+ * and the two can never offer different things.
+ */
+async function quickButtons(db: SupabaseClient): Promise<Button[][]> {
+  const help = helpMessage(await picture(db));
+  // The first two rows — review, status, ask me, what's waiting. The rest are for people who already
+  // know what a voice guide is, and a wall of eight buttons under a short answer reads as a menu
+  // with a sentence attached rather than an answer with options.
+  return help.buttons.slice(0, 2);
 }
 
 /** A message held while the bot asks whether it was an answer or a new thought. */

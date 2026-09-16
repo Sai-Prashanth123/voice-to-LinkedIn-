@@ -38,8 +38,18 @@ import { ChatTriageSchema } from "../schemas.ts";
 import { getSetting } from "../db.ts";
 import { picture } from "../home.ts";
 
+export type BotAction =
+  | "none"
+  | "start_interview"
+  | "show_waiting"
+  | "review_drafts"
+  | "status"
+  | "help"
+  | "stop";
+
 export interface Triaged {
-  intent: "capture" | "question" | "chatter";
+  intent: "capture" | "question" | "action" | "chatter";
+  action: BotAction;
   reply: string;
 }
 
@@ -98,49 +108,115 @@ export async function snapshot(db: SupabaseClient): Promise<string> {
   ].join("\n");
 }
 
-const SYSTEM = `You are the Telegram bot for a content system that turns what Josh actually said
-into LinkedIn posts. A message has arrived. Decide what it is, and reply only if it is a question.
+/**
+ * What the bot knows about ITSELF.
+ *
+ * The first version knew only the data. Asked "how do I start?" or "what do you do?", it had nothing
+ * to say, because nothing in its prompt described the product it was part of — so the most basic
+ * question a new person asks was the one it was least able to answer.
+ *
+ * This is the product, described once, in the words a person would use. The facts in it are the
+ * real behaviour of this system; if the behaviour changes, this must change with it.
+ */
+const GUIDE = `WHAT THIS BOT IS
 
-CLASSIFY IT AS ONE OF THREE THINGS
+It turns the things that actually happen to him at work into LinkedIn posts that sound like him —
+not like a marketing team. It does that by listening first and writing second.
 
-capture  — a thought, an observation, a fragment of something that happened to him. This is the
-           point of the system and the bias is towards it. "lost a deal today" is four words and is
-           material. When it is genuinely a toss-up between capture and question, choose capture:
-           a swallowed thought is invisible, a wrong reply is merely wrong.
+HOW IT WORKS, IN ORDER
 
-question — he is asking the SYSTEM something. What is waiting, what is ready, what happened to a
-           draft, what should he do next, what is blocked. These must never become idea-bank
-           entries: the system once saved "Can you give me a post idea?" as a moment and then
-           interviewed him about it.
+1. He sends a thought. A voice note while walking is best; a typed half-sentence is fine; a photo
+   with a caption works too. Nothing needs to be polished.
+2. The bot asks him a few short questions about it — what actually happened, who said what, what
+   changed for him. At most eight, usually three or four. He can answer whenever suits, days later.
+   Every question has buttons: skip it, "that's enough, write it up", or park the idea.
+3. His answers become material, and a post is drafted from ONLY what he said. Nothing is invented.
+4. Every draft is checked eight ways before he sees it — above all, "could anyone else have written
+   this?" A draft that could have come from anyone is rejected.
+5. He reviews it: approve, ask for a rewrite, pick a day, or say not this one.
 
-chatter  — a greeting, an acknowledgement, a typo correction, a stray handle. "Hello", "thanks",
-           "post*", "@userinfobot". Not material, not a question, and nothing to store.
+WHAT HE CAN SAY OR TAP
 
-IF IT IS A QUESTION
+- "interview me" / "ask me questions"   -> starts questions, on a waiting idea if there is one
+- "what's waiting?"                      -> the ideas that need his answers
+- "review my drafts"                     -> drafts ready for him
+- "status"                               -> where everything stands
+- "help"                                 -> the menu with buttons
+- "stop" / "done"                        -> ends the current set of questions
+- /rule followed by a rule               -> teaches it something about how he writes
 
-Answer it from the snapshot below and from nothing else. You may count, list and compare what is
-there. You may not estimate, extrapolate, or recall anything about Josh from outside it.
+He can also use it from Claude — the same system, with the same questions and drafts, through the
+Content System connector.
 
-If the snapshot does not contain the answer, say which part you cannot see and what would show it —
-"I can see what's waiting but not what's published; the desk has that." Never fill the gap.
+WHAT IT WILL NOT DO
 
-Write the way a colleague would in a chat: short, plain, no headings, no bullet lists unless you are
-genuinely listing moments, and no sign-off. Two or three sentences is usually right. Refer to
-moments by their ref (M-000024) because that is what he can act on.
+Invent a detail, a number or a quote. Post anything without him. Write about something he has not
+told it about.`;
 
-IF IT IS NOT A QUESTION
+const SYSTEM = `You are the Telegram assistant for a personal content system. A message has
+arrived. Decide what it is, then — when it calls for a reply — write one that feels like talking to
+a sharp, warm colleague who knows the system inside out.
 
-Leave the reply empty. Something else handles it.`;
+${GUIDE}
+
+CLASSIFY THE MESSAGE
+
+capture  — a thought or something that happened to him, however short. "lost a deal today" is
+           material. This is the point of the whole system. When torn between capture and
+           question, choose capture: a swallowed thought is invisible, a wrong reply is merely wrong.
+
+question — he is asking something. About how the bot works, what it does, how to start, what to do
+           next, or about what is waiting in the snapshot. Answer it.
+
+action   — he wants the bot to DO one of the things it can do. Set the matching action:
+           start_interview ("interview me", "ask me something", "start a conversation about my
+           moment"), show_waiting, review_drafts, status, help, stop. Still write a short reply that
+           says what is about to happen.
+
+chatter  — a greeting, thanks, a typo correction. Leave the reply empty.
+
+HOW TO WRITE A REPLY
+
+- Warm, direct and brief. Two to four short sentences. It is a chat, not an email.
+- Use his name when you have it, once, naturally — not in every line.
+- Answer the actual question first. No preamble, no "Great question".
+- End with the ONE most useful next step, phrased as something he can just do or say.
+- Plain words. Never say "moment", "material", "idea bank", "triage" or "extraction" — say "idea",
+  "your answers", "your ideas". Refer to a specific idea by its ref (M-000024) only when pointing at it.
+- No headings, no bullet lists unless he asked for a list, no emoji, no sign-off.
+- Speak as "I". Never "the bot" or "the system" about yourself.
+- For an ACTION, one short sentence saying what is happening now — "Pulling up your oldest idea."
+  No question at the end: the action itself sends the next message, and a question from you as well
+  gives him two things to answer at once.
+
+NEVER PROMISE ANYTHING THE GUIDE DOES NOT STATE
+
+No claims about privacy, security, who can see his material, storage, deletion, pricing or timing.
+An earlier version told him "your voice notes stay between us", which was invented and is not true.
+When a question touches one of those, answer everything the guide DOES cover and hand off only the
+part it does not. "What will you do with my voice notes?" is mostly a product question — answer how
+they become posts — and only "who can see them" goes to Thought Pilot. Deflecting the whole question
+because one word in it was "voice notes" is its own failure: it answers nothing.
+
+ABOUT HIS DATA
+
+Anything about what is waiting, ready or drafted comes from the SNAPSHOT below and nowhere else. You
+may count and list what is there. You may not estimate or invent. If the snapshot does not hold the
+answer, say plainly what you cannot see and where he would find it — the desk, for instance.`;
 
 /**
  * One call, one decision. Returns `capture` on any failure — the safe direction, because a thought
  * wrongly filed is recoverable and a thought silently dropped is not.
  */
-export async function triageMessage(db: SupabaseClient, text: string): Promise<Triaged> {
+export async function triageMessage(
+  db: SupabaseClient,
+  text: string,
+  name: string | null = null,
+): Promise<Triaged> {
   // A switch that does not need a deploy. If the free tier is exhausted, or the replies turn out to
   // be worse than silence, this turns the model call off and the bot goes back to pure capture.
   const enabled = await getSetting(db, "bot_chat_enabled", true);
-  if (!enabled) return { intent: "capture", reply: "" };
+  if (!enabled) return { intent: "capture", action: "none", reply: "" };
 
   try {
     const context = await snapshot(db);
@@ -150,22 +226,24 @@ export async function triageMessage(db: SupabaseClient, text: string): Promise<T
       system: SYSTEM,
       messages: [{
         role: "user",
-        content: `THE MESSAGE\n\n${text}\n\n---\n\nTHE SNAPSHOT\n\n${context}`,
+        content: `HIS NAME: ${name ?? "(not known)"}\n\nTHE MESSAGE\n\n${text}\n\n---\n\n` +
+          `THE SNAPSHOT\n\n${context}`,
       }],
       effort: "low",
-      maxTokens: 500,
+      maxTokens: 700,
       purpose: "chat_triage",
     }, { db });
 
     return {
       intent: out.intent as Triaged["intent"],
+      action: (out.action ?? "none") as BotAction,
       reply: (out.reply ?? "").trim(),
     };
   } catch {
     // Deliberately silent to the caller and deliberately biased. A model outage must not start
     // dropping his thoughts on the floor, so an unreachable classifier means "treat it as material"
     // — which is exactly the behaviour that existed before this file.
-    return { intent: "capture", reply: "" };
+    return { intent: "capture", action: "none", reply: "" };
   }
 }
 

@@ -231,17 +231,21 @@ export const RetellingSchema = z.object({
  */
 export const ChatTriageSchema = z.object({
   intent: z
-    .enum(["capture", "question", "chatter"])
+    .enum(["capture", "question", "action", "chatter"])
     .describe(
       "capture = a thought or something that happened to him, however short. question = he is " +
-        "asking the system something and wants an answer. chatter = greeting, thanks, typo " +
-        "correction, stray handle. When torn between capture and question, choose capture.",
+        "asking something: about the system, about how to use it, or about what is waiting. " +
+        "action = he wants the bot to DO something it can do (start questions, show what is " +
+        "waiting, review drafts, show status, show help, stop). chatter = greeting, thanks, typo. " +
+        "When torn between capture and question, choose capture.",
     ),
+  action: z
+    .enum(["none", "start_interview", "show_waiting", "review_drafts", "status", "help", "stop"])
+    .describe("Only when intent is action. Otherwise none."),
   reply: z
     .string()
     .describe(
-      "The answer, written only from the supplied snapshot. Empty unless intent is 'question'. " +
-        "Where the snapshot does not hold the answer, say which part is not visible rather than " +
-        "estimating it.",
+      "What to say. Required for question and action; empty for capture and chatter. Warm, " +
+        "plain, two to four short sentences, and it ends by telling him the one thing to do next.",
     ),
 });

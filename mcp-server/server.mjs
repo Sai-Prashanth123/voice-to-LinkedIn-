@@ -10,6 +10,7 @@
  * readers of one thing eventually disagreed.
  */
 
+import { INSTRUCTIONS } from "./instructions.mjs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { DbError } from "./db.mjs";
 import { assertUniqueNames } from "./tools/index.mjs";
@@ -56,7 +57,9 @@ export function wrap(tool, context, onCall) {
  * @param onCall   audit hook
  */
 export function build(context, list, onCall) {
-  const server = new McpServer({ name: NAME, version: VERSION });
+  // Instructions are read by every Claude client before the first message, which makes them the one
+  // place conversational behaviour can live without anyone configuring anything. See instructions.mjs.
+  const server = new McpServer({ name: NAME, version: VERSION }, { instructions: INSTRUCTIONS });
 
   for (const tool of assertUniqueNames(list)) {
     // Annotations are attached HERE rather than written into each tool's config, so they are
