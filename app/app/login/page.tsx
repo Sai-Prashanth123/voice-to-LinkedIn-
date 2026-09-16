@@ -1,76 +1,17 @@
 import { redirect } from "next/navigation";
-import { isAllowed } from "@/lib/allowlist";
-import { SubmitButton } from "../submit-button";
-import { supabaseServer } from "@/lib/supabase";
-
-export const dynamic = "force-dynamic";
 
 /**
- * A magic link, because there is one user and a password is one more thing to lose.
+ * There is no sign-in any more.
+ *
+ * The page is kept rather than deleted because the address is in circulation: it is in the
+ * handbook, in Josh's browser history, and at the end of every magic link already sent. Deleting
+ * the route would answer all of those with a 404, which reads as "the desk is gone" rather than
+ * "the desk no longer asks who you are".
+ *
+ * So it forwards. Anyone arriving at an old link lands on the desk itself.
  */
-async function sendLink(formData: FormData) {
-  "use server";
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  // 15.4, and it fails CLOSED for the same reason the middleware does: an unset ALLOWED_EMAIL used
-  // to skip this check entirely and send a sign-in link to whoever asked.
-  if (!isAllowed(email)) redirect("/login?denied=1");
+export const dynamic = "force-dynamic";
 
-  const db = await supabaseServer();
-  const { error } = await db.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/auth/callback` },
-  });
-  redirect(error ? "/login?failed=1" : "/login?sent=1");
-}
-
-export default async function Login({
-  searchParams,
-}: {
-  searchParams: Promise<{ sent?: string; denied?: string; failed?: string }>;
-}) {
-  const params = await searchParams;
-
-  return (
-    <main>
-      <section className="step">
-        <div className="step-head">
-          <span className="step-no">—</span>
-          <h2>Sign in</h2>
-        </div>
-
-        {params.sent
-          ? (
-            <div className="quiet">
-              <strong>Check your email.</strong>{" "}
-              The link signs you straight in and expires shortly.
-            </div>
-          )
-          : (
-            <>
-              {params.denied && (
-                <div className="quiet" style={{ borderColor: "var(--mark)", marginBottom: "1.5rem" }}>
-                  That address cannot access this system.
-                </div>
-              )}
-              {params.failed && (
-                <div className="quiet" style={{ borderColor: "var(--mark)", marginBottom: "1.5rem" }}>
-                  The link could not be sent. Try again in a moment.
-                </div>
-              )}
-              <form action={sendLink} className="row">
-                <input
-                  type="email"
-                  name="email"
-                  required
-                  placeholder="you@slingshotgtm.com"
-                  aria-label="Email address"
-                  style={{ minWidth: "18rem" }}
-                />
-                <SubmitButton className="primary" pendingLabel="Sending…">Send me a link</SubmitButton>
-              </form>
-            </>
-          )}
-      </section>
-    </main>
-  );
+export default function Login() {
+  redirect("/");
 }

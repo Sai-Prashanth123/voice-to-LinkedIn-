@@ -1,0 +1,8 @@
+# The desk has no sign-in. Anyone with the address can read it, which is a deliberate decision.
+#
+# This file does not protect anything - it is a request, honoured by well-behaved crawlers and
+# ignored by everyone else. It exists so the material is not additionally indexed and served in
+# search results, which is a different and larger exposure than "somebody has the link".
+
+User-agent: *
+Disallow: /

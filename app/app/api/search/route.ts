@@ -11,20 +11,16 @@ export const dynamic = "force-dynamic";
  * twice, once when the conversation question disagreed across two surfaces and once when the edit
  * classifier had to be copied.
  *
- * SECURITY: this runs as the signed-in user, and `search_moments` is security invoker, so row-level
- * security applies exactly as it does to a page read. The middleware has already refused anyone who
- * is not Josh before the request reaches here.
+ * SECURITY: there is no sign-in any more, so this reaches the same rows any page on the desk
+ * reaches. The 401 that used to stand here was removed with the rest of the auth, not overlooked —
+ * leaving it would have made search the one part of an open desk that refused to answer, which
+ * reads as a broken feature rather than a protected one.
  */
 export async function GET(request: Request) {
   const q = new URL(request.url).searchParams.get("q")?.trim() ?? "";
   if (q.length < 2) return NextResponse.json({ moments: [] });
 
   const db = await supabaseServer();
-
-  // Signed out is a 401 rather than an empty list. An empty list would read as "nothing matched",
-  // which is a different and misleading answer.
-  const { data: { user } } = await db.auth.getUser();
-  if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
   const { data: hits, error } = await db.rpc("search_moments", { q, limit_to: 8 });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

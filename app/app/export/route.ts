@@ -33,9 +33,10 @@ const BUCKETS = ["voice-notes", "images", "renders"] as const;
 export async function GET() {
   const db = await supabaseServer();
 
-  const { data: { user } } = await db.auth.getUser();
-  if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
-
+  // The sign-in check that stood here went with the rest of the auth. Worth being clear-eyed about
+  // what that means for THIS route specifically: it returns every table plus signed links to every
+  // stored voice note and image, in one request, to anyone who knows the path. It is the single
+  // most exposing endpoint on an open desk.
   const bundle: Record<string, unknown> = {
     exported_at: new Date().toISOString(),
     note:
