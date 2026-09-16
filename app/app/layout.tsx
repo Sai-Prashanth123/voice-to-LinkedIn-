@@ -5,7 +5,7 @@ import { CommandPalette } from "./command-palette";
 
 export const metadata: Metadata = {
   title: "The desk",
-  description: "Weekly pass, calendar, reference library and proposals.",
+  description: "The idea bank and the drafts written from it.",
   appleWebApp: {
     capable: true,
     title: "The desk",
@@ -32,11 +32,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <header className="masthead">
           <h1><Link href="/">The desk</Link></h1>
           <nav aria-label="Sections">
-            <Link href="/">This week</Link>
-            <Link href="/calendar">Calendar</Link>
+            <Link href="/drafts">Drafts</Link>
             <Link href="/bank">Idea bank</Link>
-            <Link href="/library">Library</Link>
-            <Link href="/proposals">Proposals</Link>
           </nav>
           <CommandPalette />
         </header>

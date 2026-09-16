@@ -15,7 +15,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "The desk",
     short_name: "The desk",
-    description: "Weekly pass, calendar and reference library for the content system.",
+    description: "The idea bank and the drafts written from it.",
     start_url: "/",
     display: "standalone",
     orientation: "portrait",

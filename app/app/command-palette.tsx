@@ -29,12 +29,8 @@ interface Hit {
 }
 
 const ROUTES = [
-  { label: "This week", detail: "Drafts, the question, verdicts", href: "/" },
-  { label: "Calendar", detail: "What is going out, and when", href: "/calendar" },
-  { label: "Idea bank", detail: "Every moment, searchable", href: "/bank" },
-  { label: "Reference library", detail: "How it writes — edit anything", href: "/library" },
-  { label: "Proposals", detail: "Changes waiting for your call", href: "/proposals" },
-  { label: "Export everything", detail: "Every table, as one file", href: "/export" },
+  { label: "Drafts", detail: "Everything written, and what the checks said", href: "/drafts" },
+  { label: "Idea bank", detail: "Every idea, searchable", href: "/bank" },
 ];
 
 export function CommandPalette() {
