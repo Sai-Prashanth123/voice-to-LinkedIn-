@@ -104,3 +104,28 @@ test("setup fills in the connector address and the caller's token", async () => 
   assert.match(joined, /--token "tok-123"/);
   assert.equal(out.token_filled_in, true);
 });
+
+test("write tools submit with the key from the context, not only process.env", async () => {
+  // On the hosted connector the key is in the env object the edge function builds, so process.env
+  // has nothing. Every write from Claude Desktop and claude.ai failed with "CONTENT_MCP_KEY is not
+  // set" while the local server, which does have it in process.env, passed every check.
+  const saved = process.env.CONTENT_MCP_KEY;
+  delete process.env.CONTENT_MCP_KEY;
+  const realFetch = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (url, init) => {
+    seen.push({ url: String(url), auth: init?.headers?.Authorization });
+    return new Response(JSON.stringify({ ok: true, moment_id: 1 }), { status: 200 });
+  };
+  try {
+    const capture = tools.find((t) => t.name === "capture_thought");
+    await capture.handler({ text: "x" }, { url: "https://p.test", key: "ctx-key" });
+    const answer = tools.find((t) => t.name === "answer_interview");
+    await answer.handler({ moment_id: 1, answer: "y" }, { url: "https://p.test", key: "ctx-key" });
+    assert.equal(seen.length, 2);
+    assert.ok(seen.every((s) => s.auth === "Bearer ctx-key" && s.url.endsWith("/functions/v1/cc-submit")));
+  } finally {
+    globalThis.fetch = realFetch;
+    if (saved !== undefined) process.env.CONTENT_MCP_KEY = saved;
+  }
+});

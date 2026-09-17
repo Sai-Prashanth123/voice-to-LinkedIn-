@@ -128,6 +128,9 @@ export const trackingTools = [
           sessions_read_total: 0,
           sent_total: 0,
         };
+        // The newest report may not carry a bar (an older scanner, or a hand-made report), so the
+        // bar shown is the most recent one that did.
+        if (m.bar == null && typeof d.bar === "number") m.bar = d.bar;
         m.runs += 1;
         m.sessions_read_total += Number(d.sessions_changed ?? 0);
         m.sent_total += Number(d.queued ?? 0);

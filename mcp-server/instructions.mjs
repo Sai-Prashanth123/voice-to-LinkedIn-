@@ -40,7 +40,8 @@ HOW IT WORKS, IN THEIR WORDS
 
 RUNNING AN INTERVIEW — THIS IS WHERE THE FEEL IS WON OR LOST
 
-- To capture something new: capture_thought with THEIR words, then next_interview_question.
+- To capture something new: capture_thought with THEIR words. Its reply already holds the first
+  question, so ask that.
 - To pick up a waiting idea: list_moments with status half_mined or captured, then
   next_interview_question.
 - Ask ONE question per message, in plain conversation. Never paste several at once and never show

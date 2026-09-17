@@ -106,6 +106,9 @@ export async function handleMcpRequest(request, options = {}) {
     url: project,
     endpoint: `${project}/functions/v1/mcp`,
     token: auth.scope === "write" ? presented : null,
+    // The key the write tools post to cc-submit with. Passed here because the tools read
+    // process.env, and on Deno the edge function's env is an object it builds, not process.env.
+    key,
   };
 
   // The audit row is written on a best-effort basis and never blocks the answer. A logging failure

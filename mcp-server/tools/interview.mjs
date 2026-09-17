@@ -36,8 +36,11 @@
 import { z } from "zod";
 
 /** One door, so the key check and the error shape are written once. */
-async function post(url, payload) {
-  const key = process.env.CONTENT_MCP_KEY;
+async function post(url, contextKey, payload) {
+  // From the context first. On the hosted connector the key lives in the env object the edge
+  // function builds, not in process.env, so reading process.env alone made every write from
+  // Claude Desktop and claude.ai fail with "not set" while the local server worked.
+  const key = contextKey ?? process.env.CONTENT_MCP_KEY;
   if (!key) throw new Error("CONTENT_MCP_KEY is not set, so nothing can be submitted.");
 
   const res = await fetch(`${url}/functions/v1/cc-submit`, {
@@ -65,15 +68,17 @@ export const interviewTools = [
         "thought captured here is indistinguishable from one sent to the bot. " +
         "Capture his OWN words as closely as you can: everything downstream is checked against " +
         "this text span by span, and a tidied-up paraphrase is a worse source than a rough " +
-        "sentence. Do not capture questions, instructions or your own summaries.",
+        "sentence. Do not capture questions, instructions or your own summaries. " +
+        "The reply carries the FIRST interview question: ask him that, then pass his answer to " +
+        "answer_interview. The interview happens here only; nothing is sent to Telegram.",
       inputSchema: {
         text: z.string().min(1).describe(
           "What happened, in his words. A fragment is fine — the interview is what fills it out.",
         ),
       },
     },
-    async handler(args, { url }) {
-      return await post(url, { kind: "capture", text: args.text });
+    async handler(args, { url, key }) {
+      return await post(url, key, { kind: "capture", text: args.text });
     },
   },
 
@@ -92,8 +97,8 @@ export const interviewTools = [
         moment_id: z.number().int().describe("The moment to interview about"),
       },
     },
-    async handler(args, { url }) {
-      return await post(url, { kind: "interview_next", moment_id: args.moment_id });
+    async handler(args, { url, key }) {
+      return await post(url, key, { kind: "interview_next", moment_id: args.moment_id });
     },
   },
 
@@ -113,8 +118,8 @@ export const interviewTools = [
         answer: z.string().min(1).describe("His answer, verbatim"),
       },
     },
-    async handler(args, { url }) {
-      return await post(url, {
+    async handler(args, { url, key }) {
+      return await post(url, key, {
         kind: "interview_answer",
         moment_id: args.moment_id,
         answer: args.answer,

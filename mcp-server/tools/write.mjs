@@ -166,7 +166,7 @@ export const writeTools = [
         model: z.string().optional().describe("What wrote it. Defaults to claude-code."),
       },
     },
-    async handler(args, { db, url }) {
+    async handler(args, { db, url, key: contextKey }) {
       // 6.3 again: a killed moment is one Josh has already said no to.
       const [moment] = await db.select("moments", {
         select: "id,killed,status,ref",
@@ -262,7 +262,7 @@ export const writeTools = [
        * number is what parks an idea after its third failed draft (9.8), and reading it from the job
        * rather than from here means it cannot be reset by calling this again.
        */
-      const key = process.env.CONTENT_MCP_KEY;
+      const key = contextKey ?? process.env.CONTENT_MCP_KEY;
       if (!key) throw new Error("CONTENT_MCP_KEY is not set, so the draft cannot be filed.");
 
       const res = await fetch(`${url}/functions/v1/cc-submit`, {
@@ -306,12 +306,12 @@ export const writeTools = [
       },
     },
 
-    async handler(args, { url }) {
+    async handler(args, { url, key: contextKey }) {
       // Posted to cc-submit rather than written here, and that is the whole design rather than an
       // inconvenience. content_mcp has insert on four tables and the idea bank is none of them; the
       // edge function validates and writes with its own admin client. The model call moved off the
       // free tier, the write authority did not.
-      const key = process.env.CONTENT_MCP_KEY;
+      const key = contextKey ?? process.env.CONTENT_MCP_KEY;
       if (!key) throw new Error("CONTENT_MCP_KEY is not set, so the extraction cannot be submitted.");
 
       const res = await fetch(`${url}/functions/v1/cc-submit`, {
@@ -365,8 +365,8 @@ export const writeTools = [
       },
     },
 
-    async handler(args, { url }) {
-      const key = process.env.CONTENT_MCP_KEY;
+    async handler(args, { url, key: contextKey }) {
+      const key = contextKey ?? process.env.CONTENT_MCP_KEY;
       if (!key) throw new Error("CONTENT_MCP_KEY is not set, so candidates cannot be submitted.");
 
       // Posted rather than inserted: content_mcp cannot write `moments`, and that is the point.

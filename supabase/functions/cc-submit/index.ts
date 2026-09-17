@@ -32,7 +32,7 @@
 
 import { admin, getSetting, logEvent } from "../_shared/db.ts";
 import { loadSecrets } from "../_shared/secrets.ts";
-import { enqueue, json } from "../_shared/jobs.ts";
+import { json } from "../_shared/jobs.ts";
 import {
   applyExtraction,
   chooseNextQuestion,
@@ -267,16 +267,21 @@ async function capture(db: SupabaseClient, body: { text?: string }) {
     text_body: text,
   });
 
-  // Same as Telegram capture: the interview starts itself. Without this the moment sits at
-  // `captured` with no turns, which is exactly the state seven of them are in right now.
-  await enqueue(db, "interview_step", { moment_id: moment.id });
-  await logEvent(db, "captured_via_mcp", "info", { moment_id: moment.id, ref: moment.ref });
+  // The interview starts here, synchronously, and the first question goes back to Claude — not to
+  // the Telegram queue. Without a first question the moment sits at `captured` with no turns, which
+  // is how seven of them ended up. But enqueueing the Telegram step for it (as this did) also sent
+  // that question to Telegram, so a thought typed into Claude was interviewed in two places at once.
+  const step = await chooseNextQuestion(db, moment.id);
+  await logEvent(db, "captured_via_mcp", "info", { moment_id: moment.id, ref: moment.ref, action: step.action });
 
   return json({
     ok: true,
     moment_id: moment.id,
     moment_ref: moment.ref,
-    next: "The first question is being written. Call next_interview_question in a moment to get it.",
+    ...step,
+    next: step.action === "asked"
+      ? "Ask him this question, then pass his answer to answer_interview."
+      : nextFor(step.action),
   });
 }
 

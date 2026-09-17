@@ -61,6 +61,8 @@ export interface NextStep {
   parkReason?: string;
   /** Why nothing happened, for a caller that has to explain itself to a person. */
   note?: string;
+  /** The question was already waiting for an answer; nothing new was asked and nothing should be sent. */
+  alreadyOpen?: boolean;
 }
 
 /** The Telegram job. Chooses, then delivers. */
@@ -91,6 +93,22 @@ export async function chooseNextQuestion(
       action: "nothing",
       momentId,
       note: `That interview is already finished — the moment is ${moment.status}.`,
+    };
+  }
+
+  // A question already waiting is never followed by another. Found by a live test: a thought
+  // captured in Claude queued the Telegram interview step, Claude asked its first question
+  // straight away, and when the queued step ran it asked the model for a SECOND question and sent
+  // it to Telegram — two open questions on one idea, one budget slot wasted, and the next Telegram
+  // message filed as an answer to an interview happening somewhere else.
+  const last = session.turns[session.turns.length - 1];
+  if (last?.role === "question") {
+    return {
+      action: "asked",
+      momentId,
+      question: last.body,
+      alreadyOpen: true,
+      progress: `${session.questionsAsked} of at most ${maxQuestions}.`,
     };
   }
 
@@ -251,7 +269,7 @@ export async function deliverQuestion(db: SupabaseClient, step: NextStep): Promi
     return;
   }
 
-  if (action !== "asked" || !step.question) return;
+  if (action !== "asked" || !step.question || step.alreadyOpen) return;
 
   const text = (step.encouragement
     ? `${step.encouragement}\n\n${step.question}`

@@ -330,6 +330,25 @@ async function route(db: SupabaseClient, msg: Message): Promise<void> {
     const session = await loadSession(db, state.moment_id);
     const last = session.turns[session.turns.length - 1];
 
+    // A greeting or a bare "thanks" is not an answer. Found by a live test: with a question open,
+    // "hi" was filed as the answer, the interviewer took that as the end of the conversation, and
+    // the idea came out "mined" from one word. The question stays open and the state is untouched,
+    // so his real answer still lands where it belongs. A voice note is never chatter.
+    const hasVoice = Boolean(msg.voice ?? msg.audio);
+    if (last?.role === "question" && !hasVoice && isChatter(text)) {
+      if (isGreeting(text)) {
+        const name = await displayName(db, chatId);
+        const { data: moment } = await db.from("moments").select("ref").eq("id", state.moment_id).maybeSingle();
+        await sendMessage(
+          chatId,
+          `Hi${name ? ` ${name}` : ""}. One question is still open on ${moment?.ref ?? "your last idea"}:\n\n` +
+            `"${last.body.slice(0, 300)}"\n\n` +
+            `Answer it whenever suits, or just send something new.`,
+        );
+      }
+      return;
+    }
+
     if (last?.role === "question") {
       const askedAt = await lastQuestionAt(db, state.moment_id);
       const ageMs = askedAt ? Date.now() - askedAt.getTime() : Infinity;
