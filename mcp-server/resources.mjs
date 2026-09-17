@@ -132,7 +132,7 @@ export function resourcesFor(context) {
         return json(uri.href, {
           moment: {
             id: moment.id,
-            ref: moment.ref,
+            name: moment.title ?? null,
             status: moment.status,
             source: moment.source,
             pillar: moment.pillar,

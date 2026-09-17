@@ -43,6 +43,7 @@ export const WRITE_TOOLS = new Set([
   // The interview, from a surface that is not Telegram. Both write turns to the idea bank.
   "capture_thought",
   "answer_interview",
+  "name_idea",
   "scan_sessions",
   // Returns a command that installs a scheduled reporter holding this token.
   "setup_session_tracking",

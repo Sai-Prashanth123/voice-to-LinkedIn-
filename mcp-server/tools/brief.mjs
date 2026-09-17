@@ -108,7 +108,7 @@ export const briefTools = [
       const id = args.moment_id;
 
       const [moment] = await db.select("moments", {
-        select: "id,ref,killed,status,audience,pillar",
+        select: "id,title,killed,status,audience,pillar",
         id: `eq.${id}`,
         limit: 1,
       });
@@ -186,7 +186,7 @@ export const briefTools = [
 
       return {
         moment_id: id,
-        moment_ref: moment.ref,
+        name: moment.title ?? null,
         prompt_version: PROMPT_VERSION,
         library_version: library.version,
         library_sections_awaiting_josh: library.awaiting_josh,
@@ -230,7 +230,7 @@ export const briefTools = [
       if (!draft) throw new Error(`No draft with id ${args.draft_id}.`);
 
       const [moment] = await db.select("moments", {
-        select: "id,ref,audience",
+        select: "id,title,audience",
         id: `eq.${draft.moment_id}`,
         limit: 1,
       });
@@ -288,7 +288,7 @@ export const briefTools = [
       // test 8 is built to catch.
       return {
         draft_id: draft.id,
-        moment_ref: moment?.ref,
+        name: moment?.title ?? null,
         prompt_version: PROMPT_VERSION,
         already_judged: [...done],
         not_judgeable: [...unjudgeable],
@@ -405,7 +405,7 @@ export const briefTools = [
       const id = args.moment_id;
 
       const [moment] = await db.select("moments", {
-        select: "id,ref,status,killed",
+        select: "id,title,status,killed",
         id: `eq.${id}`,
         limit: 1,
       });
@@ -455,7 +455,7 @@ export const briefTools = [
 
       return {
         moment_id: id,
-        moment_ref: moment.ref,
+        name: moment.title ?? null,
         prompt_version: PROMPT_VERSION,
 
         // Only pillars Josh has actually defined. With none, extraction records none rather than

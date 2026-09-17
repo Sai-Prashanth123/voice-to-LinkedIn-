@@ -30,7 +30,7 @@ export async function GET(request: Request) {
 
   const { data: moments } = await db
     .from("moments")
-    .select("id, ref, status, pillar, material(the_moment)")
+    .select("id, title, status, pillar, material(the_moment)")
     .in("id", ids);
 
   // Re-ordered to the ranking, which `in()` does not preserve. flatMap rather than
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
       const mat = Array.isArray(raw) ? raw[0] : raw;
       return [{
         id: m.id,
-        ref: m.ref,
+        title: m.title,
         status: m.status,
         pillar: m.pillar,
         line: String(mat?.the_moment ?? "").split(/\r?\n/)[0].slice(0, 90),

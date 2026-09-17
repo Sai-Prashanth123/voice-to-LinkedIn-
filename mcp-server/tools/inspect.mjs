@@ -208,8 +208,8 @@ export const inspectTools = [
     async handler(_args, { db }) {
       const [mined, halfMined, captured, unjudged, waiting, openProposals] = await Promise.all([
         rows(db, "moments?select=id&status=eq.mined&killed=is.false"),
-        rows(db, "moments?select=id,ref&status=eq.half_mined&killed=is.false&order=id.asc"),
-        rows(db, "moments?select=id,ref&status=eq.captured&killed=is.false&order=id.asc"),
+        rows(db, "moments?select=id,title&status=eq.half_mined&killed=is.false&order=id.asc"),
+        rows(db, "moments?select=id,title&status=eq.captured&killed=is.false&order=id.asc"),
         rows(db, "drafts?select=id&order=id.desc&limit=100"),
         // moments!inner(killed) — a post on a killed moment is a verification fixture. Counting
         // them told the operator two posts were waiting on Josh when both were fakes, which is
@@ -241,7 +241,7 @@ export const inspectTools = [
 
       if (halfMined.length > 0) {
         actions.push({
-          do: `Answer the interview on ${halfMined.length} candidate(s) — start with ${halfMined[0].ref}`,
+          do: `Answer the interview on ${halfMined.length} candidate(s) — start with "${halfMined[0].title ?? "an unnamed idea"}"`,
           where: "Telegram",
           why: "A candidate cannot be drafted until Josh has been interviewed about it (4.3.3). " +
             "With nothing mined, this is what everything else is waiting on.",

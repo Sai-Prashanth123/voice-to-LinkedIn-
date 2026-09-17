@@ -72,13 +72,13 @@ function completableId(context, load, description) {
 
 async function momentOptions({ db }) {
   const rows = await db.select("moments", {
-    select: "id,ref,status,notes",
+    select: "id,title,status,notes",
     killed: "is.false",
     order: "id.desc",
     limit: 40,
   });
   return rows.map((m) =>
-    `${m.id} · ${m.ref} · ${m.status}${m.notes ? ` · ${String(m.notes).split("\n")[0].slice(0, 50)}` : ""}`
+    `${m.id} · ${m.title ?? "unnamed idea"} · ${m.status}${m.notes ? ` · ${String(m.notes).split("\n")[0].slice(0, 50)}` : ""}`
   );
 }
 

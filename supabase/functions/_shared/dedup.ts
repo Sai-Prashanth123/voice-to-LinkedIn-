@@ -235,7 +235,7 @@ async function byModel(
     db.from("published_archive").select("body, posted_on")
       .order("posted_on", { ascending: false, nullsFirst: false }).limit(25),
     db.from("moments")
-      .select("ref, status, material(the_moment, the_detail, the_realisation)")
+      .select("title, status, material(the_moment, the_detail, the_realisation)")
       .in("status", ["queued", "drafted", "gated", "scheduled"])
       .eq("killed", false)
       .neq("id", momentId)
@@ -249,7 +249,7 @@ async function byModel(
     const one = Array.isArray(mat) ? mat[0] : mat;
     const summary = [one?.the_moment, one?.the_detail, one?.the_realisation]
       .filter(Boolean).join(" ");
-    return `[${m.ref}] ${firstLine(summary, 300)}`;
+    return `[${m.title ?? "Unnamed idea"}] ${firstLine(summary, 300)}`;
   }).filter((line) => line.trim().length > 12);
 
   if (priorPosts.length === 0 && priorMoments.length === 0) {

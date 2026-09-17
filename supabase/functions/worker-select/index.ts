@@ -589,7 +589,7 @@ async function remindStalledInterviews(db: SupabaseClient): Promise<void> {
 
   const { data: open } = await db
     .from("moments")
-    .select("id, ref, status")
+    .select("id, ref, title, status")
     .in("status", ["captured", "half_mined"])
     .eq("killed", false)
     .limit(100);
@@ -597,6 +597,7 @@ async function remindStalledInterviews(db: SupabaseClient): Promise<void> {
   const waiting: {
     id: number;
     ref: string;
+    title: string | null;
     question: string;
     about: string;
     silentHours: number;
@@ -641,6 +642,7 @@ async function remindStalledInterviews(db: SupabaseClient): Promise<void> {
     waiting.push({
       id: m.id as number,
       ref: m.ref as string,
+      title: (m.title as string | null) ?? null,
       question: String(last.body ?? "").trim(),
       about: String(first?.body ?? "").trim(),
       silentHours,
@@ -659,7 +661,8 @@ async function remindStalledInterviews(db: SupabaseClient): Promise<void> {
 
   const lines = listed.map((w, i) => {
     const label = only ? "" : `${i + 1}. `;
-    const about = w.about ? `${snippet(w.about, 70)}\n   ` : "";
+    // The name they gave it; their own first words only for an idea not yet named.
+    const about = w.title ? `"${w.title}"\n   ` : w.about ? `${snippet(w.about, 70)}\n   ` : "";
     return `${label}${about}${snippet(w.question, 140)}`;
   });
 

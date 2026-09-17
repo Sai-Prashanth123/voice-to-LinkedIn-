@@ -28,7 +28,8 @@ import { enqueue, json, nudge } from "../_shared/jobs.ts";
 import { pushBack } from "../_shared/pushback.ts";
 import { recordVerdict } from "../_shared/outcome.ts";
 import { decide as decideProposal } from "../_shared/proposals.ts";
-import { startNextSeedMoment } from "../_shared/handlers/interview.ts";
+import { chooseNextQuestion, deliverQuestion, startNextSeedMoment } from "../_shared/handlers/interview.ts";
+import { cleanName, ideaGist, ideaLabel, MAX_NAME, namePrompt, nextUnnamed, setIdeaName } from "../_shared/idea-names.ts";
 import { loadLibrary, parsePillars } from "../_shared/library.ts";
 import { appendTurn, lastQuestionAt, loadSession } from "../_shared/session.ts";
 import {
@@ -306,6 +307,13 @@ async function route(db: SupabaseClient, msg: Message): Promise<void> {
     // Otherwise it was never a verdict. Fall through and treat it as whatever it actually is.
   }
 
+  // The name for an idea (migration 0037). Before the answer branch: an idea waiting for its name
+  // has no open question yet, and its first question is asked only once this is answered.
+  if (state.awaiting === "idea_name" && state.moment_id) {
+    await handleIdeaName(db, chatId, state.moment_id, msg, text);
+    return;
+  }
+
   // 9.12 — his answer on whether names may be used.
   if (state.awaiting === "name_clearance" && state.moment_id) {
     await handleNameClearance(db, chatId, state, text);
@@ -338,10 +346,10 @@ async function route(db: SupabaseClient, msg: Message): Promise<void> {
     if (last?.role === "question" && !hasVoice && isChatter(text)) {
       if (isGreeting(text)) {
         const name = await displayName(db, chatId);
-        const { data: moment } = await db.from("moments").select("ref").eq("id", state.moment_id).maybeSingle();
+        const { data: moment } = await db.from("moments").select("title").eq("id", state.moment_id).maybeSingle();
         await sendMessage(
           chatId,
-          `Hi${name ? ` ${name}` : ""}. One question is still open on ${moment?.ref ?? "your last idea"}:\n\n` +
+          `Hi${name ? ` ${name}` : ""}. One question is still open on ${ideaLabel(moment)}:\n\n` +
             `"${last.body.slice(0, 300)}"\n\n` +
             `Answer it whenever suits, or just send something new.`,
         );
@@ -449,6 +457,8 @@ async function triageAndHandle(
         esc(await greetingReply(db, await displayName(db, chatId))),
         await quickButtons(db),
       );
+      // Ideas from before names existed are asked about one at a time, starting when they say hello.
+      await askNextUnnamed(db, chatId);
     }
     return;
   }
@@ -608,7 +618,7 @@ async function askWhichOne(
   const voice = msg.voice ?? msg.audio;
 
   const { data: moment } = await db
-    .from("moments").select("ref").eq("id", momentId).maybeSingle();
+    .from("moments").select("title").eq("id", momentId).maybeSingle();
 
   const { data: turn } = await db
     .from("interview_turns")
@@ -636,7 +646,7 @@ async function askWhichOne(
 
   await sendMessage(
     chatId,
-    `Quick check — I still had a question open on ${moment?.ref ?? "an earlier moment"}:\n\n` +
+    `Quick check — I still had a question open on ${ideaLabel(moment)}:\n\n` +
       `"${(turn?.body ?? "").slice(0, 200)}"\n\n` +
       `Is this about that, or something new?`,
     [[
@@ -653,6 +663,7 @@ async function captureNewMoment(
   chatId: number,
   msg: Message,
   text: string,
+  opts: { quiet?: boolean } = {},
 ): Promise<void> {
   const voice = msg.voice ?? msg.audio;
   if (!voice && text.length === 0) return;
@@ -669,7 +680,7 @@ async function captureNewMoment(
   const { data: moment, error } = await db.from("moments").insert({
     source: "raw_capture",
     status: "captured",
-  }).select("id, ref").single();
+  }).select("id").single();
   if (error || !moment) throw new Error(`could not create moment: ${error?.message}`);
 
   if (voice) {
@@ -696,10 +707,14 @@ async function captureNewMoment(
     // Says what happens next, which the old one did not. "Got it (14s). Saved as M-000033." is
     // accurate and tells a person nothing: the reference is the least useful thing in the sentence
     // and it was the whole sentence.
+    //
+    // The idea is named while the audio transcribes (migration 0037). The transcribe job queues the
+    // interview step, and that step waits for the name, so neither has to wait on the other.
+    if (opts.quiet) return;
     await sendMessage(
       chatId,
-      `Got that — ${voice.duration}s. Transcribing it now, then I will ask you a couple of ` +
-        `questions about it. (${moment.ref})`,
+      `Got that — ${voice.duration}s, transcribing it now. While that runs: what should we call ` +
+        `this idea? A few words you will recognise later.`,
     );
   } else {
     await db.from("raw_inputs").insert({
@@ -708,15 +723,102 @@ async function captureNewMoment(
       text_body: text,
       telegram_message_id: msg.message_id,
     });
-    await enqueue(db, "interview_step", { moment_id: moment.id });
-    await sendMessage(
-      chatId,
-      `Got it. I will ask you a couple of questions about this one in a moment — answer them ` +
-        `whenever suits. (${moment.ref})`,
-    );
+    // No interview step is queued. The first question is asked once the idea has a name, by the
+    // idea_name branch in route(); queueing it here as well would only wait on the same name.
+    if (opts.quiet) return;
+    await sendMessage(chatId, namePrompt(text, true));
   }
 
-  await setState(db, "answer", moment.id);
+  await setState(db, "idea_name", moment.id);
+}
+
+/**
+ * The reply to "what should we call this idea?".
+ *
+ * Asked until it is answered: a greeting gets the question again, a whole new story is kept as its
+ * own idea (and named next) rather than squeezed into a name, and a name already in use is refused.
+ * Once named, the interview starts — unless the idea is a voice note still being transcribed, in
+ * which case the transcribe job starts it when the words exist.
+ */
+async function handleIdeaName(
+  db: SupabaseClient,
+  chatId: number,
+  momentId: number,
+  msg: Message,
+  text: string,
+): Promise<void> {
+  const voice = msg.voice ?? msg.audio;
+
+  // A spoken name would need transcribing before it could be checked for clashes; ask for it typed.
+  if (voice) {
+    await sendMessage(chatId, "Type the name for this one, please — a few words is enough.");
+    return;
+  }
+  if (!text) return;
+
+  if (isChatter(text)) {
+    if (isGreeting(text)) {
+      const name = await displayName(db, chatId);
+      await sendMessage(
+        chatId,
+        `Hi${name ? ` ${name}` : ""}. ` + namePrompt(await ideaGist(db, momentId), false),
+      );
+    }
+    return;
+  }
+
+  // Too long to be a name: it is a new thought. Kept as its own idea so nothing is lost, and asked
+  // about once this one has its name.
+  if (cleanName(text).length > MAX_NAME) {
+    await captureNewMoment(db, chatId, msg, text, { quiet: true });
+    await sendMessage(
+      chatId,
+      "Saved that as a new idea — I will ask what to call it next. First, a name for this one:\n\n" +
+        `"${(await ideaGist(db, momentId)).slice(0, 200)}"`,
+    );
+    return;
+  }
+
+  const named = await setIdeaName(db, momentId, text);
+  if (!named.ok) {
+    await sendMessage(chatId, named.reason);
+    return;
+  }
+
+  await setState(db, "nothing", null);
+
+  // A voice note whose words are not in yet: the transcribe job queues the interview step.
+  const { data: pending } = await db
+    .from("raw_inputs")
+    .select("id")
+    .eq("moment_id", momentId)
+    .eq("kind", "voice")
+    .is("transcript", null)
+    .limit(1);
+  if (pending && pending.length > 0) {
+    await sendMessage(chatId, `"${named.name}" it is. First question as soon as the voice note is transcribed.`);
+    return;
+  }
+
+  const step = await chooseNextQuestion(db, momentId);
+  if (step.action === "asked" || step.action === "parked") {
+    await sendMessage(chatId, `"${named.name}" it is.`);
+    await deliverQuestion(db, step);
+    return;
+  }
+
+  // Nothing to interview (an older idea that is already mined or parked): move to the next unnamed one.
+  await sendMessage(chatId, `"${named.name}" it is.`);
+  await askNextUnnamed(db, chatId);
+}
+
+/** Ask for the name of the next idea that still has none, if any. Returns whether it asked. */
+async function askNextUnnamed(db: SupabaseClient, chatId: number): Promise<boolean> {
+  const next = await nextUnnamed(db);
+  if (!next) return false;
+  await sendMessage(chatId, namePrompt(await ideaGist(db, next), false));
+  await setState(db, "idea_name", next);
+  return true;
 }
 
 /**
@@ -992,17 +1094,17 @@ async function handleTap(
        * pending draft job carrying his note, which Claude picks up through next_work.
        */
       const { data: post } = await db
-        .from("posts").select("draft_id, drafts(moment_id, moments(ref))").eq("id", action.postId)
+        .from("posts").select("draft_id, drafts(moment_id, moments(title))").eq("id", action.postId)
         .maybeSingle();
       // deno-lint-ignore no-explicit-any
-      const ref = (post as any)?.drafts?.moments?.ref as string | undefined;
+      const title = (post as any)?.drafts?.moments?.title as string | undefined;
 
       await sendMessage(
         chatId,
-        `Two ways to rewrite ${ref ?? "this one"}:\n\n` +
+        `Two ways to rewrite ${title ? `"${title}"` : "this one"}:\n\n` +
           `Reply to the draft above with what you would change. I will queue the rewrite with your ` +
           `note attached.\n\n` +
-          `Or open Claude and say "rewrite ${ref ?? "this draft"}" to work through it there.`,
+          `Or open Claude and say "rewrite ${title ?? "this draft"}" to work through it there.`,
       );
       return;
     }
@@ -1081,13 +1183,15 @@ async function handleTap(
       nudge();
 
       const { data: reopened } = await db
-        .from("moments").select("ref").eq("id", action.momentId).maybeSingle();
+        .from("moments").select("title").eq("id", action.momentId).maybeSingle();
 
       if (messageId) {
         await replaceMessage(
           chatId,
           messageId,
-          "Reopened " + (reopened?.ref ?? "it") + ". One question coming — tell me what you remember.",
+          reopened?.title
+            ? `Reopened "${reopened.title}". One question coming — tell me what you remember.`
+            : "Reopened it. First, what should we call this idea? Then one question about what you remember.",
         );
       }
       return;
@@ -1187,7 +1291,7 @@ async function handleTap(
 
       const { data: options } = await db
         .from("moments")
-        .select("id, ref, pillar, material(the_moment)")
+        .select("id, title, pillar, material(the_moment)")
         .not("status", "in", '("parked","published")')
         .eq("killed", false)
         .order("captured_at", { ascending: false })
@@ -1202,8 +1306,8 @@ async function handleTap(
         // deno-lint-ignore no-explicit-any
         const mat = (o as any).material;
         const one = Array.isArray(mat) ? mat[0] : mat;
-        const label = (one?.the_moment ?? o.pillar ?? "").toString().slice(0, 24);
-        return [{ text: label ? `${o.ref} — ${label}` : o.ref, data: `img:${o.id}` }];
+        const label = (o.title ?? one?.the_moment ?? o.pillar ?? "Unnamed idea").toString().slice(0, 40);
+        return [{ text: label, data: `img:${o.id}` }];
       });
 
       if (messageId) {
@@ -1228,13 +1332,13 @@ async function handleTap(
       await setState(db, "visual_details", action.momentId, { source_path: sourcePath });
 
       const { data: m } = await db
-        .from("moments").select("ref").eq("id", action.momentId).maybeSingle();
+        .from("moments").select("title").eq("id", action.momentId).maybeSingle();
 
       if (messageId) {
         await replaceMessage(
           chatId,
           messageId,
-          `Right — with ${m?.ref ?? "that one"}.
+          `Right — with ${m?.title ? `"${m.title}"` : "that one"}.
 
 ` +
             `What are you taking from it: the idea, the structure, or just the look? And what is ` +
@@ -1528,7 +1632,7 @@ async function handleImage(db: SupabaseClient, chatId: number, msg: Message): Pr
   // Attach to the moment most likely to want it: the most recent one still in play.
   const { data: moment } = await db
     .from("moments")
-    .select("id, ref")
+    .select("id, title")
     .not("status", "in", '("parked","published")')
     .eq("killed", false)
     .order("captured_at", { ascending: false })
@@ -1566,10 +1670,10 @@ async function handleImage(db: SupabaseClient, chatId: number, msg: Message): Pr
   // when the wrong picture went out under his name. One button turns the assumption into an answer.
   const sent = await sendMessage(
     chatId,
-    `Got the image — I will put it with ${moment.ref}.\n\n` +
+    `Got the image — I will put it with ${ideaLabel(moment)}.\n\n` +
       `What are you taking from it: the idea, the structure, or just the look?\n` +
       `And what is the post doing?`,
-    [[{ text: `Not ${moment.ref} — a different one`, data: "imgpick:" }]],
+    [[{ text: "Not that one — a different idea", data: "imgpick:" }]],
   );
   await recordSent(db, sent, "visual_prompt", moment.id);
 }
@@ -1897,7 +2001,7 @@ async function offerCandidates(
 
   const { data } = await db
     .from("moments")
-    .select("id, ref, source, strength, notes")
+    .select("id, title, source, strength, notes")
     .eq("status", "half_mined")
     .eq("killed", false)
     .order("strength", { ascending: false, nullsFirst: false })
@@ -1915,7 +2019,7 @@ async function offerCandidates(
   }
 
   const lines = data
-    .map((c, i) => `${i + 1}. ${(c.notes ?? c.ref).split("\n")[0]}`)
+    .map((c, i) => `${i + 1}. ${(c.title ?? c.notes ?? "Unnamed idea").split("\n")[0]}`)
     .join("\n\n");
 
   // One tap per candidate, and — importantly — a way to decline.

@@ -92,12 +92,12 @@ async function notifyDraftReady(db: SupabaseClient, job: Job): Promise<void> {
   }
 
   const { data: draft } = await db.from("drafts").select("body").eq("id", draftId).single();
-  const { data: moment } = await db.from("moments").select("ref").eq("id", momentId).single();
+  const { data: moment } = await db.from("moments").select("title").eq("id", momentId).single();
   if (!draft || !moment) return;
 
   const messageId = await sendMessage(
     joshChatId(),
-    `Draft ready — ${moment.ref}\n\n${"─".repeat(20)}\n\n${draft.body}\n\n${"─".repeat(20)}\n\n` +
+    `Draft ready — ${moment.title ? `"${moment.title}"` : "your idea"}\n\n${"─".repeat(20)}\n\n${draft.body}\n\n${"─".repeat(20)}\n\n` +
       `It is in the calendar as a draft. Reply to this message if you want it changed, or leave it ` +
       `for the weekly pass — nothing is waiting on you.`,
   );
@@ -142,7 +142,7 @@ async function sendDraftDigest(db: SupabaseClient, _job: Job): Promise<void> {
   // worse than one that never arrives.
   const { data: fresh } = await db
     .from("posts")
-    .select("id, body, moment_id, draft_id, visual_id, moments!inner(ref, pillar)")
+    .select("id, body, moment_id, draft_id, visual_id, moments!inner(title, pillar)")
     .eq("status", "draft")
     .is("marked_ready_at", null)
     .is("announced_at", null)
@@ -155,7 +155,7 @@ async function sendDraftDigest(db: SupabaseClient, _job: Job): Promise<void> {
     const m = (p as any).moments;
     const one = Array.isArray(m) ? m[0] : m;
     const tags = [one?.pillar, p.visual_id ? "image" : null].filter(Boolean).join(", ");
-    return `${one?.ref ?? "—"}${tags ? ` (${tags})` : ""}\n${firstLine(p.body)}`;
+    return `${one?.title ?? "Unnamed idea"}${tags ? ` (${tags})` : ""}\n${firstLine(p.body)}`;
   });
 
   const messageId = await sendMessage(

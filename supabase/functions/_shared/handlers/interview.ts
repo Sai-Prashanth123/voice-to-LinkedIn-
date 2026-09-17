@@ -10,6 +10,7 @@
  *   5.5  the interviewer cannot write prose    — its output schema has no field for a draft
  */
 
+import { ideaGist, namePrompt } from "../idea-names.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { callStructured, MODELS } from "../llm.ts";
 import { getSetting, logEvent, park } from "../db.ts";
@@ -50,7 +51,7 @@ import type { InterviewDepth, Job } from "../types.ts";
  */
 export interface NextStep {
   /** asked = a question is waiting. finished/parked = the interview is over. nothing = no-op. */
-  action: "asked" | "finished" | "parked" | "nothing";
+  action: "asked" | "finished" | "parked" | "nothing" | "needs_name";
   momentId: number;
   /** The question itself, when action is "asked". Already recorded as a turn. */
   question?: string;
@@ -93,6 +94,22 @@ export async function chooseNextQuestion(
       action: "nothing",
       momentId,
       note: `That interview is already finished — the moment is ${moment.status}.`,
+    };
+  }
+
+  // No interview without a name (migration 0037). The person names every idea before a single
+  // question is asked, and this is the one place every interview passes through — Telegram, voice
+  // notes, Claude, call candidates, re-opens and the stale-interview sweep — so none can skip it.
+  //
+  // A prompted or seeding session is the exception for its first question only: it starts with no
+  // story at all ("run me through some questions"), so there is nothing yet to name. The name is
+  // asked straight after the first answer instead.
+  const storyYet = moment.source !== "prompted_session" || session.turns.some((t) => t.role === "answer");
+  if (!moment.title && storyYet) {
+    return {
+      action: "needs_name",
+      momentId,
+      note: "This idea has no name yet. Ask the person what to call it before the interview starts.",
     };
   }
 
@@ -256,6 +273,33 @@ export async function chooseNextQuestion(
  */
 export async function deliverQuestion(db: SupabaseClient, step: NextStep): Promise<void> {
   const { action, momentId } = step;
+
+  if (action === "needs_name") {
+    // One name at a time. The stale-interview sweep can queue a step for every unnamed idea at
+    // once, and asking for five names in five messages — each overwriting what the bot waits on —
+    // would file the first reply against the last question. Whatever is already being waited on
+    // (a name, an answer, a clearance) is left alone; this one is asked when that is done.
+    const { data: state } = await db
+      .from("conversation_state").select("awaiting, moment_id").eq("id", true).maybeSingle();
+    const awaiting = state?.awaiting ?? "nothing";
+    // Already asked for this name: the reminder comes when they next message, not from a queue retry.
+    if (awaiting === "idea_name") return;
+    const aboutThisIdea = ["answer", "seeding"].includes(awaiting) && state?.moment_id === momentId;
+    if (awaiting !== "nothing" && !aboutThisIdea) return;
+
+    const gist = await ideaGist(db, momentId);
+    const { count } = await db
+      .from("raw_inputs").select("id", { count: "exact", head: true }).eq("moment_id", momentId);
+    const justCaptured = (count ?? 0) > 0 && Boolean(gist) && await isFresh(db, momentId);
+    await sendMessage(joshChatId(), namePrompt(gist, justCaptured));
+    await db.from("conversation_state").update({
+      awaiting: "idea_name",
+      moment_id: momentId,
+      context: {},
+      updated_at: new Date().toISOString(),
+    }).eq("id", true);
+    return;
+  }
 
   if (action === "parked") {
     // These two were inside the park branch before. They are Telegram, so they live here now.
@@ -471,7 +515,7 @@ export async function applyExtraction(
   // question asked earlier.
   await creditSession(db, momentId);
 
-  const { data: m } = await db.from("moments").select("ref").eq("id", momentId).single();
+  const { data: m } = await db.from("moments").select("title").eq("id", momentId).single();
 
   // 9.12 — every name it would need, asked about once, while the moment is fresh in his mind.
   // 9.10 — not simply `cleared = false`. A name cleared before this moment was last re-opened is
@@ -481,7 +525,7 @@ export async function applyExtraction(
   // ONE message: what it was filed as, and who it mentions. These used to be two paths, and the name
   // path returned before reaching the pillar confirmation — so 5.10 never fired on a moment with a
   // person in it, which is most moments worth writing.
-  await confirmFiled(db, momentId, m?.ref ?? "", uncleared);
+  await confirmFiled(db, momentId, m?.title ?? null, uncleared);
 
   // Only claim the conversation when there is nothing else going on.
   //
@@ -546,7 +590,7 @@ export async function seedText(db: SupabaseClient, momentId: number): Promise<st
 async function confirmFiled(
   db: SupabaseClient,
   momentId: number,
-  ref: string,
+  title: string | null,
   uncleared: { id: number; name: string; kind: string }[] = [],
 ): Promise<number | null> {
   const { data: moment } = await db
@@ -558,7 +602,7 @@ async function confirmFiled(
   const library = await loadLibrary(db, "interview");
   const pillars = parsePillars(library.sections.pillars ?? "");
 
-  const lines = [`Got it — saved as ${ref}.`];
+  const lines = [title ? `Got it — "${title}" is saved.` : `Got it — saved.`];
 
   if (moment?.pillar) lines.push(`Filed under ${moment.pillar}.`);
   else if (pillars.length > 0) lines.push(`I could not place it in one of your pillars.`);
@@ -726,4 +770,10 @@ async function askReopeningQuestion(db: SupabaseClient, momentId: number): Promi
   // Recorded, not sent. deliverQuestion puts it on Telegram when that is the surface; the MCP
   // interview tools return it to whoever asked instead.
   return question;
+}
+
+/** Captured in the last ten minutes: the name prompt reads "Got it" rather than quoting the idea back. */
+async function isFresh(db: SupabaseClient, momentId: number): Promise<boolean> {
+  const { data } = await db.from("moments").select("captured_at").eq("id", momentId).maybeSingle();
+  return Boolean(data?.captured_at) && Date.now() - new Date(data!.captured_at).getTime() < 10 * 60_000;
 }

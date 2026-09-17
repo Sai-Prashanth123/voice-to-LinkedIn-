@@ -52,7 +52,7 @@ export const visualTools = [
       const id = args.moment_id;
 
       const [moment] = await db.select("moments", {
-        select: "id,ref,killed,status,notes,audience,pillar",
+        select: "id,title,killed,status,notes,audience,pillar",
         id: `eq.${id}`,
         limit: 1,
       });
@@ -83,7 +83,7 @@ export const visualTools = [
       });
 
       return {
-        moment: { id: moment.id, ref: moment.ref, notes: moment.notes, audience: moment.audience },
+        moment: { id: moment.id, name: moment.title ?? null, notes: moment.notes, audience: moment.audience },
         system: VISUAL_SYSTEM(prompt),
         source_images: images,
         existing_versions: existing,

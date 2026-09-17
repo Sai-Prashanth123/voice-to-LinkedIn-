@@ -22,7 +22,7 @@ import { useRouter } from "next/navigation";
 
 interface Hit {
   id: number;
-  ref: string;
+  title: string | null;
   status: string;
   pillar: string | null;
   line: string;
@@ -107,7 +107,7 @@ export function CommandPalette() {
     })),
     ...hits.map((h) => ({
       key: `m:${h.id}`,
-      label: h.ref + (h.pillar ? ` · ${h.pillar}` : ""),
+      label: (h.title ?? "Unnamed idea") + (h.pillar ? ` · ${h.pillar}` : ""),
       detail: h.line || h.status,
       go: () => router.push(`/bank?status=${h.status}#m${h.id}`),
     })),

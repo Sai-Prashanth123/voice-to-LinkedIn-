@@ -21,7 +21,7 @@ const CHECK_LABELS: Record<string, string> = {
  *
  * Drafts are written in Claude and judged by the server. This page shows the result of both: the post,
  * which idea it came from, and every check the server ran with its reason. Nothing here edits a draft.
- * A rewrite starts in Claude ("rewrite M-000024") or by replying to the draft in Telegram.
+ * A rewrite starts in Claude ("rewrite <the idea's name>") or by replying to the draft in Telegram.
  *
  * Acceptance fixtures are left out. They are twenty deliberately generic drafts that component test 8
  * uses to prove the gate rejects generic writing, and showing them here would put fake posts next to
@@ -39,7 +39,7 @@ export default async function Drafts({
   let query = db
     .from("drafts")
     .select(
-      "id, moment_id, version, attempt, body, hook, framework, model, claims_verified, gate_passed, gate_reason, created_at, moments!inner(ref, killed), gate_runs(check_key, passed, reason)",
+      "id, moment_id, version, attempt, body, hook, framework, model, claims_verified, gate_passed, gate_reason, created_at, moments!inner(title, killed), gate_runs(check_key, passed, reason)",
     )
     .neq("framework", "acceptance-fixture")
     .eq("moments.killed", false)
@@ -60,7 +60,7 @@ export default async function Drafts({
 
         <p className="step-note">
           Every draft written in Claude, with what the server's eight checks said about it. To rewrite
-          one, say "rewrite" and its reference in Claude, or reply to it in Telegram.
+          one, say "rewrite" and the idea's name in Claude, or reply to it in Telegram.
         </p>
 
         {Number.isInteger(momentId) && (
@@ -74,7 +74,7 @@ export default async function Drafts({
         {!error && (drafts ?? []).length === 0
           ? <div className="quiet">No drafts yet. They appear here once written in Claude.</div>
           : (drafts ?? []).map((d) => {
-            const moment = one<{ ref: string }>(d.moments as never);
+            const moment = one<{ title: string | null }>(d.moments as never);
             const runs = many<{ check_key: string; passed: boolean; reason: string | null }>(
               d.gate_runs as never,
             );
@@ -102,9 +102,9 @@ export default async function Drafts({
               >
                 <div className="entry-meta">
                   <span>
-                    {moment?.ref
-                      ? <Link href={`/bank?q=${encodeURIComponent(moment.ref)}`}>{moment.ref}</Link>
-                      : `idea ${d.moment_id}`}
+                    {moment?.title
+                      ? <Link href={`/bank?q=${encodeURIComponent(moment.title)}`}>{moment.title}</Link>
+                      : "Not named yet"}
                   </span>
                   <span>draft {d.version}</span>
                   {d.attempt > 1 && <span>attempt {d.attempt}</span>}

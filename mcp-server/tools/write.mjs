@@ -169,7 +169,7 @@ export const writeTools = [
     async handler(args, { db, url, key: contextKey }) {
       // 6.3 again: a killed moment is one Josh has already said no to.
       const [moment] = await db.select("moments", {
-        select: "id,killed,status,ref",
+        select: "id,killed,status,title",
         id: `eq.${args.moment_id}`,
         limit: 1,
       });
@@ -284,7 +284,7 @@ export const writeTools = [
         throw new Error(filed.next ? `${detail}\n\n${filed.next}` : detail);
       }
 
-      return { ...filed, moment_ref: moment.ref };
+      return { ...filed, name: moment.title ?? null };
     },
   },
 

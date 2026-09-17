@@ -144,7 +144,7 @@ export const trackingTools = [
       }));
 
       const ideas = (await context.db.select("moments", {
-        select: "id,ref,status,captured_at,source_ref,killed",
+        select: "id,title,status,captured_at,source_ref,killed",
         source: "eq.claude_code",
         order: "captured_at.desc",
         limit: 50,
@@ -154,7 +154,7 @@ export const trackingTools = [
         tracking: rows.length > 0,
         machines: rows,
         ideas_from_sessions: ideas.map((m) => ({
-          ref: m.ref,
+          name: m.title ?? null,
           status: m.status,
           captured_at: m.captured_at,
           session: m.source_ref,

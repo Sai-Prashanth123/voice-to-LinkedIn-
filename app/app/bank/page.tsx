@@ -39,7 +39,7 @@ export default async function Bank({
   const db = await supabaseServer();
 
   const COLUMNS =
-    "id, ref, source, status, pillar, audience, strength, depth_reached, pinned, killed, not_before, parked_reason, notes, captured_at, decays_at, last_score, last_score_reasons, material(the_moment, the_detail, the_realisation, the_lesson, their_actual_words), moment_names(id, name, cleared, kind), drafts(id)";
+    "id, title, source, status, pillar, audience, strength, depth_reached, pinned, killed, not_before, parked_reason, notes, captured_at, decays_at, last_score, last_score_reasons, material(the_moment, the_detail, the_realisation, the_lesson, their_actual_words), moment_names(id, name, cleared, kind), drafts(id)";
 
   // A search looks ACROSS every status. Searching inside the current tab would hide the idea being
   // looked for whenever it had moved on — and a drafted idea is exactly the one you go looking for.
@@ -128,7 +128,7 @@ export default async function Bank({
             return (
               <article key={m.id} id={`m${m.id}`} className="entry" data-mark={m.killed ? undefined : "clean"}>
                 <div className="entry-meta">
-                  <span>{m.ref}</span>
+                  <span className={m.title ? undefined : "flag"}>{m.title ?? "Not named yet"}</span>
                   <span>{m.source.replace("_", " ")}</span>
                   {m.pillar && <span>{m.pillar}</span>}
                   {m.strength && <span>strength {m.strength}/5</span>}

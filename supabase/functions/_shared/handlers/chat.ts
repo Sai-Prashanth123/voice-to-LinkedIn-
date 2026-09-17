@@ -66,7 +66,7 @@ export async function snapshot(db: SupabaseClient): Promise<string> {
   // The same filter offerCandidates uses, so the list and the count cannot disagree.
   const { data: waiting } = await db
     .from("moments")
-    .select("ref, notes, material(the_moment)")
+    .select("title, notes, material(the_moment)")
     .eq("killed", false)
     .eq("status", "half_mined")
     .order("id", { ascending: false })
@@ -74,7 +74,7 @@ export async function snapshot(db: SupabaseClient): Promise<string> {
 
   const { data: ready } = await db
     .from("moments")
-    .select("ref, pillar, material(the_moment)")
+    .select("title, pillar, material(the_moment)")
     .eq("killed", false)
     .in("status", ["mined", "queued"])
     .order("id", { ascending: false })
@@ -84,7 +84,7 @@ export async function snapshot(db: SupabaseClient): Promise<string> {
     const material = m.material as { the_moment?: string } | { the_moment?: string }[] | null;
     const one = Array.isArray(material) ? material[0] : material;
     const summary = String(one?.the_moment ?? m.notes ?? "").replace(/\s+/g, " ").trim();
-    return `  ${m.ref}${summary ? ` — ${summary.slice(0, 140)}` : " — (nothing extracted yet)"}`;
+    return `  ${m.title ? `"${m.title}"` : "(unnamed idea)"}${summary ? ` — ${summary.slice(0, 140)}` : " — (nothing extracted yet)"}`;
   };
 
   return [
@@ -182,7 +182,7 @@ HOW TO WRITE A REPLY
 - Answer the actual question first. No preamble, no "Great question".
 - End with the ONE most useful next step, phrased as something he can just do or say.
 - Plain words. Never say "moment", "material", "idea bank", "triage" or "extraction" — say "idea",
-  "your answers", "your ideas". Refer to a specific idea by its ref (M-000024) only when pointing at it.
+  "your answers", "your ideas". Refer to a specific idea by its name in quotes. Never use or invent a code like M-000024.
 - No headings, no bullet lists unless he asked for a list, no emoji, no sign-off.
 - Speak as "I". Never "the bot" or "the system" about yourself.
 - For an ACTION, one short sentence saying what is happening now — "Pulling up your oldest idea."

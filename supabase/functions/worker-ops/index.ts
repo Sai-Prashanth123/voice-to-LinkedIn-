@@ -215,7 +215,7 @@ async function daily(db: SupabaseClient): Promise<Response> {
 
   const { data: decaying } = await db
     .from("moments")
-    .select("ref, decays_at")
+    .select("title, decays_at")
     .eq("status", "mined")
     .eq("time_sensitive", true)
     .gte("decays_at", todayIso)
@@ -226,7 +226,7 @@ async function daily(db: SupabaseClient): Promise<Response> {
     alerts.push(
       `${decaying.length === 1 ? "A moment goes" : `${decaying.length} moments go`} stale soon and ` +
         `will be parked unless written:\n` +
-        decaying.map((m) => `  ${m.ref} — ${m.decays_at}`).join("\n") +
+        decaying.map((m) => `  ${m.title ?? "Unnamed idea"} — ${m.decays_at}`).join("\n") +
         `\n\nThose dates are my guess. If one is wrong, change it in the bank and it stays in the queue.`,
     );
   }

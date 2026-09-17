@@ -22,7 +22,7 @@ import { score, overall, summarise } from "../../supabase/functions/_shared/acce
 import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
 
 const MOMENT_FIELDS =
-  "id,ref,source,status,depth_reached,pillar,audience,strength,pinned,killed," +
+  "id,title,source,status,depth_reached,pillar,audience,strength,pinned,killed," +
   "time_sensitive,decays_at,not_before,parked_reason,notes,captured_at,last_score";
 
 /** A killed row is `true`; everything else is live, including a null. */

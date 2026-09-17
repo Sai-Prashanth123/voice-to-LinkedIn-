@@ -69,16 +69,43 @@ export const interviewTools = [
         "Capture his OWN words as closely as you can: everything downstream is checked against " +
         "this text span by span, and a tidied-up paraphrase is a worse source than a rough " +
         "sentence. Do not capture questions, instructions or your own summaries. " +
+        "BEFORE CALLING, ASK THEM WHAT TO CALL THIS IDEA and pass their answer as name. Every idea " +
+        "is named by the person who had it, and that name is how it is found and referred to from " +
+        "then on. Never make a name up, shorten theirs or suggest one unless they ask you to. " +
         "The reply carries the FIRST interview question: ask him that, then pass his answer to " +
-        "answer_interview. The interview happens here only; nothing is sent to Telegram.",
+        "answer_interview. If it says needs_name instead, the name was refused — ask for another " +
+        "and call name_idea. The interview happens here only; nothing is sent to Telegram.",
       inputSchema: {
         text: z.string().min(1).describe(
           "What happened, in his words. A fragment is fine — the interview is what fills it out.",
         ),
+        name: z.string().min(1).max(80).describe(
+          "What THEY said to call this idea, exactly as they said it. Ask; never invent.",
+        ),
       },
     },
     async handler(args, { url, key }) {
-      return await post(url, key, { kind: "capture", text: args.text });
+      return await post(url, key, { kind: "capture", text: args.text, name: args.name });
+    },
+  },
+
+  {
+    name: "name_idea",
+    config: {
+      title: "Name or rename an idea",
+      description:
+        "Give an idea the name its owner chose, or change it. Every idea is named by the person, " +
+        "and an unnamed one cannot be interviewed or drafted — when any tool answers needs_name, " +
+        "ask them what to call it and pass their words here. Never make a name up. Naming an idea " +
+        "for the first time starts its interview and returns the first question. Names must be " +
+        "unique among live ideas and under 80 characters; a refusal says why.",
+      inputSchema: {
+        moment_id: z.number().int().describe("The idea to name (its id from list_moments)"),
+        name: z.string().min(1).max(80).describe("What they said to call it, exactly"),
+      },
+    },
+    async handler(args, { url, key }) {
+      return await post(url, key, { kind: "name", moment_id: args.moment_id, name: args.name });
     },
   },
 

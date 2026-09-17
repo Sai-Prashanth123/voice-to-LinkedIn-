@@ -232,7 +232,7 @@ ${summarise(p)}`,
 async function sendDrafts(db: SupabaseClient, chatId: number): Promise<number> {
   const { data: drafts } = await db
     .from("posts")
-    .select("id, body, visual_id, moments!inner(ref, pillar)")
+    .select("id, body, visual_id, moments!inner(title, pillar)")
     .eq("status", "draft")
     .order("id");
 
@@ -240,8 +240,8 @@ async function sendDrafts(db: SupabaseClient, chatId: number): Promise<number> {
 
   for (const post of drafts) {
     // deno-lint-ignore no-explicit-any
-    const m = embedOne<{ ref: string; pillar: string | null }>((post as any).moments);
-    const header = [m?.ref, m?.pillar, post.visual_id ? "image attached" : null]
+    const m = embedOne<{ title: string | null; pillar: string | null }>((post as any).moments);
+    const header = [m?.title ? `"${m.title}"` : null, m?.pillar, post.visual_id ? "image attached" : null]
       .filter(Boolean).join(" · ");
 
     await sendMessage(

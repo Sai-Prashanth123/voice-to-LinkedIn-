@@ -39,6 +39,7 @@ import {
   seedText,
 } from "../_shared/handlers/interview.ts";
 import { appendTurn, loadSession, renderTranscript } from "../_shared/session.ts";
+import { setIdeaName } from "../_shared/idea-names.ts";
 import { verifyExtraction } from "../_shared/extraction.ts";
 import { applyDraft } from "../_shared/handlers/draft.ts";
 import type { Claim } from "../_shared/claims.ts";
@@ -61,6 +62,7 @@ Deno.serve(async (req) => {
   let body: {
     kind?: string;
     text?: string;
+    name?: string;
     answer?: string;
     moment_id?: number;
     extracted?: Extraction;
@@ -79,11 +81,12 @@ Deno.serve(async (req) => {
   if (body.kind === "draft") return await fileDraft(db, body as unknown as DraftBody);
   if (body.kind === "interview_next") return await interviewNext(db, body);
   if (body.kind === "interview_answer") return await interviewAnswer(db, body);
+  if (body.kind === "name") return await nameIdea(db, body);
 
   if (body.kind !== "extraction") {
     return json({
       error: `unknown kind "${body.kind ?? ""}". Expected "extraction", "candidates", ` +
-        `"capture", "draft", "interview_next" or "interview_answer".`,
+        `"capture", "name", "draft", "interview_next" or "interview_answer".`,
     }, 400);
   }
 
@@ -94,7 +97,7 @@ Deno.serve(async (req) => {
   }
 
   const { data: moment } = await db
-    .from("moments").select("id, ref, status, killed").eq("id", momentId).maybeSingle();
+    .from("moments").select("id, ref, title, status, killed").eq("id", momentId).maybeSingle();
 
   if (!moment) return json({ error: `no moment with id ${momentId}` }, 404);
 
@@ -127,7 +130,7 @@ Deno.serve(async (req) => {
     });
     return json({
       ok: false,
-      moment_ref: moment.ref,
+      name: moment.title,
       failures: verdict.failures,
       checked: verdict.checked,
       next: "Fix the extraction against what Josh actually said, or leave the field empty. " +
@@ -148,7 +151,7 @@ Deno.serve(async (req) => {
 
   return json({
     ok: true,
-    moment_ref: moment.ref,
+    name: moment.title,
     status: after?.status ?? null,
     strength: after?.strength ?? null,
     pillar: after?.pillar ?? null,
@@ -250,10 +253,11 @@ async function submitCandidates(db: SupabaseClient, body: {
  * on moments, raw_inputs or interview_turns, and it should not. The model decides; this writes.
  */
 
-/** 4.1 — a thought, from a surface that is not Telegram. */
-async function capture(db: SupabaseClient, body: { text?: string }) {
+/** 4.1 — a thought, from a surface that is not Telegram. Named by the person, before its interview. */
+async function capture(db: SupabaseClient, body: { text?: string; name?: string }) {
   const text = String(body.text ?? "").trim();
   if (!text) return json({ error: "text is required" }, 400);
+  const name = String(body.name ?? "").trim();
 
   const { data: moment, error } = await db.from("moments").insert({
     source: "raw_capture",
@@ -267,6 +271,22 @@ async function capture(db: SupabaseClient, body: { text?: string }) {
     text_body: text,
   });
 
+  // The thought is saved first and named second, so a refused name (too long, already used) loses
+  // nothing: the idea exists, and the reply asks for a different name.
+  if (name) {
+    const named = await setIdeaName(db, moment.id, name);
+    if (!named.ok) {
+      await logEvent(db, "captured_via_mcp", "info", { moment_id: moment.id, ref: moment.ref, action: "needs_name" });
+      return json({
+        ok: true,
+        moment_id: moment.id,
+        action: "needs_name",
+        name_refused: named.reason,
+        next: `Saved, but not named: ${named.reason} Ask them for another name, then call name_idea.`,
+      });
+    }
+  }
+
   // The interview starts here, synchronously, and the first question goes back to Claude — not to
   // the Telegram queue. Without a first question the moment sits at `captured` with no turns, which
   // is how seven of them ended up. But enqueueing the Telegram step for it (as this did) also sent
@@ -277,7 +297,7 @@ async function capture(db: SupabaseClient, body: { text?: string }) {
   return json({
     ok: true,
     moment_id: moment.id,
-    moment_ref: moment.ref,
+    name: name || null,
     ...step,
     next: step.action === "asked"
       ? "Ask him this question, then pass his answer to answer_interview."
@@ -285,10 +305,48 @@ async function capture(db: SupabaseClient, body: { text?: string }) {
   });
 }
 
+/** Name an idea (or rename it), then start its interview if it is waiting for one. */
+async function nameIdea(db: SupabaseClient, body: { moment_id?: number; name?: string }) {
+  const momentId = Number(body.moment_id);
+  if (!Number.isInteger(momentId)) return json({ error: "moment_id must be an integer" }, 400);
+
+  const { data: moment } = await db
+    .from("moments").select("id, title, killed").eq("id", momentId).maybeSingle();
+  if (!moment) return json({ error: `no idea with id ${momentId}` }, 404);
+  if (moment.killed) return json({ error: "that idea has been killed" }, 409);
+
+  const named = await setIdeaName(db, momentId, String(body.name ?? ""));
+  if (!named.ok) return json({ error: named.reason, next: "Ask them for a different name." }, 409);
+
+  await logEvent(db, "idea_named", "info", { moment_id: momentId, renamed_from: moment.title ?? null });
+
+  // A rename leaves the interview where it was; a first name starts it.
+  if (moment.title) {
+    return json({ ok: true, moment_id: momentId, name: named.name, renamed_from: moment.title });
+  }
+  const step = await chooseNextQuestion(db, momentId);
+  return json({ ok: true, moment_id: momentId, name: named.name, ...step, next: nextFor(step.action) });
+}
+
+/** needs_name, before anything else, for an idea that has never been named. */
+async function unnamed(db: SupabaseClient, momentId: number): Promise<Response | null> {
+  const { data: m } = await db.from("moments").select("title, source").eq("id", momentId).maybeSingle();
+  if (!m || m.title) return null;
+  return json({
+    ok: true,
+    action: "needs_name",
+    moment_id: momentId,
+    next: nextFor("needs_name"),
+  });
+}
+
 /** The open question for a moment, asking a new one if there is room. */
 async function interviewNext(db: SupabaseClient, body: { moment_id?: number }) {
   const momentId = Number(body.moment_id);
   if (!Number.isInteger(momentId)) return json({ error: "moment_id must be an integer" }, 400);
+
+  const needsName = await unnamed(db, momentId);
+  if (needsName) return needsName;
 
   // A question already waiting is NOT re-asked. Calling this twice must not burn two of the eight
   // (5.8), and must not leave two unanswered questions pointing at one moment.
@@ -318,8 +376,12 @@ async function interviewAnswer(db: SupabaseClient, body: { moment_id?: number; a
   const answer = String(body.answer ?? "").trim();
   if (!answer) return json({ error: "answer is required" }, 400);
 
+  // Kept asking until named: the answer is not filed against an idea that has no name yet.
+  const needsName = await unnamed(db, momentId);
+  if (needsName) return needsName;
+
   const { data: moment } = await db
-    .from("moments").select("id, ref, status, killed").eq("id", momentId).maybeSingle();
+    .from("moments").select("id, ref, title, status, killed").eq("id", momentId).maybeSingle();
   if (!moment) return json({ error: `no moment with id ${momentId}` }, 404);
   if (moment.killed) return json({ error: `moment ${momentId} has been killed` }, 409);
 
@@ -330,7 +392,7 @@ async function interviewAnswer(db: SupabaseClient, body: { moment_id?: number; a
   if (last?.role !== "question") {
     return json({
       error: "There is no open question on that moment.",
-      moment_ref: moment.ref,
+      name: moment.title,
       next: "Call next_interview_question first, or capture_thought if this is something new.",
     }, 409);
   }
@@ -353,10 +415,15 @@ async function interviewAnswer(db: SupabaseClient, body: { moment_id?: number; a
     action: step.action,
   });
 
-  return json({ ok: true, ...step, moment_id: momentId, moment_ref: moment.ref, next: nextFor(step.action) });
+  return json({ ok: true, ...step, moment_id: momentId, name: moment.title, next: nextFor(step.action) });
 }
 
 function nextFor(action: string): string {
+  if (action === "needs_name") {
+    return "This idea has no name yet. Ask them what to call it — a few words they will recognise — " +
+      "and call name_idea with exactly what they say. Never make a name up. The interview starts " +
+      "once it is named.";
+  }
   if (action === "asked") return "Answer it with answer_interview.";
   if (action === "finished") {
     return "The interview is over and extraction is queued. It will become material on its own; " +
@@ -396,15 +463,18 @@ async function fileDraft(db: SupabaseClient, body: DraftBody) {
   if (!Array.isArray(body.claims)) return json({ error: "claims must be an array (it may be empty)" }, 400);
 
   const { data: moment } = await db
-    .from("moments").select("id, ref, status, killed").eq("id", momentId).maybeSingle();
+    .from("moments").select("id, ref, title, status, killed").eq("id", momentId).maybeSingle();
   if (!moment) return json({ error: `no moment with id ${momentId}` }, 404);
-  if (moment.killed) return json({ error: `moment ${momentId} has been killed`, ref: moment.ref }, 409);
+  if (moment.killed) return json({ error: `moment ${momentId} has been killed` }, 409);
+  if (!moment.title) {
+    return json({ error: "This idea has no name yet, so it cannot be drafted.", next: nextFor("needs_name") }, 409);
+  }
 
   // Mined or queued is a first draft; drafted is a rewrite. Anything earlier has not been
   // interviewed (4.3.3), and anything later has already left the writing stage.
   if (!["mined", "queued", "drafted"].includes(moment.status)) {
     return json({
-      error: `${moment.ref} is ${moment.status}, so it cannot be drafted yet.`,
+      error: `"${moment.title}" is ${moment.status}, so it cannot be drafted yet.`,
       next: moment.status === "captured" || moment.status === "half_mined"
         ? "It has not been interviewed. Run the interview first with next_interview_question."
         : "It has already moved past drafting.",
@@ -464,7 +534,7 @@ async function fileDraft(db: SupabaseClient, body: DraftBody) {
 
   return json({
     ok: true,
-    moment_ref: moment.ref,
+    name: moment.title,
     draft_id: filed.draftId,
     attempt,
     claims_verified: filed.verified,
