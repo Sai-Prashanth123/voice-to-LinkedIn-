@@ -2,14 +2,23 @@
  * Ideas are named by the person who had them (migration 0037).
  *
  * Every surface used to call an idea by a minted number — "Got it. (M-000035)" — and "rewrite
- * M-000024" was a sentence only the system could say. Now the person names each idea right after
- * capturing it, the interview waits until they have, and the name is what everything shows.
+ * M-000024" was a sentence only the system could say. Ideas have names instead, and the name is what
+ * Telegram, Claude and the desk all show.
  *
- * Nothing here invents a name. An unnamed idea is shown as unnamed and asked about, because a name
- * the system picked would be the system deciding what the story is about before anyone asked.
+ * WHO CHOOSES IT (0037, then 0038)
+ *
+ * First the person did, and nothing moved until they had: no interview question, a greeting re-asked,
+ * an answer refused. A label had become a toll gate on every thought. So the handle is now derived
+ * from their own words at capture (autoName), said out loud, and changed whenever they say "call it
+ * X" — which is one message instead of one on every idea.
+ *
+ * The derivation still invents nothing: it reuses their nouns and reaches no conclusion the interview
+ * has not reached. The name is how a person finds an idea. It is never material and never appears in
+ * a draft.
  */
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { callText, MODELS } from "./llm.ts";
 
 export const MAX_NAME = 80;
 
@@ -106,28 +115,87 @@ export async function ideaGist(db: SupabaseClient, momentId: number): Promise<st
   return String((material as { the_moment?: string } | null)?.the_moment ?? m?.notes ?? "").split("\n")[0].slice(0, 220);
 }
 
-/** The question that asks for a name. */
-export function namePrompt(gist: string, justCaptured: boolean): string {
-  const opener = justCaptured ? "Got it." : "One of your ideas has no name yet:";
-  const quoted = gist ? `\n\n"${gist}${gist.length >= 220 ? "…" : ""}"` : "";
-  return justCaptured
-    ? `${opener} What should we call this idea? A few words you will recognise later.`
-    : `${opener}${quoted}\n\nWhat should we call it? A few words you will recognise later.`;
+const NAMER_SYSTEM =
+  `You give a short handle to something a person just told you, so they can find it again later.
+
+Reply with the handle ALONE: three to six words, no quotes, no full stop, no explanation.
+
+It must be built from THEIR words. Use the nouns they used. Do not add a conclusion they did not
+reach, an adjective they did not use, or a lesson. "CFO reads the first line" is a handle. "The power
+of concise communication" is a headline about a post nobody has written, and is wrong.
+
+If what they sent is too thin to name, reply with the most concrete few words in it.`;
+
+/**
+ * Name an idea from what the person said, without asking them.
+ *
+ * WHY THE SYSTEM NAMES IT
+ *
+ * The first version asked, and kept asking: no interview question until a name was typed, a greeting
+ * re-asked, an answer refused. That turned a label into a toll gate on every thought. So the handle
+ * is derived, said out loud in the acknowledgement, and changed by saying "call it X" — which is one
+ * message instead of one every time.
+ *
+ * WHAT IT MAY NOT DO
+ *
+ * Invent. The handle is built from their own nouns, never a conclusion they have not reached: the
+ * interview exists precisely because the system does not know what the story means yet, and a name
+ * that guessed would be the first fabrication in the chain. It is also never used inside a draft —
+ * it is how a person finds an idea, not material.
+ *
+ * NEVER FAILS. A capture that threw because a naming model was rate limited would lose the thought,
+ * so every failure falls back to the first few words of what they said.
+ */
+export async function autoName(
+  db: SupabaseClient,
+  momentId: number,
+  text: string,
+): Promise<string | null> {
+  const said = (text ?? "").trim() || await ideaGist(db, momentId);
+  if (!said) return null;
+
+  let candidate = "";
+  try {
+    candidate = await callText({
+      model: MODELS.HAIKU,
+      system: NAMER_SYSTEM,
+      messages: [{ role: "user", content: said.slice(0, 1500) }],
+      maxTokens: 40,
+      purpose: "idea_name",
+      momentId,
+    }, { db });
+  } catch {
+    // Left for the fallback below. A name is never worth failing a capture over.
+  }
+
+  const wanted = cleanName(candidate).split("\n")[0] || firstWords(said);
+  return await nameWithoutClashing(db, momentId, wanted.slice(0, MAX_NAME));
 }
 
-/** The oldest live idea still waiting for a name, for asking about existing ideas one at a time. */
-export async function nextUnnamed(db: SupabaseClient): Promise<number | null> {
-  const { data } = await db
-    .from("moments")
-    .select("id")
-    .is("title", null)
-    .eq("killed", false)
-    // Published is done with; parked is not in play. A parked idea is named if it is ever reopened,
-    // because the reopen asks the same question every other interview does. Asking for a name for
-    // eight parked ideas the moment someone says hello is how a good idea becomes a chore.
-    .not("status", "in", "(published,parked)")
-    // Newest first: the idea most likely to still be in their head.
-    .order("captured_at", { ascending: false })
-    .limit(1);
-  return data?.[0]?.id ?? null;
+/** Their opening words, cut at a word boundary. The fallback when the model is unavailable. */
+export function firstWords(said: string): string {
+  const flat = said.replace(/\s+/g, " ").trim();
+  if (flat.length <= 48) return flat;
+  const cut = flat.slice(0, 48);
+  const space = cut.lastIndexOf(" ");
+  return (space > 20 ? cut.slice(0, space) : cut).trim();
+}
+
+/**
+ * Store it, stepping around a name that is already taken.
+ *
+ * Two ideas can genuinely be about the same thing, and refusing the second one's name would mean
+ * either failing the capture or asking — which is the behaviour this replaces.
+ */
+async function nameWithoutClashing(
+  db: SupabaseClient,
+  momentId: number,
+  base: string,
+): Promise<string | null> {
+  for (let n = 1; n <= 9; n++) {
+    const attempt = n === 1 ? base : `${base.slice(0, MAX_NAME - 4)} (${n})`;
+    const result = await setIdeaName(db, momentId, attempt);
+    if (result.ok) return result.name;
+  }
+  return null;
 }

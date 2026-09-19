@@ -231,21 +231,37 @@ export const RetellingSchema = z.object({
  */
 export const ChatTriageSchema = z.object({
   intent: z
-    .enum(["capture", "question", "action", "chatter"])
+    .enum(["answer", "capture", "question", "action", "rename", "chatter"])
     .describe(
-      "capture = a thought or something that happened to him, however short. question = he is " +
-        "asking something: about the system, about how to use it, or about what is waiting. " +
-        "action = he wants the bot to DO something it can do (start questions, show what is " +
-        "waiting, review drafts, show status, show help, stop). chatter = greeting, thanks, typo. " +
-        "When torn between capture and question, choose capture.",
+      "answer = it replies to the question the bot is waiting on, which the conversation above " +
+        "shows. capture = a thought or something that happened to him, however short, that is NOT " +
+        "answering that question. question = he is asking something: about the system, how to use " +
+        "it, what is waiting, or what was just said. action = he wants the bot to DO something it " +
+        "can do (start questions, show what is waiting, review drafts, show status, show help, " +
+        "stop). rename = he is saying what an idea should be called (\"call it X\", \"name that " +
+        "one X\"). chatter = greeting, thanks, typo. When torn between capture and question, " +
+        "choose capture; when torn between answer and capture, use unsure.",
     ),
   action: z
     .enum(["none", "start_interview", "show_waiting", "review_drafts", "status", "help", "stop"])
     .describe("Only when intent is action. Otherwise none."),
+  name: z
+    .string()
+    .describe(
+      "Only when intent is rename: what he said to call it, in his words, without \"call it\". " +
+        "Empty otherwise.",
+    ),
+  unsure: z
+    .boolean()
+    .describe(
+      "True when this could genuinely be either an answer to the open question or a new thought, " +
+        "and you cannot tell from the conversation. He is then asked which, with two buttons. Use " +
+        "it rarely: it costs him a tap.",
+    ),
   reply: z
     .string()
     .describe(
-      "What to say. Required for question and action; empty for capture and chatter. Warm, " +
-        "plain, two to four short sentences, and it ends by telling him the one thing to do next.",
+      "What to say. Required for question and action; empty for capture, answer and chatter. " +
+        "Warm, plain, two to four short sentences, ending with the one thing to do next.",
     ),
 });

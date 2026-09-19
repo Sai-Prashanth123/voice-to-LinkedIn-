@@ -8,7 +8,8 @@
  */
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { joshChatId, sendMessage } from "./telegram.ts";
+import { sendMessage } from "./telegram.ts";
+import { chatForMoment } from "./chat-state.ts";
 
 /**
  * 6.4 — parking with a real way back.
@@ -25,7 +26,7 @@ export async function sendParked(
   momentId: number,
   text: string,
 ): Promise<void> {
-  const messageId = await sendMessage(joshChatId(), text, [
+  const messageId = await sendMessage(await chatForMoment(db, momentId), text, [
     [{ text: "Add to this one", data: `reopen:${momentId}` }],
   ]);
 

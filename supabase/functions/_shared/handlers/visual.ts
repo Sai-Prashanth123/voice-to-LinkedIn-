@@ -10,6 +10,7 @@
  * 10.7: not every post gets an image. Nothing here runs unless Josh sends one.
  */
 
+import { chatForMoment, setState } from "../chat-state.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { initWasm, Resvg } from "npm:@resvg/resvg-wasm@2";
 import { callStructured, canSeeImages, MODELS, provider } from "../llm.ts";
@@ -193,12 +194,11 @@ export async function handleVisual(db: SupabaseClient, job: Job): Promise<void> 
 
   // Leave the door open for 10.6 without demanding he use it: anything other than "another" is
   // treated as him having moved on.
-  await db.from("conversation_state").update({
-    awaiting: "visual_feedback",
-    moment_id: momentId,
-    context: { source_path: sourcePath, taking, post_doing: postDoing },
-    updated_at: new Date().toISOString(),
-  }).eq("id", true);
+  await setState(db, await chatForMoment(db, momentId), "visual_feedback", momentId, {
+    source_path: sourcePath,
+    taking,
+    post_doing: postDoing,
+  });
 }
 
 async function nextVersion(db: SupabaseClient, momentId: number): Promise<number> {

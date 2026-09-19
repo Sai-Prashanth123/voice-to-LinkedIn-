@@ -17,6 +17,7 @@
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { noteProvider } from "../providers.ts";
+import { autoName } from "../idea-names.ts";
 import { logEvent } from "../db.ts";
 import { enqueue } from "../jobs.ts";
 import { pushBack } from "../pushback.ts";
@@ -76,6 +77,11 @@ export async function handleTranscribe(db: SupabaseClient, job: Job): Promise<vo
     );
     return;
   }
+
+  // Now there are words, so now it can be named. A voice note is captured before anything can read
+  // it, which is why naming happens here rather than at capture.
+  const { data: named } = await db.from("moments").select("title").eq("id", momentId).maybeSingle();
+  if (!named?.title) await autoName(db, momentId, text);
 
   // The interview picks it up from here. 4.1.3: Josh can talk for two minutes and be done — the
   // follow-up happens later, on his time.

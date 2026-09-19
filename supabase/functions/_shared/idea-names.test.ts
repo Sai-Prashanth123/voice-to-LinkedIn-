@@ -1,5 +1,5 @@
-import { assertEquals } from "jsr:@std/assert@1";
-import { cleanName, ideaLabel, MAX_NAME, namePrompt } from "./idea-names.ts";
+import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
+import { cleanName, firstWords, ideaLabel, MAX_NAME } from "./idea-names.ts";
 
 Deno.test("a name is tidied, not rewritten", () => {
   assertEquals(cleanName('  "CFO reads the first line."  '), "CFO reads the first line");
@@ -12,15 +12,29 @@ Deno.test("a name is tidied, not rewritten", () => {
 Deno.test("an idea is never referred to by its internal code", () => {
   assertEquals(ideaLabel({ title: "Filing taxes" }), '"Filing taxes"');
   assertEquals(ideaLabel({ title: null }).includes("M-"), false);
-  assertEquals(namePrompt("a prospect said onboarding felt like filing taxes", true).includes("M-"), false);
-});
-
-Deno.test("the prompt for an older idea quotes what it is about", () => {
-  const p = namePrompt("a prospect said onboarding felt like filing taxes", false);
-  assertEquals(p.includes("filing taxes"), true);
-  assertEquals(p.includes("What should we call it?"), true);
 });
 
 Deno.test("the length limit matches the database constraint", () => {
   assertEquals(MAX_NAME, 80);
+});
+
+/*
+ * autoName's own path needs a database and a model, so what is tested here is the part that must
+ * hold when both are unavailable: the capture still gets a handle, built from their words.
+ *
+ * The real function is exported and called here rather than reimplemented: a test that holds a copy
+ * of the thing it tests can only ever agree with itself.
+ */
+Deno.test("the fallback handle is the person's own opening words, cut at a word boundary", () => {
+  assertEquals(firstWords("lost a deal today"), "lost a deal today");
+
+  const long = firstWords(
+    "a prospect told me our onboarding felt like filing taxes and we rebuilt the first call",
+  );
+  assertStringIncludes(long, "a prospect told me our onboarding");
+  assertEquals(long.length <= 48, true);
+  assertEquals(long.endsWith(" "), false);
+
+  // A single unbroken run of characters still yields something rather than nothing.
+  assertEquals(firstWords("x".repeat(90)).length, 48);
 });

@@ -48,8 +48,14 @@ export type BotAction =
   | "stop";
 
 export interface Triaged {
-  intent: "capture" | "question" | "action" | "chatter";
+  intent: "answer" | "capture" | "question" | "action" | "rename" | "chatter";
   action: BotAction;
+  /** Only for rename: what he said to call the idea. */
+  name: string;
+  /** The model could not tell an answer from a new thought. He is asked, with two buttons. */
+  unsure: boolean;
+  /** The model was not consulted at all — switched off, or unreachable. Fall back to the old rules. */
+  degraded: boolean;
   reply: string;
 }
 
@@ -159,11 +165,41 @@ a sharp, warm colleague who knows the system inside out.
 
 ${GUIDE}
 
+READ THE CONVERSATION FIRST
+
+The messages before this one are the real conversation in this chat, oldest first: "user" is him,
+"assistant" is you. Read them before deciding anything. They are how you know whether he is
+answering the question you just asked, adding a second thought, or asking about something you said.
+
+ANSWER OR NEW STORY — the decision you will make most often
+
+WHAT YOU ARE WAITING ON is stated below. When a question is open, ANSWER is the default and a
+capture is the exception. Anything that adds detail to the idea you asked about is an answer: who
+they were, when it happened, where, what was said, what it felt like, why it mattered — however
+short, and however long ago you asked. "Tuesday", "no idea", "the CFO", "on a call last week", "it
+was a 12-person company in Austin" are all answers.
+
+It is a CAPTURE only when he is plainly telling you about a DIFFERENT event: a second story, usually
+marked as one ("and another thing", "separately", "also, yesterday…") or obviously unrelated to the
+question you asked. A new person, company or day is not on its own a new story — the question may
+have asked for exactly that.
+
+When the note below says an interview is part-way through but no question is open, the next question
+is still being written. A message that continues what he was saying is STILL an answer.
+
+Getting this wrong splits one interview into two ideas, neither of which has enough in it. If it
+could honestly be either, set unsure and leave the reply empty; he is asked which, with two buttons.
+
 CLASSIFY THE MESSAGE
 
-capture  — a thought or something that happened to him, however short. "lost a deal today" is
-           material. This is the point of the whole system. When torn between capture and
-           question, choose capture: a swallowed thought is invisible, a wrong reply is merely wrong.
+answer   — it replies to the open question named below. Leave the reply empty: the interview sends
+           the next question itself, and a reply from you as well says the same thing twice.
+
+capture  — a thought or something that happened to him, however short, that is NOT answering the
+           open question. "lost a deal today" is material. This is the point of the whole system.
+           When torn between capture and question, choose capture: a swallowed thought is invisible,
+           a wrong reply is merely wrong. When torn between capture and answer with a question open,
+           choose answer — see above.
 
 question — he is asking something. About how the bot works, what it does, how to start, what to do
            next, or about what is waiting in the snapshot. Answer it.
@@ -172,6 +208,10 @@ action   — he wants the bot to DO one of the things it can do. Set the matchin
            start_interview ("interview me", "ask me something", "start a conversation about my
            moment"), show_waiting, review_drafts, status, help, stop. Still write a short reply that
            says what is about to happen.
+
+rename   — he is saying what an idea should be called: "call it the CFO thing", "name that one
+           first-line test". Put the name itself in the name field, without the "call it". Leave the reply
+           empty; the rename is confirmed for him.
 
 chatter  — a greeting, thanks, a typo correction. Leave the reply empty.
 
@@ -212,22 +252,29 @@ export async function triageMessage(
   db: SupabaseClient,
   text: string,
   name: string | null = null,
+  chatId?: number,
 ): Promise<Triaged> {
   // A switch that does not need a deploy. If the free tier is exhausted, or the replies turn out to
   // be worse than silence, this turns the model call off and the bot goes back to pure capture.
   const enabled = await getSetting(db, "bot_chat_enabled", true);
-  if (!enabled) return { intent: "capture", action: "none", reply: "" };
+  if (!enabled) return FALLBACK;
 
   try {
-    const context = await snapshot(db);
+    const [context, history, waitingOn] = await Promise.all([
+      snapshot(db),
+      recentMessages(db, chatId),
+      openQuestion(db, chatId),
+    ]);
 
     const out = await callStructured(ChatTriageSchema, {
       model: MODELS.HAIKU,
-      system: SYSTEM,
-      messages: [{
+      system: `${SYSTEM}\n\nWHAT YOU ARE WAITING ON\n\n${waitingOn}\n\nTHE SNAPSHOT\n\n${context}`,
+      // The conversation as real turns, his message last. Passing it as turns rather than as a block
+      // of text inside one turn is what lets the model treat "and another thing" as a reply to what
+      // it just said — which is the whole point of keeping it.
+      messages: [...history, {
         role: "user",
-        content: `HIS NAME: ${name ?? "(not known)"}\n\nTHE MESSAGE\n\n${text}\n\n---\n\n` +
-          `THE SNAPSHOT\n\n${context}`,
+        content: `${name ? `(${name}) ` : ""}${text}`,
       }],
       effort: "low",
       maxTokens: 700,
@@ -237,14 +284,89 @@ export async function triageMessage(
     return {
       intent: out.intent as Triaged["intent"],
       action: (out.action ?? "none") as BotAction,
+      name: (out.name ?? "").trim(),
+      unsure: out.unsure === true,
+      degraded: false,
       reply: (out.reply ?? "").trim(),
     };
   } catch {
     // Deliberately silent to the caller and deliberately biased. A model outage must not start
     // dropping his thoughts on the floor, so an unreachable classifier means "treat it as material"
     // — which is exactly the behaviour that existed before this file.
-    return { intent: "capture", action: "none", reply: "" };
+    return FALLBACK;
   }
+}
+
+/** The safe direction when the model is unavailable: treat it as material rather than dropping it. */
+const FALLBACK: Triaged = {
+  intent: "capture",
+  action: "none",
+  name: "",
+  unsure: false,
+  degraded: true,
+  reply: "",
+};
+
+/** How many turns the model reads. Twenty covers a sitting without a long bill on every message. */
+const HISTORY = 20;
+
+/**
+ * The conversation this chat is actually in (0038).
+ *
+ * The bot used to answer every message from a database snapshot alone. It could not see what it had
+ * just said, so "and another thing" and "no, the second one" were unanswerable, and whether a message
+ * was an answer was decided by a three-hour clock rather than by reading.
+ */
+async function recentMessages(
+  db: SupabaseClient,
+  chatId?: number,
+): Promise<{ role: "user" | "assistant"; content: string }[]> {
+  if (!chatId) return [];
+  const { data } = await db
+    .from("chat_messages")
+    .select("direction, body")
+    .eq("chat_id", chatId)
+    .order("created_at", { ascending: false })
+    .limit(HISTORY + 1);
+
+  // Newest-first out of the database so the limit takes the recent end, then reversed for the model.
+  // The last row is the message being triaged, which is passed separately.
+  const rows = (data ?? []).reverse();
+  if (rows.length > 0 && rows[rows.length - 1].direction === "in") rows.pop();
+
+  return rows.map((r) => ({
+    role: r.direction === "in" ? "user" as const : "assistant" as const,
+    content: String(r.body ?? "").slice(0, 1200),
+  }));
+}
+
+/**
+ * What this chat is mid-way through, in words the model can act on.
+ *
+ * Stated rather than left to be inferred: the bot knowing it asked a question is the difference
+ * between reading "Tuesday" as an answer and filing it as a new idea called "Tuesday".
+ */
+async function openQuestion(db: SupabaseClient, chatId?: number): Promise<string> {
+  if (!chatId) return "Nothing. There is no question open in this chat.";
+
+  const { data: state } = await db
+    .from("conversation_state").select("awaiting, moment_id").eq("chat_id", chatId).maybeSingle();
+  if (!state?.moment_id || !["answer", "seeding"].includes(String(state.awaiting))) {
+    return "Nothing. There is no question open in this chat.";
+  }
+
+  const [{ data: moment }, { data: turn }] = await Promise.all([
+    db.from("moments").select("title").eq("id", state.moment_id).maybeSingle(),
+    db.from("interview_turns").select("role, body").eq("moment_id", state.moment_id)
+      .order("turn_no", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+
+  const which = moment?.title ? `"${moment.title}"` : "his last idea";
+  if (turn?.role !== "question") {
+    return `The idea ${which} is part-way through an interview, but no question is open right now.`;
+  }
+  return `You asked him this about ${which}, and are waiting for the answer:\n\n` +
+    `"${String(turn.body).slice(0, 400)}"`;
 }
 
 /* ── Who the chat belongs to ──────────────────────────────────────────────────────────────────

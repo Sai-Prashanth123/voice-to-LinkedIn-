@@ -10,7 +10,6 @@
  *   5.5  the interviewer cannot write prose    — its output schema has no field for a draft
  */
 
-import { ideaGist, namePrompt } from "../idea-names.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { callStructured, MODELS } from "../llm.ts";
 import { getSetting, logEvent, park } from "../db.ts";
@@ -27,6 +26,7 @@ import { type Extraction, ExtractionSchema, NextQuestionSchema } from "../schema
 import { appendTurn, deepest, loadSession, renderTranscript } from "../session.ts";
 import { type Button, joshChatId, sendMessage } from "../telegram.ts";
 import { questionOuts } from "../interviewouts.ts";
+import { chatForMoment, getState, setState } from "../chat-state.ts";
 import { sendParked } from "../parked.ts";
 import { isRealName, unclearedNames } from "../names.ts";
 import type { InterviewDepth, Job } from "../types.ts";
@@ -51,7 +51,7 @@ import type { InterviewDepth, Job } from "../types.ts";
  */
 export interface NextStep {
   /** asked = a question is waiting. finished/parked = the interview is over. nothing = no-op. */
-  action: "asked" | "finished" | "parked" | "nothing" | "needs_name";
+  action: "asked" | "finished" | "parked" | "nothing";
   momentId: number;
   /** The question itself, when action is "asked". Already recorded as a turn. */
   question?: string;
@@ -94,22 +94,6 @@ export async function chooseNextQuestion(
       action: "nothing",
       momentId,
       note: `That interview is already finished — the moment is ${moment.status}.`,
-    };
-  }
-
-  // No interview without a name (migration 0037). The person names every idea before a single
-  // question is asked, and this is the one place every interview passes through — Telegram, voice
-  // notes, Claude, call candidates, re-opens and the stale-interview sweep — so none can skip it.
-  //
-  // A prompted or seeding session is the exception for its first question only: it starts with no
-  // story at all ("run me through some questions"), so there is nothing yet to name. The name is
-  // asked straight after the first answer instead.
-  const storyYet = moment.source !== "prompted_session" || session.turns.some((t) => t.role === "answer");
-  if (!moment.title && storyYet) {
-    return {
-      action: "needs_name",
-      momentId,
-      note: "This idea has no name yet. Ask the person what to call it before the interview starts.",
     };
   }
 
@@ -177,7 +161,11 @@ export async function chooseNextQuestion(
       }),
     }],
     effort: "medium",
-    maxTokens: 1200,
+    // A question is two sentences and an optional one-line encouragement. 1200 was headroom nobody
+    // used, and on a nearly-empty provider account the ASKED-FOR ceiling is what gets refused:
+    // "you requested up to 1200 tokens, but can only afford 1068" stopped every interview while
+    // there was credit for the answer it would actually have produced.
+    maxTokens: 700,
     purpose: "interview",
     momentId,
     promptVersion: PROMPT_VERSION,
@@ -274,33 +262,6 @@ export async function chooseNextQuestion(
 export async function deliverQuestion(db: SupabaseClient, step: NextStep): Promise<void> {
   const { action, momentId } = step;
 
-  if (action === "needs_name") {
-    // One name at a time. The stale-interview sweep can queue a step for every unnamed idea at
-    // once, and asking for five names in five messages — each overwriting what the bot waits on —
-    // would file the first reply against the last question. Whatever is already being waited on
-    // (a name, an answer, a clearance) is left alone; this one is asked when that is done.
-    const { data: state } = await db
-      .from("conversation_state").select("awaiting, moment_id").eq("id", true).maybeSingle();
-    const awaiting = state?.awaiting ?? "nothing";
-    // Already asked for this name: the reminder comes when they next message, not from a queue retry.
-    if (awaiting === "idea_name") return;
-    const aboutThisIdea = ["answer", "seeding"].includes(awaiting) && state?.moment_id === momentId;
-    if (awaiting !== "nothing" && !aboutThisIdea) return;
-
-    const gist = await ideaGist(db, momentId);
-    const { count } = await db
-      .from("raw_inputs").select("id", { count: "exact", head: true }).eq("moment_id", momentId);
-    const justCaptured = (count ?? 0) > 0 && Boolean(gist) && await isFresh(db, momentId);
-    await sendMessage(joshChatId(), namePrompt(gist, justCaptured));
-    await db.from("conversation_state").update({
-      awaiting: "idea_name",
-      moment_id: momentId,
-      context: {},
-      updated_at: new Date().toISOString(),
-    }).eq("id", true);
-    return;
-  }
-
   if (action === "parked") {
     // These two were inside the park branch before. They are Telegram, so they live here now.
     await advanceSeeding(db);
@@ -332,7 +293,7 @@ export async function deliverQuestion(db: SupabaseClient, step: NextStep): Promi
    * interviewer to stop and write up what it has, which clause 5 calls a real outcome rather than a
    * failure. It is also the answer to "how do I know when an interview is finished" — he decides.
    */
-  const messageId = await sendMessage(joshChatId(), text, questionOuts(momentId));
+  const messageId = await sendMessage(await chatForMoment(db, momentId), text, questionOuts(momentId));
 
   // So that a reply is unambiguously an answer to THIS question, even days later (5.11).
   if (messageId) {
@@ -361,18 +322,19 @@ export async function deliverQuestion(db: SupabaseClient, step: NextStep): Promi
  * stealing it would lose his reply.
  */
 async function pointStateAtMoment(db: SupabaseClient, momentId: number): Promise<void> {
-  const { data: state } = await db
-    .from("conversation_state").select("awaiting").eq("id", true).maybeSingle();
+  const chatId = await chatForMoment(db, momentId);
+  const state = await getState(db, chatId);
 
-  const awaiting = state?.awaiting ?? "nothing";
+  const awaiting = state.awaiting ?? "nothing";
   if (!["nothing", "answer", "seeding"].includes(awaiting)) return;
 
-  await db.from("conversation_state").update({
+  await db.from("conversation_state").upsert({
+    chat_id: chatId,
     // A seeding sitting stays seeding: that is what tells extract to open the next moment.
     awaiting: awaiting === "seeding" ? "seeding" : "answer",
     moment_id: momentId,
     updated_at: new Date().toISOString(),
-  }).eq("id", true);
+  }, { onConflict: "chat_id" });
 }
 
 /**
@@ -535,16 +497,13 @@ export async function applyExtraction(
   // the buttons carry the name id directly. Silence leaves them uncleared, which 9.12 already calls
   // the safe default.
   if (uncleared.length > 0) {
-    const { data: state } = await db
-      .from("conversation_state").select("awaiting").eq("id", true).maybeSingle();
+    const chatId = await chatForMoment(db, momentId);
+    const state = await getState(db, chatId);
 
-    if (state?.awaiting === "nothing" || state?.awaiting === "answer") {
-      await db.from("conversation_state").update({
-        awaiting: "name_clearance",
-        moment_id: momentId,
-        context: { name_ids: uncleared.map((n) => n.id) },
-        updated_at: new Date().toISOString(),
-      }).eq("id", true);
+    if (state.awaiting === "nothing" || state.awaiting === "answer") {
+      await setState(db, chatId, "name_clearance", momentId, {
+        name_ids: uncleared.map((n) => n.id),
+      });
     }
   }
 
@@ -646,7 +605,7 @@ async function confirmFiled(
   const buttons = rows.length > 0 ? rows : undefined;
 
   const messageId = await sendMessage(
-    joshChatId(),
+    await chatForMoment(db, momentId),
     pillars.length > 0 ? `${lines.join("\n")}\n\nWrong pillar? Change it here.` : lines.join("\n"),
     buttons,
   );
@@ -690,10 +649,11 @@ function chunk<T>(items: T[], size: number): T[][] {
  * is how every one of those call sites stays a no-op the rest of the time.
  */
 export async function advanceSeeding(db: SupabaseClient): Promise<boolean> {
-  const chatId = joshChatId();
-  const { data: state } = await db
-    .from("conversation_state").select("awaiting, context").eq("id", true).maybeSingle();
-  if (state?.awaiting !== "seeding") return false;
+  // A seeding sitting belongs to whoever started it, which is the chat whose state says so.
+  const { data: sitting } = await db
+    .from("conversation_state").select("chat_id").eq("awaiting", "seeding").limit(1).maybeSingle();
+  if (!sitting) return false;
+  const chatId = Number(sitting.chat_id);
 
   const target = await getSetting(db, "seed_target", 25);
   const { count: mined } = await db
@@ -703,12 +663,7 @@ export async function advanceSeeding(db: SupabaseClient): Promise<boolean> {
 
   const done = mined ?? 0;
   if (done >= target) {
-    await db.from("conversation_state").update({
-      awaiting: "nothing",
-      moment_id: null,
-      context: {},
-      updated_at: new Date().toISOString(),
-    }).eq("id", true);
+    await setState(db, chatId, "nothing", null);
 
     await sendMessage(
       chatId,
@@ -730,10 +685,15 @@ export async function advanceSeeding(db: SupabaseClient): Promise<boolean> {
  * finished — which is a worker, not a message. The state stays `seeding` so the next answer routes
  * to this moment and the sitting continues rather than ending after one.
  */
-export async function startNextSeedMoment(db: SupabaseClient): Promise<void> {
+export async function startNextSeedMoment(db: SupabaseClient, chatId?: number): Promise<void> {
+  const sittingChat = chatId ?? Number(
+    (await db.from("conversation_state").select("chat_id").eq("awaiting", "seeding").limit(1)
+      .maybeSingle()).data?.chat_id ?? joshChatId(),
+  );
   const { data: moment } = await db.from("moments").insert({
     source: "prompted_session",
     status: "captured",
+    chat_id: sittingChat,
   }).select("id").single();
   if (!moment) return;
 
@@ -743,11 +703,7 @@ export async function startNextSeedMoment(db: SupabaseClient): Promise<void> {
     text_body: "(seeding session — filling the bank before anything else runs)",
   });
 
-  await db.from("conversation_state").update({
-    awaiting: "seeding",
-    moment_id: moment.id,
-    updated_at: new Date().toISOString(),
-  }).eq("id", true);
+  await setState(db, sittingChat, "seeding", moment.id);
 
   await enqueue(db, "interview_step", { moment_id: moment.id });
 }
@@ -772,8 +728,3 @@ async function askReopeningQuestion(db: SupabaseClient, momentId: number): Promi
   return question;
 }
 
-/** Captured in the last ten minutes: the name prompt reads "Got it" rather than quoting the idea back. */
-async function isFresh(db: SupabaseClient, momentId: number): Promise<boolean> {
-  const { data } = await db.from("moments").select("captured_at").eq("id", momentId).maybeSingle();
-  return Boolean(data?.captured_at) && Date.now() - new Date(data!.captured_at).getTime() < 10 * 60_000;
-}

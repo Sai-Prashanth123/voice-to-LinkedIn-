@@ -16,7 +16,7 @@ import { noteProvider } from "../_shared/providers.ts";
 import type { Awaiting } from "../_shared/types.ts";
 import { admin, getSetting, logEvent, park } from "../_shared/db.ts";
 import { loadSecrets, secret } from "../_shared/secrets.ts";
-import { approveAccess, isApproved, requestAccess } from "../_shared/telegram-access.ts";
+import { approveAccess, isApproved, registerAccess } from "../_shared/telegram-access.ts";
 import {
   type BotAction,
   displayName,
@@ -29,7 +29,8 @@ import { pushBack } from "../_shared/pushback.ts";
 import { recordVerdict } from "../_shared/outcome.ts";
 import { decide as decideProposal } from "../_shared/proposals.ts";
 import { chooseNextQuestion, deliverQuestion, startNextSeedMoment } from "../_shared/handlers/interview.ts";
-import { cleanName, ideaGist, ideaLabel, MAX_NAME, namePrompt, nextUnnamed, setIdeaName } from "../_shared/idea-names.ts";
+import { chatForMoment, getState, setState } from "../_shared/chat-state.ts";
+import { autoName, ideaLabel, setIdeaName } from "../_shared/idea-names.ts";
 import { loadLibrary, parsePillars } from "../_shared/library.ts";
 import { appendTurn, lastQuestionAt, loadSession } from "../_shared/session.ts";
 import {
@@ -130,43 +131,38 @@ Deno.serve(async (req) => {
   // Rejecting an unknown chat is correct and must stay silent to the sender (15.4). But it is also
   // what a total credential failure looks like from the outside, which is how a real message got
   // dropped while this returned 200. Recording it means the two are distinguishable.
-  if (!isAuthorised(msg.chat.id) && !await isApproved(db, msg.chat.id)) {
+  const known = await isApproved(db, msg.chat.id);
+  if (!isAuthorised(msg.chat.id) && !known) {
     /*
-     * A STRANGER ASKS. THEY DO NOT LET THEMSELVES IN.
+     * A NEW CHAT IS ADMITTED WITHOUT BEING ASKED ABOUT, AND THAT IS A DECISION WITH A COST.
      *
-     * This called registerAccess, which writes status 'approved' outright — so every unknown chat
-     * was admitted on its first message and then fell straight through to route() below. The
-     * migration that created this table says the opposite in its own header: "they cannot reach the
-     * shared workspace until the owner approves them." Two readers of one rule, disagreeing.
+     * This used to hold a stranger as `pending` and send the owner an approve button. The owner
+     * asked for the opposite — the chat id is stored in the background, nobody is interrogated —
+     * for the same reason the desk's login was removed.
      *
-     * It matters more here than on the desk. The desk is read-only to a visitor; the bot WRITES.
-     * An admitted stranger can put material into the bank and answer interview questions as though
-     * they were Josh, and 15.4 exists because that bank holds his clients' material.
+     * What it costs, plainly: the bot WRITES. An admitted chat can put material into the bank and
+     * answer interview questions as though it were Josh, and 15.4 exists because that bank holds
+     * his clients' material. The chat id is the only thing standing between a stranger who finds
+     * the bot and his idea bank.
      *
-     * So: record the request as pending, ask the owner, and stop. requestAccess returns true only
-     * when it created the row, which keeps a stranger sending ten messages from sending ten
-     * notifications.
+     * What still holds the line: every chat has its own conversation state (0038), so an admitted
+     * chat cannot answer a question asked of someone else; every admission is logged; and a chat
+     * set to `revoked` stays out.
      */
+    const { data: row } = await db
+      .from("telegram_access").select("status").eq("chat_id", msg.chat.id).maybeSingle();
+    if (row?.status === "revoked") return json({ ok: true });
+
     try {
-      const isNew = await requestAccess(db, msg.chat.id);
-      if (isNew) {
-        await logEvent(db, "telegram_access_requested", "warn", { chat_id: msg.chat.id });
-        await sendRich(
-          joshChatId(),
-          `An unknown Telegram chat (<code>${msg.chat.id}</code>) messaged the bot and is waiting ` +
-            `for access. Approve only if you recognise it — an approved chat can add material and ` +
-            `answer interview questions.`,
-          [[{ text: "Approve this chat", data: `access:approve:${msg.chat.id}` }]],
-        );
-      }
+      await registerAccess(db, msg.chat.id);
+      await logEvent(db, "telegram_chat_admitted", "info", { chat_id: msg.chat.id });
     } catch (err) {
       await logEvent(db, "telegram_access_registration_failed", "error", {
         chat_id: msg.chat.id,
         error: err instanceof Error ? err.message : String(err),
       });
+      return json({ ok: true });
     }
-    // Silent to the sender either way (15.4): an unknown chat learns nothing about what this is.
-    return json({ ok: true });
   }
 
   try {
@@ -196,6 +192,20 @@ async function route(db: SupabaseClient, msg: Message): Promise<void> {
   // complete, because the handover document is generated from it.
   await noteProvider(db, "telegram", "messaging");
   const text = (msg.text ?? msg.caption ?? "").trim();
+
+  // Their half of the conversation, so the assistant can read what was said rather than guessing
+  // from a database snapshot (0038). A voice note is recorded as a placeholder — the transcript is
+  // material and lives in raw_inputs, not here.
+  if (text || msg.voice || msg.audio || msg.photo) {
+    await db.from("chat_messages").insert({
+      chat_id: chatId,
+      direction: "in",
+      body: text || (msg.voice || msg.audio ? "(a voice note)" : "(an image)"),
+      telegram_message_id: msg.message_id,
+    }).then(({ error }) => {
+      if (error) console.error(`chat_messages(in) failed: ${error.message}`);
+    });
+  }
 
   // ── Commands ────────────────────────────────────────────────────────────────
   const command = parseCommand(msg.text);
@@ -245,7 +255,7 @@ async function route(db: SupabaseClient, msg: Message): Promise<void> {
   }
 
   // ── Otherwise, whatever the bot is waiting on ──────────────────────────────
-  const state = await getState(db);
+  const state = await getState(db, chatId);
 
   // 8.1 — recording the voice interview. Handled before everything else, because while this is
   // running a voice note is library evidence rather than a moment, and filing it as a moment would
@@ -274,7 +284,7 @@ async function route(db: SupabaseClient, msg: Message): Promise<void> {
       return;
     }
     // Anything else means he is done with the image and has moved on.
-    await setState(db, "nothing", null);
+    await setState(db, chatId, "nothing", null);
   }
 
   // 12.4 — one line on a draft, or nothing.
@@ -298,20 +308,13 @@ async function route(db: SupabaseClient, msg: Message): Promise<void> {
     const fresh = Date.now() - askedAt <= VERDICT_WINDOW_MS;
     const typed = !msg.voice && !msg.audio && text.length > 0;
 
-    await setState(db, "nothing", null);
+    await setState(db, chatId, "nothing", null);
 
     if (fresh && typed && postId && await recordVerdict(db, postId, text, draftId)) {
       await sendMessage(chatId, "Noted — that goes into what I tune against.");
       return;
     }
     // Otherwise it was never a verdict. Fall through and treat it as whatever it actually is.
-  }
-
-  // The name for an idea (migration 0037). Before the answer branch: an idea waiting for its name
-  // has no open question yet, and its first question is asked only once this is answered.
-  if (state.awaiting === "idea_name" && state.moment_id) {
-    await handleIdeaName(db, chatId, state.moment_id, msg, text);
-    return;
   }
 
   // 9.12 — his answer on whether names may be used.
@@ -329,7 +332,7 @@ async function route(db: SupabaseClient, msg: Message): Promise<void> {
       return;
     }
     // Not a number in range — he has moved on. Fall through and treat it as a new thought.
-    await setState(db, "nothing", null);
+    await setState(db, chatId, "nothing", null);
   }
 
   // `seeding` is an ordinary interview that keeps going; his reply is an answer either way. The
@@ -358,19 +361,75 @@ async function route(db: SupabaseClient, msg: Message): Promise<void> {
     }
 
     if (last?.role === "question") {
-      const askedAt = await lastQuestionAt(db, state.moment_id);
-      const ageMs = askedAt ? Date.now() - askedAt.getTime() : Infinity;
-
-      if (ageMs <= ANSWER_WINDOW_MS) {
-        // Recent question: he is in the conversation. The common case, and it stays frictionless.
+      /*
+       * A VOICE NOTE, OR A RECENT REPLY, IS AN ANSWER WITHOUT ASKING ANYONE.
+       *
+       * Nobody records audio to change the subject, and a typed reply inside the window is the
+       * common case — both stay frictionless and cost no model call.
+       *
+       * Everything else is read rather than timed. The window used to decide alone: a message four
+       * hours after a question got the "which one is this?" buttons however obviously it answered,
+       * and one four hours before the window closed was filed as an answer however obviously it did
+       * not. The assistant now sees the conversation, so it can tell — and `unsure` is how it says
+       * it cannot, which is the only case that still costs him a tap.
+       */
+      // A voice note is an answer without anybody deciding: nobody records audio to change the
+      // subject, and the words are not readable until after it is transcribed anyway.
+      if (hasVoice) {
         await handleAnswer(db, chatId, state.moment_id, msg, text);
         return;
       }
 
-      // 4.1.3 lets him leave a question and come back later, so a message arriving hours afterwards
-      // is at least as likely to be something new. Guessing wrong loses the material silently — the
-      // new moment is never created and the thought is filed as a reply to an old question. One tap
-      // costs a second and removes the guess.
+      const read = await triageMessage(db, text, await displayName(db, chatId), chatId);
+
+      if (read.degraded) {
+        // The model was switched off or unreachable. Back to the clock: inside the window it is an
+        // answer, outside it he is asked. Worse than reading the conversation, better than guessing.
+        const askedAt = await lastQuestionAt(db, state.moment_id);
+        const ageMs = askedAt ? Date.now() - askedAt.getTime() : Infinity;
+        if (ageMs <= ANSWER_WINDOW_MS) {
+          await handleAnswer(db, chatId, state.moment_id, msg, text);
+        } else {
+          await askWhichOne(db, chatId, state.moment_id, msg, text);
+        }
+        return;
+      }
+
+      if (read.intent === "answer" && !read.unsure) {
+        await handleAnswer(db, chatId, state.moment_id, msg, text);
+        return;
+      }
+      if (read.intent === "capture" && !read.unsure) {
+        // A second story told while a question is open is a second idea, not an answer to the first.
+        await captureNewMoment(db, chatId, msg, text);
+        return;
+      }
+      if (read.intent === "action" && read.action !== "none") {
+        if (read.reply) await sendMessage(chatId, read.reply);
+        await handleCommand(db, chatId, ACTION_TO_COMMAND[read.action]);
+        return;
+      }
+      if (read.intent === "chatter") {
+        if (isGreeting(text)) {
+          await sendRich(
+            chatId,
+            esc(await greetingReply(db, await displayName(db, chatId))),
+            await quickButtons(db),
+          );
+        }
+        return;
+      }
+      if (read.intent === "rename" && read.name) {
+        await renameIdea(db, chatId, state.moment_id, read.name);
+        return;
+      }
+      if (read.intent === "question" && read.reply) {
+        await sendRich(chatId, esc(read.reply), await quickButtons(db));
+        return;
+      }
+
+      // 4.1.3 lets him leave a question and come back later. When it is genuinely ambiguous, one tap
+      // costs a second and removes the guess — which is better than losing the thought either way.
       await askWhichOne(db, chatId, state.moment_id, msg, text);
       return;
     }
@@ -448,7 +507,7 @@ async function triageAndHandle(
    * "ok", a thumbs up — and answering it starts a loop that only ends when one side gives up.
    */
   if (isChatter(text)) {
-    await setState(db, "nothing", null);
+    await setState(db, chatId, "nothing", null);
     if (first) {
       await sendRich(chatId, esc(orientation(first)), await quickButtons(db));
     } else if (isGreeting(text)) {
@@ -457,14 +516,42 @@ async function triageAndHandle(
         esc(await greetingReply(db, await displayName(db, chatId))),
         await quickButtons(db),
       );
-      // Ideas from before names existed are asked about one at a time, starting when they say hello.
-      await askNextUnnamed(db, chatId);
     }
     return;
   }
 
   const name = await displayName(db, chatId);
-  const { intent, action, reply } = await triageMessage(db, text, name);
+  const { intent, action, reply, name: newName } = await triageMessage(db, text, name, chatId);
+
+  /*
+   * AN ANSWER CAN ARRIVE WITH NO QUESTION SITTING OPEN.
+   *
+   * The interview asks its next question through the queue, so for the ten seconds it takes to write
+   * one the last turn is an answer and the branch above does not run. A follow-up sent in that gap
+   * — "on a call last week", the second half of a thought — reached this path and was filed as a
+   * brand new idea. Found live.
+   *
+   * The state still says which idea he is mid-way through, and the assistant has read the
+   * conversation, so an answer goes where the rest of them went.
+   */
+  if (intent === "answer") {
+    const state = await getState(db, chatId);
+    if (state.moment_id && ["answer", "seeding"].includes(state.awaiting)) {
+      await handleAnswer(db, chatId, state.moment_id, msg, text);
+      return;
+    }
+  }
+
+  // "Call it the CFO thing." Renaming is something he says mid-conversation, not a mode he is put
+  // into — which is the whole difference between this and the naming question it replaces.
+  if (intent === "rename" && newName) {
+    const state = await getState(db, chatId);
+    const target = state.moment_id ?? await mostRecentIdea(db, chatId);
+    if (target) {
+      await renameIdea(db, chatId, target, newName);
+      return;
+    }
+  }
 
   /*
    * "Interview me", "what's waiting?", "review my drafts" — things the bot has always been able to do,
@@ -490,11 +577,52 @@ async function triageAndHandle(
   }
 
   if (intent === "chatter") {
-    await setState(db, "nothing", null);
+    await setState(db, chatId, "nothing", null);
     return;
   }
 
   await captureNewMoment(db, chatId, msg, text);
+}
+
+/**
+ * Rename an idea because he said what it should be called.
+ *
+ * The name is his, so a refusal (already taken, too long) is reported rather than worked around —
+ * the opposite of `autoName`, which must never fail because nobody asked it to name anything.
+ */
+async function renameIdea(
+  db: SupabaseClient,
+  chatId: number,
+  momentId: number,
+  name: string,
+): Promise<void> {
+  const { data: before } = await db
+    .from("moments").select("title").eq("id", momentId).maybeSingle();
+
+  const named = await setIdeaName(db, momentId, name);
+  if (!named.ok) {
+    await sendMessage(chatId, named.reason);
+    return;
+  }
+
+  await logEvent(db, "idea_renamed", "info", {
+    moment_id: momentId,
+    from: before?.title ?? null,
+    to: named.name,
+  });
+  await sendMessage(chatId, `Renamed it "${named.name}".`);
+}
+
+/** The idea this chat last sent, for a rename with nothing else in play. */
+async function mostRecentIdea(db: SupabaseClient, chatId: number): Promise<number | null> {
+  const { data } = await db
+    .from("moments")
+    .select("id")
+    .eq("chat_id", chatId)
+    .eq("killed", false)
+    .order("captured_at", { ascending: false })
+    .limit(1);
+  return data?.[0]?.id ?? null;
 }
 
 /** The words the model hears, mapped to the commands the bot already had. One list, no new paths. */
@@ -579,7 +707,7 @@ async function startPromptedSession(db: SupabaseClient, chatId: number): Promise
     text_body: "(prompted session — Josh asked to be run through questions)",
   });
   await enqueue(db, "interview_step", { moment_id: moment.id });
-  await setState(db, "answer", moment.id);
+  await setState(db, chatId, "answer", moment.id);
   nudge();
 }
 
@@ -673,13 +801,15 @@ async function captureNewMoment(
   // creates can ever be removed — so junk accumulates permanently. Voice notes are exempt: nobody
   // records audio to say thanks.
   if (!voice && isChatter(text)) {
-    await setState(db, "nothing", null);
+    await setState(db, chatId, "nothing", null);
     return;
   }
 
   const { data: moment, error } = await db.from("moments").insert({
     source: "raw_capture",
     status: "captured",
+    // Whose conversation this idea belongs to, so its questions come back to the same place.
+    chat_id: chatId,
   }).select("id").single();
   if (error || !moment) throw new Error(`could not create moment: ${error?.message}`);
 
@@ -708,13 +838,12 @@ async function captureNewMoment(
     // accurate and tells a person nothing: the reference is the least useful thing in the sentence
     // and it was the whole sentence.
     //
-    // The idea is named while the audio transcribes (migration 0037). The transcribe job queues the
-    // interview step, and that step waits for the name, so neither has to wait on the other.
+    // Naming waits for the words. A voice note has none yet, so the transcribe job names it and the
+    // interview step follows — the acknowledgement here says what is happening rather than asking.
     if (opts.quiet) return;
     await sendMessage(
       chatId,
-      `Got that — ${voice.duration}s, transcribing it now. While that runs: what should we call ` +
-        `this idea? A few words you will recognise later.`,
+      `Got that — ${voice.duration}s, transcribing it now, then a couple of questions about it.`,
     );
   } else {
     await db.from("raw_inputs").insert({
@@ -723,103 +852,34 @@ async function captureNewMoment(
       text_body: text,
       telegram_message_id: msg.message_id,
     });
-    // No interview step is queued. The first question is asked once the idea has a name, by the
-    // idea_name branch in route(); queueing it here as well would only wait on the same name.
-    if (opts.quiet) return;
-    await sendMessage(chatId, namePrompt(text, true));
-  }
 
-  await setState(db, "idea_name", moment.id);
-}
-
-/**
- * The reply to "what should we call this idea?".
- *
- * Asked until it is answered: a greeting gets the question again, a whole new story is kept as its
- * own idea (and named next) rather than squeezed into a name, and a name already in use is refused.
- * Once named, the interview starts — unless the idea is a voice note still being transcribed, in
- * which case the transcribe job starts it when the words exist.
- */
-async function handleIdeaName(
-  db: SupabaseClient,
-  chatId: number,
-  momentId: number,
-  msg: Message,
-  text: string,
-): Promise<void> {
-  const voice = msg.voice ?? msg.audio;
-
-  // A spoken name would need transcribing before it could be checked for clashes; ask for it typed.
-  if (voice) {
-    await sendMessage(chatId, "Type the name for this one, please — a few words is enough.");
-    return;
-  }
-  if (!text) return;
-
-  if (isChatter(text)) {
-    if (isGreeting(text)) {
-      const name = await displayName(db, chatId);
-      await sendMessage(
-        chatId,
-        `Hi${name ? ` ${name}` : ""}. ` + namePrompt(await ideaGist(db, momentId), false),
-      );
+    // Named from their own words, said out loud, and changed by saying so. The first version asked
+    // and would not move until it was answered, which made a label a toll gate on every thought.
+    const name = await autoName(db, moment.id, text);
+    await enqueue(db, "interview_step", { moment_id: moment.id });
+    if (opts.quiet) {
+      await setState(db, chatId, "answer", moment.id);
+      return;
     }
-    return;
-  }
 
-  // Too long to be a name: it is a new thought. Kept as its own idea so nothing is lost, and asked
-  // about once this one has its name.
-  if (cleanName(text).length > MAX_NAME) {
-    await captureNewMoment(db, chatId, msg, text, { quiet: true });
+    // STATE BEFORE ACKNOWLEDGEMENT. Found live: sending to a chat Telegram refused threw, the state
+    // was never written, and the idea sat in the bank while the chat was waiting on nothing — so the
+    // person's next message would have opened a second idea instead of answering the first. The
+    // conversation's state is about what the system will do next, not about a message getting out.
+    await setState(db, chatId, "answer", moment.id);
     await sendMessage(
       chatId,
-      "Saved that as a new idea — I will ask what to call it next. First, a name for this one:\n\n" +
-        `"${(await ideaGist(db, momentId)).slice(0, 200)}"`,
+      name
+        ? `Got it — filed as "${name}". A couple of questions coming; say "call it something else" ` +
+          `if that name is wrong.`
+        : `Got it. A couple of questions about this one coming.`,
     );
     return;
   }
 
-  const named = await setIdeaName(db, momentId, text);
-  if (!named.ok) {
-    await sendMessage(chatId, named.reason);
-    return;
-  }
-
-  await setState(db, "nothing", null);
-
-  // A voice note whose words are not in yet: the transcribe job queues the interview step.
-  const { data: pending } = await db
-    .from("raw_inputs")
-    .select("id")
-    .eq("moment_id", momentId)
-    .eq("kind", "voice")
-    .is("transcript", null)
-    .limit(1);
-  if (pending && pending.length > 0) {
-    await sendMessage(chatId, `"${named.name}" it is. First question as soon as the voice note is transcribed.`);
-    return;
-  }
-
-  const step = await chooseNextQuestion(db, momentId);
-  if (step.action === "asked" || step.action === "parked") {
-    await sendMessage(chatId, `"${named.name}" it is.`);
-    await deliverQuestion(db, step);
-    return;
-  }
-
-  // Nothing to interview (an older idea that is already mined or parked): move to the next unnamed one.
-  await sendMessage(chatId, `"${named.name}" it is.`);
-  await askNextUnnamed(db, chatId);
+  await setState(db, chatId, "answer", moment.id);
 }
 
-/** Ask for the name of the next idea that still has none, if any. Returns whether it asked. */
-async function askNextUnnamed(db: SupabaseClient, chatId: number): Promise<boolean> {
-  const next = await nextUnnamed(db);
-  if (!next) return false;
-  await sendMessage(chatId, namePrompt(await ideaGist(db, next), false));
-  await setState(db, "idea_name", next);
-  return true;
-}
 
 /**
  * Acknowledgements, not material. Matched whole-string and deliberately narrow: "lost a deal today"
@@ -901,7 +961,7 @@ async function handleAnswer(
   });
 
   await enqueue(db, "interview_step", { moment_id: momentId });
-  await setState(db, "answer", momentId);
+  await setState(db, chatId, "answer", momentId);
 }
 
 /* ── Push-back on a draft (9.14) ──────────────────────────────────────────── */
@@ -973,7 +1033,7 @@ async function openCandidate(
   momentId: number,
 ): Promise<void> {
   await db.from("moments").update({ status: "captured" }).eq("id", momentId);
-  await setState(db, "answer", momentId);
+  await setState(db, chatId, "answer", momentId);
 
   const { data: opening } = await db
     .from("interview_turns")
@@ -1033,7 +1093,7 @@ async function handleTap(
         const { data: sched } = await db
           .from("posts").select("draft_id").eq("id", action.postId).maybeSingle();
         const ask = verdictPrompt(false);
-        await setState(db, "draft_verdict", null, {
+        await setState(db, chatId, "draft_verdict", null, {
           post_id: action.postId,
           draft_id: sched?.draft_id ?? null,
         });
@@ -1075,7 +1135,7 @@ async function handleTap(
       }
 
       const ask = verdictPrompt(true);
-      await setState(db, "draft_verdict", null, {
+      await setState(db, chatId, "draft_verdict", null, {
         post_id: action.postId,
         draft_id: held?.draft_id ?? null,
       });
@@ -1111,9 +1171,9 @@ async function handleTap(
 
     // ── Disambiguation: the held message was an answer after all ─────────────
     case "answer": {
-      const state = await getState(db);
+      const state = await getState(db, chatId);
       const pending = (state.context?.pending ?? null) as PendingMessage | null;
-      await setState(db, "answer", action.momentId);
+      await setState(db, chatId, "answer", action.momentId);
 
       if (messageId) await replaceMessage(chatId, messageId, "Right — treating that as the answer.");
       if (pending) await applyPending(db, chatId, action.momentId, pending, "answer");
@@ -1122,9 +1182,9 @@ async function handleTap(
 
     // ── Disambiguation: it was something new ─────────────────────────────────
     case "newthought": {
-      const state = await getState(db);
+      const state = await getState(db, chatId);
       const pending = (state.context?.pending ?? null) as PendingMessage | null;
-      await setState(db, "nothing", null);
+      await setState(db, chatId, "nothing", null);
 
       if (messageId) await replaceMessage(chatId, messageId, "Got it — starting a new one.");
       if (pending) await applyPending(db, chatId, 0, pending, "new");
@@ -1172,7 +1232,7 @@ async function handleTap(
 
       // Point the conversation at it so what he says next lands on THIS row rather than opening a
       // new one — which is what used to happen, leaving the parked moment orphaned.
-      await setState(db, "answer", action.momentId);
+      await setState(db, chatId, "answer", action.momentId);
 
       // And ask him something, rather than only waiting. Pointing the state at the moment is not
       // enough on its own: the routing rule that files a message as an answer requires an open
@@ -1219,7 +1279,7 @@ async function handleTap(
         .limit(1)
         .maybeSingle();
 
-      await setState(db, "answer", action.momentId);
+      await setState(db, chatId, "answer", action.momentId);
       await logEvent(db, "interview_resumed_by_josh", "info", { moment_id: action.momentId });
 
       if (messageId) {
@@ -1269,7 +1329,7 @@ async function handleTap(
     // system and one parked by Josh are different facts and the bank should not blur them.
     case "parkit": {
       await park(db, action.momentId, "You parked this one. Send me more about it any time.");
-      await setState(db, "nothing", null);
+      await setState(db, chatId, "nothing", null);
       await logEvent(db, "moment_parked", "info", {
         moment_id: action.momentId,
         reason: "parked by Josh from a button",
@@ -1329,7 +1389,7 @@ async function handleTap(
           .eq("image_path", sourcePath);
       }
 
-      await setState(db, "visual_details", action.momentId, { source_path: sourcePath });
+      await setState(db, chatId, "visual_details", action.momentId, { source_path: sourcePath });
 
       const { data: m } = await db
         .from("moments").select("title").eq("id", action.momentId).maybeSingle();
@@ -1352,7 +1412,7 @@ async function handleTap(
     // 12.4 — "nothing specific" is a real answer, not a failure to answer. Offering it is what
     // stops the question sitting there looking like it needs something.
     case "noverdict": {
-      await setState(db, "nothing", null);
+      await setState(db, chatId, "nothing", null);
       if (messageId) {
         await replaceMessage(chatId, messageId, "Fair enough. Nothing waiting on you.");
       }
@@ -1422,7 +1482,7 @@ async function handleTap(
           const { data: st } = await db
             .from("conversation_state").select("awaiting, moment_id").eq("id", true).maybeSingle();
           if (st?.awaiting === "name_clearance" && st.moment_id === n.moment_id) {
-            await setState(db, "nothing", null);
+            await setState(db, chatId, "nothing", null);
           }
         }
       }
@@ -1610,7 +1670,7 @@ async function handleNameClearance(
   const { data: current } = await db
     .from("conversation_state").select("awaiting, moment_id").eq("id", true).maybeSingle();
   if (current?.awaiting === "name_clearance" && current.moment_id === state.moment_id) {
-    await setState(db, "nothing", null);
+    await setState(db, chatId, "nothing", null);
   }
 
   await sendMessage(
@@ -1659,7 +1719,7 @@ async function handleImage(db: SupabaseClient, chatId: number, msg: Message): Pr
     telegram_message_id: msg.message_id,
   });
 
-  await setState(db, "visual_details", moment.id, { source_path: path });
+  await setState(db, chatId, "visual_details", moment.id, { source_path: path });
 
   // 10.2 asks THREE things, and the third was being guessed rather than asked: "what he is taking
   // from it, what the post is doing, and which moment it goes with."
@@ -1699,7 +1759,7 @@ async function startVisual(
   });
   // Held so 10.6 works: "another" reruns with the same reference and intent rather than starting
   // the whole exchange again.
-  await setState(db, "visual_feedback", state.moment_id, {
+  await setState(db, chatId, "visual_feedback", state.moment_id, {
     source_path: state.context.source_path,
     taking,
     post_doing: text,
@@ -1747,7 +1807,7 @@ async function handleCommand(db: SupabaseClient, chatId: number, kind: string): 
       // 8.1 — "the voice guide comes from a recorded interview where he talks at length in his own
       // words, and that transcript is the source of truth." It is on the critical path with no date
       // attached (8.2), so the least this can do is make starting it a single command.
-      await setState(db, "voice_guide_capture", null);
+      await setState(db, chatId, "voice_guide_capture", null);
       await sendMessage(
         chatId,
         "Talk to me. Not about how you write — just tell me things.\n\n" +
@@ -1791,12 +1851,12 @@ async function handleCommand(db: SupabaseClient, chatId: number, kind: string): 
 
     case "stop": {
       // 4.2.5 — he can stop at any point and everything captured is kept.
-      const state = await getState(db);
+      const state = await getState(db, chatId);
       if (state.moment_id) {
         await enqueue(db, "interview_extract", { moment_id: state.moment_id });
       }
       const wasSeeding = state.awaiting === "seeding";
-      await setState(db, "nothing", null);
+      await setState(db, chatId, "nothing", null);
       await sendMessage(
         chatId,
         wasSeeding
@@ -2050,27 +2110,6 @@ async function offerCandidates(
     await db.from("sent_messages").insert({ telegram_message_id: messageId, kind: "candidates" });
   }
   return true;
-}
-
-/* ── State helpers ────────────────────────────────────────────────────────── */
-
-async function getState(db: SupabaseClient) {
-  const { data } = await db.from("conversation_state").select("*").eq("id", true).single();
-  return data ?? { awaiting: "nothing", moment_id: null, context: {} };
-}
-
-async function setState(
-  db: SupabaseClient,
-  awaiting: Awaiting,
-  momentId: number | null,
-  context: Record<string, unknown> = {},
-): Promise<void> {
-  await db.from("conversation_state").update({
-    awaiting,
-    moment_id: momentId,
-    context,
-    updated_at: new Date().toISOString(),
-  }).eq("id", true);
 }
 
 async function recordSent(

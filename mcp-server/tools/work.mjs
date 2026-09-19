@@ -87,23 +87,6 @@ export const workTools = [
         // the difference between offering work and offering something Josh already said no to.
         if (!moment || moment.killed || moment.status === "parked") continue;
 
-        // Nothing is written from an idea its owner has not named (migration 0037). Offered as the
-        // work instead, because the draft cannot be filed until it is done.
-        if (!moment.title) {
-          return {
-            work: "name",
-            moment_id: momentId,
-            also_waiting: queue.length - 1,
-            gist: await ideaGist(db, momentId),
-            how: [
-              "This idea is ready to write but has no name. Show them what it is about (gist) and ask " +
-                "what they want to call it.",
-              "Call name_idea with exactly what they say. Never make a name up.",
-            ],
-            then: "Call next_work again; the draft is offered once it is named.",
-          };
-        }
-
         const brief = await viaTool("get_drafting_brief", { moment_id: momentId }, context);
         const failures = Array.isArray(job.payload?.failures) ? job.payload.failures : [];
         const isRewrite = Boolean(job.payload?.previous_body) || failures.length > 0;
@@ -165,17 +148,3 @@ export const workTools = [
     },
   },
 ];
-
-/** What an unnamed idea is about, in their own first words, so they know which one they are naming. */
-async function ideaGist(db, momentId) {
-  const [raw] = await db.select("raw_inputs", {
-    select: "text_body,transcript",
-    moment_id: `eq.${momentId}`,
-    order: "id.asc",
-    limit: 1,
-  });
-  const said = String(raw?.text_body ?? raw?.transcript ?? "").trim();
-  if (said && !said.startsWith("(")) return said.slice(0, 220);
-  const [material] = await db.select("material", { select: "the_moment", moment_id: `eq.${momentId}`, limit: 1 });
-  return String(material?.the_moment ?? "").slice(0, 220);
-}

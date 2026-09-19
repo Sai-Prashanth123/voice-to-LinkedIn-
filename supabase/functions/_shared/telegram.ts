@@ -14,6 +14,7 @@
  */
 
 import { secret } from "./secrets.ts";
+import { admin } from "./db.ts";
 export interface TelegramUpdate {
   update_id: number;
   /** A tap on an inline button. Carries the message it was attached to, so it can be edited. */
@@ -141,7 +142,34 @@ async function send(
   });
   if (!res.ok) throw new Error(`telegram sendMessage failed: ${res.status} ${await res.text()}`);
   const result = await res.json();
-  return result?.result?.message_id ?? 0;
+  const messageId = result?.result?.message_id ?? 0;
+
+  // Recorded here rather than at the forty call sites, so the assistant reads the conversation it is
+  // actually in — including everything a worker said while nobody was typing. Best effort: a failed
+  // insert must never turn a delivered message into an error (0038).
+  recordOut(chatId, text, messageId);
+  return messageId;
+}
+
+/**
+ * The bot's own half of the conversation, kept so it can be read back.
+ *
+ * Fire-and-forget on purpose. The message is already delivered by the time this runs; awaiting it
+ * would put a database write on the critical path of every reply, and failing it would undo nothing.
+ */
+function recordOut(chatId: number, body: string, messageId: number): void {
+  try {
+    admin().from("chat_messages").insert({
+      chat_id: chatId,
+      direction: "out",
+      body: body.slice(0, 8000),
+      telegram_message_id: messageId || null,
+    }).then(({ error }) => {
+      if (error) console.error(`chat_messages(out) failed: ${error.message}`);
+    });
+  } catch (err) {
+    console.error(`chat_messages(out) failed: ${err instanceof Error ? err.message : err}`);
+  }
 }
 
 /**
