@@ -122,7 +122,10 @@ export async function nextUnnamed(db: SupabaseClient): Promise<number | null> {
     .select("id")
     .is("title", null)
     .eq("killed", false)
-    .neq("status", "published")
+    // Published is done with; parked is not in play. A parked idea is named if it is ever reopened,
+    // because the reopen asks the same question every other interview does. Asking for a name for
+    // eight parked ideas the moment someone says hello is how a good idea becomes a chore.
+    .not("status", "in", "(published,parked)")
     // Newest first: the idea most likely to still be in their head.
     .order("captured_at", { ascending: false })
     .limit(1);
