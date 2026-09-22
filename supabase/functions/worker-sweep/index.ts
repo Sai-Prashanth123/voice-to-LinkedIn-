@@ -47,13 +47,33 @@ Deno.serve(async (req) => {
     if (body?.chat_id) onDemandChat = Number(body.chat_id);
   } catch { /* the cron sends no body */ }
 
-  return await sweep(db, onDemandChat);
+  // On request: that chat only. On the schedule: everyone the bot talks to.
+  //
+  // The scheduled path used to fall back to joshChatId(), the first id in TELEGRAM_CHAT_ID, which is
+  // the operator's chat — so Monday's sweep would have gone to us and Josh would have been told a
+  // second time that set 2 was not asking him anything.
+  if (onDemandChat) return await sweep(db, onDemandChat, true);
+
+  const { data: chats } = await db
+    .from("telegram_access")
+    .select("chat_id")
+    .eq("status", "approved");
+
+  const targets = new Set<number>((chats ?? []).map((c) => Number(c.chat_id)));
+  try {
+    targets.add(joshChatId());
+  } catch { /* no TELEGRAM_CHAT_ID configured: the approved list is the whole audience */ }
+
+  const results = [];
+  for (const chatId of targets) {
+    const res = await sweep(db, chatId, false);
+    results.push({ chat_id: chatId, ...(await res.json()) });
+  }
+  return json({ ok: true, chats: results.length, results });
 });
 
-async function sweep(db: SupabaseClient, onDemandChat: number | null): Promise<Response> {
-  const chatId = onDemandChat ?? joshChatId();
-
-  if (!onDemandChat && !(await getSetting(db, "weekly_sweep_enabled", true))) {
+async function sweep(db: SupabaseClient, chatId: number, onDemand: boolean): Promise<Response> {
+  if (!onDemand && !(await getSetting(db, "weekly_sweep_enabled", true))) {
     return json({ ok: true, swept: false, reason: "weekly_sweep_enabled is false" });
   }
 
@@ -65,12 +85,14 @@ async function sweep(db: SupabaseClient, onDemandChat: number | null): Promise<R
     return json({ ok: true, swept: false, reason: `chat is mid-${state.awaiting}` });
   }
 
-  if (!onDemandChat) {
+  if (!onDemand) {
+    // Per chat, not per system: two people each get their own week.
     const since = new Date(Date.now() - ONCE_EVERY_HOURS * 3_600_000).toISOString();
     const { count } = await db
       .from("system_events")
       .select("*", { count: "exact", head: true })
       .eq("kind", "weekly_sweep_started")
+      .eq("detail->>chat_id", String(chatId))
       .gte("created_at", since);
     if ((count ?? 0) > 0) return json({ ok: true, swept: false, reason: "already swept this week" });
   }
@@ -104,7 +126,7 @@ async function sweep(db: SupabaseClient, onDemandChat: number | null): Promise<R
   await logEvent(db, "weekly_sweep_started", "info", {
     chat_id: chatId,
     questions: questions.length,
-    on_demand: Boolean(onDemandChat),
+    on_demand: onDemand,
   });
 
   return json({ ok: true, swept: true, questions: questions.length });

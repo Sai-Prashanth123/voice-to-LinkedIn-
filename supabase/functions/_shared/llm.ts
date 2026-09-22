@@ -268,13 +268,107 @@ export async function callStructured<S extends z.ZodType>(
   acc: Accounting = {},
 ): Promise<z.infer<S>> {
   const p = compat();
-  return p ? await compatStructured(p, schema, opts, acc) : await anthropicStructured(schema, opts, acc);
+  if (!p) return await anthropicStructured(schema, opts, acc);
+  return await withFallback(p, (provider) => compatStructured(provider, schema, opts, acc));
 }
 
 /** Free-text call. Used only where the output genuinely is prose (a question, an SVG). */
 export async function callText(opts: CallOptions, acc: Accounting = {}): Promise<string> {
   const p = compat();
-  return p ? await compatText(p, opts, acc) : await anthropicText(opts, acc);
+  if (!p) return await anthropicText(opts, acc);
+  return await withFallback(p, (provider) => compatText(provider, opts, acc));
+}
+
+/**
+ * The order a struggling provider hands over in. Configured provider first, then these.
+ *
+ * Fixed rather than clever: the point is that SOMETHING answers within seconds, and a ranking that
+ * changed with load would make an outage impossible to read afterwards.
+ */
+const FALLBACK_ORDER: ("gemini" | "groq" | "openrouter" | "huggingface")[] = [
+  "gemini",
+  "groq",
+  "openrouter",
+  "huggingface",
+];
+
+/**
+ * Try the configured provider, then any other that has a key.
+ *
+ * WHY THIS EXISTS
+ *
+ * One provider was chosen per process from a secret and never changed. When Gemini's free tier
+ * started answering 503, every interview question, extraction and gate check in the system stopped
+ * for as long as it took, and the only remedy was a person editing a secret. Three other providers
+ * had keys sitting in the vault the entire time.
+ *
+ * WHAT IT DOES NOT DO
+ *
+ * Hide which company saw the material. 15.3 requires the provider ledger to be honest, and
+ * `record()` inside each call writes the provider that actually answered — so a month where Groq
+ * covered an outage shows Groq, and the handover document lists every provider that can be reached
+ * this way rather than only the configured one.
+ *
+ * Only a provider FAILURE moves on. A refusal, a schema error or a bad request fails identically
+ * everywhere, so it is raised once rather than three times more slowly.
+ */
+async function withFallback<T>(
+  configured: CompatProvider,
+  call: (p: CompatProvider) => Promise<T>,
+): Promise<T> {
+  const queue = [
+    configured,
+    ...FALLBACK_ORDER
+      .filter((name) => name !== configured.name)
+      .map((name) => COMPAT[name])
+      .filter((p) => hasKey(p)),
+  ];
+
+  let last: unknown;
+  for (const [i, provider] of queue.entries()) {
+    try {
+      return await call(provider);
+    } catch (err) {
+      last = err;
+      const message = err instanceof Error ? err.message : String(err);
+      // Only a provider that is down, rate limited or out of credit is worth handing over from.
+      if (!shouldHandOver(message)) throw err;
+      if (i < queue.length - 1) {
+        console.warn(`${provider.name} could not answer (${message.slice(0, 120)}); trying the next provider`);
+      }
+    }
+  }
+  throw last;
+}
+
+/**
+ * Worth waiting a second and asking the same provider again?
+ *
+ * Exported so the tests exercise this decision rather than a copy of it — the rule is the whole
+ * behaviour, and a second implementation in a test file would agree with itself forever.
+ */
+export function retryableStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+/**
+ * Worth asking a DIFFERENT provider?
+ *
+ * Only when the provider itself failed. A refused request, a schema error or an empty completion
+ * will come back the same from everyone, so handing over would turn one clear failure into three
+ * slow ones.
+ */
+export function shouldHandOver(message: string): boolean {
+  return message.includes("TRANSIENT");
+}
+
+/** A provider with no key configured is not a fallback, it is a second failure. */
+function hasKey(p: CompatProvider): boolean {
+  try {
+    return keysFor(p).length > 0;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -648,18 +742,40 @@ async function postWithKeys(
    */
   const start = Math.floor(Math.random() * keys.length);
 
-  for (let n = 0; n < keys.length; n++) {
-    const key = keys[(start + n) % keys.length];
-    const res = await fetch(p.url, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (res.ok) return res;
+  /*
+   * AN OVERLOADED PROVIDER IS WAITED OUT IN SECONDS, NOT MINUTES.
+   *
+   * A 503 used to leave here immediately as a TRANSIENT error, and the queue then applied its own
+   * backoff: 2 minutes, then 8, then a 10-minute ceiling. Josh watched seven of his interview
+   * questions take an average of five and a half attempts, the worst arriving 23 minutes and 39
+   * seconds after he answered — he reported it as "it's taking like 20 minutes for messages to come
+   * through", and he was being generous.
+   *
+   * Gemini's free tier returns 503 when it is momentarily busy, and it is usually free again within
+   * a second or two. So a busy provider is retried here, twice, before anything is handed back to a
+   * queue that measures its patience in minutes.
+   */
+  const BUSY_WAITS_MS = [900, 2500];
 
-    lastStatus = res.status;
-    lastDetail = (await res.text()).slice(0, 300);
-    if (!ROTATE.has(res.status)) break;
+  for (let attempt = 0; attempt <= BUSY_WAITS_MS.length; attempt++) {
+    for (let n = 0; n < keys.length; n++) {
+      const key = keys[(start + n) % keys.length];
+      const res = await fetch(p.url, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) return res;
+
+      lastStatus = res.status;
+      lastDetail = (await res.text()).slice(0, 300);
+      if (!ROTATE.has(res.status)) break;
+    }
+
+    // 429 and 5xx are the provider, not the request: worth another try in a moment. Anything else
+    // will fail identically however long we wait.
+    if (!retryableStatus(lastStatus) || attempt === BUSY_WAITS_MS.length) break;
+    await new Promise((resolve) => setTimeout(resolve, BUSY_WAITS_MS[attempt]));
   }
 
   // Says how many were tried, because "402" on its own reads as "no credit" when the real news is

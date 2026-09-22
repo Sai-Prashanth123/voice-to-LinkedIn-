@@ -408,8 +408,23 @@ async function route(db: SupabaseClient, msg: Message): Promise<void> {
         return;
       }
       if (read.intent === "capture" && !read.unsure) {
-        // A second story told while a question is open is a second idea, not an answer to the first.
-        await captureNewMoment(db, chatId, msg, text);
+        /*
+         * A second story told while a question is open is a second idea — kept, not started.
+         *
+         * Starting it would put two interviews in one thread, which is what produced "question 6,
+         * then question 3" in Josh's chat. It waits until this one is finished or stopped, and the
+         * acknowledgement says so rather than leaving him wondering where it went.
+         */
+        const name = await captureNewMoment(db, chatId, msg, text, {
+          quiet: true,
+          startInterview: false,
+        });
+        await sendMessage(
+          chatId,
+          name
+            ? `Saved that as "${name}" — I will come back to it once we are done with this one.`
+            : `Saved that one — I will come back to it once we are done here.`,
+        );
         return;
       }
       if (read.intent === "action" && read.action !== "none") {
@@ -829,11 +844,49 @@ async function applyPending(
   nudge();
 }
 
-/** 4.2.1 — a prompted session, started on his request. */
+/**
+ * Hold something in this chat's context without disturbing what it is waiting on.
+ *
+ * These two exist because eleven call sites wrote `conversation_state` with `.eq("id", true)` — the
+ * single-row filter from before 0038 made the table per-chat. Every one of them was reading or
+ * clearing WHICHEVER row happened to match, so a tap in one chat could clear another chat's pending
+ * rule, and a second person's image question could land in the first person's state.
+ */
+async function holdContext(
+  db: SupabaseClient,
+  chatId: number,
+  context: Record<string, unknown>,
+): Promise<void> {
+  const state = await getState(db, chatId);
+  await setState(db, chatId, state.awaiting, state.moment_id, context);
+}
+
+/** Drop whatever this chat was holding, leaving what it waits on alone. */
+async function clearContext(db: SupabaseClient, chatId: number): Promise<void> {
+  const state = await getState(db, chatId);
+  await setState(db, chatId, state.awaiting, state.moment_id, {});
+}
+
+/**
+ * 4.2.1 — a prompted session, started on his request.
+ *
+ * THE chat_id IS THE WHOLE BUG THIS FUNCTION ONCE HAD.
+ *
+ * Without it, `chatForMoment` falls back to `joshChatId()` — the first id in TELEGRAM_CHAT_ID, which
+ * is the operator's chat, not the person who typed /ask. Josh asked to be interviewed three times on
+ * 22 September; three moments were created, three questions were written, and all three were
+ * delivered to us. He reported it as "I want it to interview me and it's not working", and from
+ * where he sat that is exactly what happened.
+ *
+ * THE ACKNOWLEDGEMENT IS NOT DECORATION EITHER. The first question comes from a queued job and a
+ * model call — seconds at best, minutes when a provider is struggling. Saying nothing in between
+ * makes a working system indistinguishable from a dead one.
+ */
 async function startPromptedSession(db: SupabaseClient, chatId: number): Promise<void> {
   const { data: moment } = await db.from("moments").insert({
     source: "prompted_session",
     status: "captured",
+    chat_id: chatId,
   }).select("id, ref").single();
   if (!moment) return;
 
@@ -844,6 +897,10 @@ async function startPromptedSession(db: SupabaseClient, chatId: number): Promise
   });
   await enqueue(db, "interview_step", { moment_id: moment.id });
   await setState(db, chatId, "answer", moment.id);
+  await sendMessage(
+    chatId,
+    "Right — give me a moment and I will ask you the first thing.",
+  );
   nudge();
 }
 
@@ -893,20 +950,15 @@ async function askWhichOne(
     .limit(1)
     .maybeSingle();
 
-  await db.from("conversation_state").update({
-    awaiting: "disambiguate",
-    moment_id: momentId,
-    context: {
-      pending: {
-        text,
-        message_id: msg.message_id,
-        voice_file_id: voice?.file_id ?? null,
-        voice_duration: voice?.duration ?? null,
-        voice_mime: voice?.mime_type ?? null,
-      },
+  await setState(db, chatId, "disambiguate", momentId, {
+    pending: {
+      text,
+      message_id: msg.message_id,
+      voice_file_id: voice?.file_id ?? null,
+      voice_duration: voice?.duration ?? null,
+      voice_mime: voice?.mime_type ?? null,
     },
-    updated_at: new Date().toISOString(),
-  }).eq("id", true);
+  });
 
   await sendMessage(
     chatId,
@@ -928,9 +980,9 @@ async function captureNewMoment(
   msg: Message,
   text: string,
   opts: { quiet?: boolean; startInterview?: boolean } = {},
-): Promise<void> {
+): Promise<string | null> {
   const voice = msg.voice ?? msg.audio;
-  if (!voice && text.length === 0) return;
+  if (!voice && text.length === 0) return null;
 
   // A courtesy reply is not a moment. Saying "okay thanks" after a conversation ends created a
   // whole idea-bank entry containing the words "Okay thanks", and 6.3 means nothing the system
@@ -938,7 +990,7 @@ async function captureNewMoment(
   // records audio to say thanks.
   if (!voice && isChatter(text)) {
     await setState(db, chatId, "nothing", null);
-    return;
+    return null;
   }
 
   const { data: moment, error } = await db.from("moments").insert({
@@ -948,6 +1000,7 @@ async function captureNewMoment(
     chat_id: chatId,
   }).select("id").single();
   if (error || !moment) throw new Error(`could not create moment: ${error?.message}`);
+  const momentId = moment.id as number;
 
   if (voice) {
     const { bytes } = await downloadFile(voice.file_id);
@@ -976,11 +1029,12 @@ async function captureNewMoment(
     //
     // Naming waits for the words. A voice note has none yet, so the transcribe job names it and the
     // interview step follows — the acknowledgement here says what is happening rather than asking.
-    if (opts.quiet) return;
+    if (opts.quiet) return null;
     await sendMessage(
       chatId,
       `Got that — ${voice.duration}s, transcribing it now, then a couple of questions about it.`,
     );
+    return null;
   } else {
     await db.from("raw_inputs").insert({
       moment_id: moment.id,
@@ -1001,12 +1055,12 @@ async function captureNewMoment(
      * was waiting on, so the sweep's closing state was replaced by a conversation nobody had asked
      * for. A sweep answer is a note to come back to; he chooses which one to open.
      */
-    if (opts.startInterview === false) return;
+    if (opts.startInterview === false) return name;
 
     await enqueue(db, "interview_step", { moment_id: moment.id });
     if (opts.quiet) {
       await setState(db, chatId, "answer", moment.id);
-      return;
+      return name;
     }
 
     // STATE BEFORE ACKNOWLEDGEMENT. Found live: sending to a chat Telegram refused threw, the state
@@ -1021,10 +1075,13 @@ async function captureNewMoment(
           `if that name is wrong.`
         : `Got it. A couple of questions about this one coming.`,
     );
-    return;
+    return name;
   }
 
-  await setState(db, chatId, "answer", moment.id);
+  // The voice branch ends here: the words are not in yet, so the name and the first question both
+  // wait for transcription, but the chat is already pointed at the idea they belong to.
+  await setState(db, chatId, "answer", momentId);
+  return null;
 }
 
 
@@ -1106,6 +1163,17 @@ async function handleAnswer(
     // deno-lint-ignore no-explicit-any
     ...(audioPath ? { audio_path: audioPath } as any : {}),
   });
+
+  /*
+   * AN IDEA THAT ARRIVED WITH NO WORDS GETS ITS NAME FROM THE FIRST ANSWER.
+   *
+   * A prompted session ("interview me") starts from nothing — there is no thought to name it after,
+   * so it sat unnamed, and every question about it read "3 of at most 8" with no idea attached. His
+   * first answer is the first thing anybody has said about it, so it is what the name comes from.
+   */
+  const { data: moment } = await db
+    .from("moments").select("title").eq("id", momentId).maybeSingle();
+  if (!moment?.title) await autoName(db, momentId, body);
 
   await enqueue(db, "interview_step", { moment_id: momentId });
   await setState(db, chatId, "answer", momentId);
@@ -1489,7 +1557,7 @@ async function handleTap(
     // 10.2 — the third question, asked rather than guessed.
     case "imgpick": {
       const { data: state } = await db
-        .from("conversation_state").select("context").eq("id", true).maybeSingle();
+        .from("conversation_state").select("context").eq("chat_id", chatId).maybeSingle();
       const sourcePath = (state?.context as { source_path?: string } | null)?.source_path;
       if (!sourcePath) {
         if (messageId) await replaceMessage(chatId, messageId, "I have lost track of that image — send it again.");
@@ -1525,7 +1593,7 @@ async function handleTap(
 
     case "imgmoment": {
       const { data: state } = await db
-        .from("conversation_state").select("context").eq("id", true).maybeSingle();
+        .from("conversation_state").select("context").eq("chat_id", chatId).maybeSingle();
       const sourcePath = (state?.context as { source_path?: string } | null)?.source_path;
 
       // The raw input followed the guess, so it moves with the correction. Leaving it behind would
@@ -1627,7 +1695,7 @@ async function handleTap(
 
         if ((left ?? 0) === 0) {
           const { data: st } = await db
-            .from("conversation_state").select("awaiting, moment_id").eq("id", true).maybeSingle();
+            .from("conversation_state").select("awaiting, moment_id").eq("chat_id", chatId).maybeSingle();
           if (st?.awaiting === "name_clearance" && st.moment_id === n.moment_id) {
             await setState(db, chatId, "nothing", null);
           }
@@ -1646,13 +1714,10 @@ async function handleTap(
     // 8.8 — which section the rule belongs in, when its own words did not say.
     case "rulesection": {
       const { data: st } = await db
-        .from("conversation_state").select("context").eq("id", true).maybeSingle();
+        .from("conversation_state").select("context").eq("chat_id", chatId).maybeSingle();
       const pending = (st?.context as { pending_rule?: string } | null)?.pending_rule;
 
-      await db.from("conversation_state").update({
-        context: {},
-        updated_at: new Date().toISOString(),
-      }).eq("id", true);
+      await clearContext(db, chatId);
 
       const key = RULE_SECTIONS[action.index];
       if (!pending || !key) {
@@ -1680,13 +1745,10 @@ It applies to the next draft. Edit or ` +
     // 8.1 — his call on whether a typed line belongs in the voice guide.
     case "voiceguide": {
       const { data: st } = await db
-        .from("conversation_state").select("context").eq("id", true).maybeSingle();
+        .from("conversation_state").select("context").eq("chat_id", chatId).maybeSingle();
       const pending = (st?.context as { pending_voice_guide?: string } | null)?.pending_voice_guide;
 
-      await db.from("conversation_state").update({
-        context: {},
-        updated_at: new Date().toISOString(),
-      }).eq("id", true);
+      await clearContext(db, chatId);
 
       if (!pending) {
         if (messageId) await replaceMessage(chatId, messageId, "I have lost track of that one.");
@@ -1833,7 +1895,7 @@ async function handleNameClearance(
   // answers its own question and must not end the sitting — clearing the state here is what silently
   // stopped a cold start at the first moment with a person in it.
   const { data: current } = await db
-    .from("conversation_state").select("awaiting, moment_id").eq("id", true).maybeSingle();
+    .from("conversation_state").select("awaiting, moment_id").eq("chat_id", chatId).maybeSingle();
   if (current?.awaiting === "name_clearance" && current.moment_id === state.moment_id) {
     await setState(db, chatId, "nothing", null);
   }
@@ -2080,10 +2142,7 @@ async function addRule(db: SupabaseClient, chatId: number, text: string): Promis
     return;
   }
 
-  await db.from("conversation_state").update({
-    context: { pending_rule: text },
-    updated_at: new Date().toISOString(),
-  }).eq("id", true);
+  await holdContext(db, chatId, { pending_rule: text });
 
   const rows = chunkButtons(
     RULE_SECTIONS.map((k, i) => ({ text: sectionName(k), data: `sect:${i}` })),
@@ -2188,10 +2247,7 @@ async function captureVoiceGuide(
     // straight in. Voice is unambiguous and stays automatic; typed text is asked about.
     //
     // The pasted-transcript case the section invites still works: one tap.
-    await db.from("conversation_state").update({
-      context: { pending_voice_guide: text },
-      updated_at: new Date().toISOString(),
-    }).eq("id", true);
+    await holdContext(db, chatId, { pending_voice_guide: text });
 
     await sendMessage(
       chatId,
@@ -2279,12 +2335,7 @@ async function offerCandidates(
   );
 
   // Ids are still held in state so a typed "2" works as well as a tap.
-  await db.from("conversation_state").update({
-    awaiting: "candidate_choice",
-    moment_id: null,
-    context: { candidate_ids: data.map((c) => c.id) },
-    updated_at: new Date().toISOString(),
-  }).eq("id", true);
+  await setState(db, chatId, "candidate_choice", null, { candidate_ids: data.map((c) => c.id) });
 
   if (messageId) {
     await db.from("sent_messages").insert({ telegram_message_id: messageId, kind: "candidates" });

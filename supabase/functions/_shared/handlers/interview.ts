@@ -66,10 +66,50 @@ export interface NextStep {
   alreadyOpen?: boolean;
 }
 
-/** The Telegram job. Chooses, then delivers. */
+/** How long a queued interview waits when the chat is already mid-question on something else. */
+const WAIT_YOUR_TURN_MS = 3 * 60_000;
+
+/**
+ * The Telegram job. Chooses, then delivers — unless that chat is already mid-question.
+ *
+ * ONE CONVERSATION AT A TIME.
+ *
+ * Four of Josh's ideas were being interviewed at once on 22 September. Every question is numbered
+ * per idea, so what arrived in his chat read "6 of at most 8" and then, six minutes later, "3 of at
+ * most 8" — and he reported it as the bot resetting its questions. It was not resetting; it was
+ * holding four conversations in one thread with nothing to tell them apart.
+ *
+ * So a step whose chat is busy with a DIFFERENT idea goes back on the queue rather than being asked.
+ * Nothing is lost: the question has not been written yet, and the idea keeps its place.
+ */
 export async function handleInterviewStep(db: SupabaseClient, job: Job): Promise<void> {
-  const step = await chooseNextQuestion(db, Number(job.payload.moment_id));
+  const momentId = Number(job.payload.moment_id);
+
+  if (await chatIsBusyElsewhere(db, momentId)) {
+    await enqueue(db, "interview_step", { moment_id: momentId }, {
+      runAfter: new Date(Date.now() + WAIT_YOUR_TURN_MS),
+    });
+    return;
+  }
+
+  const step = await chooseNextQuestion(db, momentId);
   await deliverQuestion(db, step);
+}
+
+/** Is this idea's chat already waiting on an answer about something else? */
+async function chatIsBusyElsewhere(db: SupabaseClient, momentId: number): Promise<boolean> {
+  const chatId = await chatForMoment(db, momentId);
+  const state = await getState(db, chatId);
+
+  // A seeding sitting runs one moment straight into the next by design (clause 6), so it is never
+  // "busy elsewhere" — and a chat waiting on this very idea is exactly who this step is for.
+  if (state.awaiting !== "answer") return false;
+  if (!state.moment_id || state.moment_id === momentId) return false;
+
+  // Busy only while a question is actually open. A chat pointed at an idea whose last turn is an
+  // answer is between questions, and holding this one back would stall both.
+  const other = await loadSession(db, state.moment_id);
+  return other.turns[other.turns.length - 1]?.role === "question";
 }
 
 /**
@@ -290,6 +330,7 @@ export async function deliverQuestion(db: SupabaseClient, step: NextStep): Promi
   if (action === "parked") {
     // These two were inside the park branch before. They are Telegram, so they live here now.
     await advanceSeeding(db);
+  await startNextWaitingIdea(db, momentId);
     await sendParked(
       db,
       momentId,
@@ -301,9 +342,27 @@ export async function deliverQuestion(db: SupabaseClient, step: NextStep): Promi
 
   if (action !== "asked" || !step.question || step.alreadyOpen) return;
 
+  /*
+   * THE QUESTION SAYS WHICH IDEA IT IS ABOUT.
+   *
+   * "3 of at most 8" means nothing on its own when more than one idea has ever been in play, and
+   * Josh read a run of them as the bot resetting itself. One conversation at a time is the fix; this
+   * is the other half of it, because a queued idea will still arrive after a gap, and an idea he
+   * chose from a list is not necessarily the one he last spoke about.
+   */
+  const { data: moment } = await db
+    .from("moments").select("title, source").eq("id", momentId).maybeSingle();
+  const about = moment?.title
+    ? `On "${moment.title}" — `
+    // A prompted session has nothing to name it after until he answers. Saying so is still better
+    // than a bare number when a second idea is waiting behind it.
+    : moment?.source === "prompted_session"
+    ? "On the questions you asked for — "
+    : "";
+
   const text = (step.encouragement
     ? `${step.encouragement}\n\n${step.question}`
-    : step.question) + (step.progress ? `\n\n${step.progress}` : "");
+    : step.question) + (step.progress ? `\n\n${about}${step.progress}` : "");
 
   /*
    * Every question carries a way out that is not silence.
@@ -444,6 +503,7 @@ export async function applyExtraction(
     await park(db, momentId, "The interview did not surface a specific moment, detail or realisation.");
     await logEvent(db, "moment_parked", "info", { moment_id: momentId, reason: "no substance" });
     await advanceSeeding(db);
+  await startNextWaitingIdea(db, momentId);
     return;
   }
 
@@ -477,6 +537,7 @@ export async function applyExtraction(
         "changed. Add to it whenever it clicks and I will pick it back up.",
     );
     await advanceSeeding(db);
+  await startNextWaitingIdea(db, momentId);
     return;
   }
 
@@ -535,6 +596,7 @@ export async function applyExtraction(
   // The cold start: one moment rolls straight into the next rather than ending the sitting. Runs on
   // EVERY path out of extract now, including the one with names.
   await advanceSeeding(db);
+  await startNextWaitingIdea(db, momentId);
 }
 
 /** What Josh originally sent, whether typed or transcribed. */
@@ -753,3 +815,64 @@ async function askReopeningQuestion(db: SupabaseClient, momentId: number): Promi
   return question;
 }
 
+
+/**
+ * When one interview ends, open the next idea that chat is holding.
+ *
+ * ONE AT A TIME ONLY WORKS IF SOMETHING MOVES THE QUEUE.
+ *
+ * A thought sent mid-interview is now saved rather than started, and the person is told it will be
+ * picked up afterwards. This is what keeps that promise: on every way out of an interview — mined,
+ * parked, or stopped — the chat's oldest untouched idea starts, so nothing waits on someone
+ * remembering it exists.
+ *
+ * A seeding sitting is left alone: `advanceSeeding` already rolls one moment into the next, and two
+ * mechanisms doing the same job would open two.
+ */
+export async function startNextWaitingIdea(
+  db: SupabaseClient,
+  finishedMomentId: number,
+): Promise<boolean> {
+  const chatId = await chatForMoment(db, finishedMomentId);
+  const state = await getState(db, chatId);
+
+  if (state.awaiting === "seeding") return false;
+  if (!["nothing", "answer"].includes(state.awaiting)) return false;
+
+  // Another idea is mid-question in this chat — it owns the thread until it is done.
+  if (state.moment_id && state.moment_id !== finishedMomentId) {
+    const other = await loadSession(db, state.moment_id);
+    if (other.turns[other.turns.length - 1]?.role === "question") return false;
+  }
+
+  const { data: waiting } = await db
+    .from("moments")
+    .select("id, title")
+    .eq("chat_id", chatId)
+    .eq("killed", false)
+    .eq("status", "captured")
+    .neq("id", finishedMomentId)
+    .order("captured_at", { ascending: true })
+    .limit(10);
+
+  for (const idea of waiting ?? []) {
+    // Untouched only. An idea part-way through has its own queued step and does not need a second.
+    const { count } = await db
+      .from("interview_turns")
+      .select("*", { count: "exact", head: true })
+      .eq("moment_id", idea.id);
+    if ((count ?? 0) > 0) continue;
+
+    await setState(db, chatId, "answer", idea.id);
+    await enqueue(db, "interview_step", { moment_id: idea.id });
+    await sendMessage(
+      chatId,
+      idea.title
+        ? `Next one you sent me: "${idea.title}". A question about it coming.`
+        : `On to the next one you sent me — a question about it coming.`,
+    );
+    return true;
+  }
+
+  return false;
+}
