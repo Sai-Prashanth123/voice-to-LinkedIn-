@@ -21,12 +21,12 @@ import {
   NEXT_QUESTION_USER,
   PROMPT_VERSION,
 } from "../prompts.ts";
-import { creditSession, recordAsked, syncQuestions } from "../questions.ts";
+import { creditSession, recordAsked, type SetKey, syncQuestions } from "../questions.ts";
 import { type Extraction, ExtractionSchema, NextQuestionSchema } from "../schemas.ts";
 import { appendTurn, deepest, loadSession, renderTranscript } from "../session.ts";
 import { type Button, joshChatId, sendMessage } from "../telegram.ts";
 import { questionOuts } from "../interviewouts.ts";
-import { chatForMoment, getState, setState } from "../chat-state.ts";
+import { chatForMoment, getState, setState, statesFor } from "../chat-state.ts";
 import { sendParked } from "../parked.ts";
 import { isRealName, unclearedNames } from "../names.ts";
 import type { InterviewDepth, Job } from "../types.ts";
@@ -142,8 +142,33 @@ export async function chooseNextQuestion(
   // record of whether it has ever produced anything.
   const questions = await syncQuestions(db, library.sections.prompt_set ?? "");
   const alreadyAsked = new Set(session.turns.map((t) => t.question_key).filter(Boolean));
+
+  /*
+   * THE RIGHT SET FOR THE JOB (0039).
+   *
+   * Josh's document is four sets doing four different jobs, and the bank used to be all of them at
+   * once — so mining one idea could be offered "What happened this week that surprised you?", which
+   * is set 2's job of finding a NEW idea, asked in the middle of digging into an existing one.
+   *
+   *   ordinary idea      set 1, the mining questions, which is what clause 5 is
+   *   seeding sitting    set 4, because clause 6 says the thirty prompts are what seeding runs on
+   *   prompted session   sets 3 and 4: he asked to be taken looking, so the doors are the point
+   *
+   * Set 1 is always allowed: once the session has a scene in it, the depth ladder is what takes it
+   * further whatever door it came through. Set 2 is never in here — the sweep asks its own five.
+   */
+  const seeding = (await statesFor(db, momentId)).some((s) => s.awaiting === "seeding");
+  const allowed = new Set<SetKey>(
+    seeding
+      ? ["thirty", "mine"]
+      : moment.source === "prompted_session"
+      ? ["sitting", "thirty", "mine"]
+      : ["mine"],
+  );
+
   const bank = questions
     .filter((q) => !alreadyAsked.has(q.key))
+    .filter((q) => allowed.has((q.set_key ?? "mine") as SetKey))
     .map((q) => ({ key: q.key, text: q.current_text }));
 
   const next = await callStructured(NextQuestionSchema, {

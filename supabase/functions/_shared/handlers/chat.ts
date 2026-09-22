@@ -45,7 +45,8 @@ export type BotAction =
   | "review_drafts"
   | "status"
   | "help"
-  | "stop";
+  | "stop"
+  | "weekly_sweep";
 
 export interface Triaged {
   intent: "answer" | "capture" | "question" | "action" | "rename" | "chatter";
@@ -205,9 +206,9 @@ question — he is asking something. About how the bot works, what it does, how 
            next, or about what is waiting in the snapshot. Answer it.
 
 action   — he wants the bot to DO one of the things it can do. Set the matching action:
-           start_interview ("interview me", "ask me something", "start a conversation about my
-           moment"), show_waiting, review_drafts, status, help, stop. Still write a short reply that
-           says what is about to happen.
+           start_interview ("interview me", "ask me something"), weekly_sweep ("sweep me", "ask me
+           the weekly questions", "run the weekly sweep"), show_waiting, review_drafts, status,
+           help, stop. Still write a short reply that says what is about to happen.
 
 rename   — he is saying what an idea should be called: "call it the CFO thing", "name that one
            first-line test". Put the name itself in the name field, without the "call it". Leave the reply

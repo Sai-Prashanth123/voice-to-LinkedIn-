@@ -243,7 +243,16 @@ export const ChatTriageSchema = z.object({
         "choose capture; when torn between answer and capture, use unsure.",
     ),
   action: z
-    .enum(["none", "start_interview", "show_waiting", "review_drafts", "status", "help", "stop"])
+    .enum([
+      "none",
+      "start_interview",
+      "weekly_sweep",
+      "show_waiting",
+      "review_drafts",
+      "status",
+      "help",
+      "stop",
+    ])
     .describe("Only when intent is action. Otherwise none."),
   name: z
     .string()

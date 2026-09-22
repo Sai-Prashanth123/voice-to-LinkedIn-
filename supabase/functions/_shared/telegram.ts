@@ -294,6 +294,7 @@ export type Command =
   | { kind: "status" }
   /* Clause 6 cold start — the long deliberate sitting that fills the bank. */
   | { kind: "seed" }
+  | { kind: "sweep" }
   /* 8.1 — the recorded interview the voice guide is built from. */
   | { kind: "voiceguide" }
   /* 8.8 — adding a rule to the library in seconds, where he already is. */
@@ -335,6 +336,11 @@ export function parseCommand(text: string | undefined): Command {
       return { kind: "review" };
     case "/seed":
       return { kind: "seed" };
+
+    // 4.2 set 2. Weekly by itself; this is for when he wants it now.
+    case "/sweep":
+    case "/week_questions":
+      return { kind: "sweep" };
     case "/voiceguide":
     case "/voice":
       return { kind: "voiceguide" };
@@ -373,6 +379,7 @@ export const COMMAND_MENU: { command: string; description: string }[] = [
   { command: "status", description: "Where everything stands right now" },
   { command: "ask", description: "Run me through some questions" },
   { command: "candidates", description: "What's waiting from calls and Claude Code" },
+  { command: "sweep", description: "The weekly sweep — five questions about your week" },
   { command: "seed", description: "A long sitting — fill the bank in one go" },
   { command: "voiceguide", description: "Talk, and I keep how you sound" },
   { command: "rule", description: "Add a rule, e.g. /rule never say journey" },

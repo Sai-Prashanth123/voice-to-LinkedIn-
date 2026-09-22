@@ -161,6 +161,7 @@ export type Awaiting =
   | "nothing"
   | "answer"              // an answer to an interview question
   | "idea_name"           // the name for a just-captured idea, asked before its interview
+  | "sweep"               // 4.2 set 2: the weekly sweep, one of his five questions at a time
   | "visual_details"      // 10.2 what he is taking from the image
   | "visual_feedback"     // 10.6 another version, without starting again
   | "name_clearance"      // 9.12 the system must ask before a name is used

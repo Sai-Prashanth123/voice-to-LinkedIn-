@@ -26,6 +26,7 @@ import {
 } from "../_shared/handlers/chat.ts";
 import { enqueue, json, nudge } from "../_shared/jobs.ts";
 import { pushBack } from "../_shared/pushback.ts";
+import { recordAsked } from "../_shared/questions.ts";
 import { recordVerdict } from "../_shared/outcome.ts";
 import { decide as decideProposal } from "../_shared/proposals.ts";
 import { chooseNextQuestion, deliverQuestion, startNextSeedMoment } from "../_shared/handlers/interview.ts";
@@ -315,6 +316,13 @@ async function route(db: SupabaseClient, msg: Message): Promise<void> {
       return;
     }
     // Otherwise it was never a verdict. Fall through and treat it as whatever it actually is.
+  }
+
+  // 4.2 set 2 — an answer to one of the five weekly questions. Before the interview branch, because
+  // a sweep holds no moment_id: it is five separate answers, not one conversation about one idea.
+  if (state.awaiting === "sweep") {
+    await handleSweepAnswer(db, chatId, state, msg, text);
+    return;
   }
 
   // 9.12 — his answer on whether names may be used.
@@ -625,9 +633,137 @@ async function mostRecentIdea(db: SupabaseClient, chatId: number): Promise<numbe
   return data?.[0]?.id ?? null;
 }
 
+/**
+ * Run the weekly sweep for this chat, now.
+ *
+ * Awaited rather than nudged: he asked for it, so the first question should arrive in the same
+ * breath as the request rather than whenever the next tick happens.
+ */
+async function runSweepNow(db: SupabaseClient, chatId: number): Promise<boolean> {
+  const base = secret("functions_base_url");
+  const key = secret("service_role_key");
+  if (!base || !key) {
+    await logEvent(db, "sweep_unconfigured", "error", { chat_id: chatId });
+    return false;
+  }
+
+  try {
+    const res = await fetch(`${base}/worker-sweep`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId }),
+    });
+    const body = await res.json().catch(() => ({}));
+    return res.ok && body?.swept === true;
+  } catch (err) {
+    await logEvent(db, "sweep_failed", "error", {
+      chat_id: chatId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  }
+}
+
+/**
+ * His answer to one of the five sweep questions.
+ *
+ * Each answer that has something in it becomes an idea, named from his own words and left at
+ * `captured`. No interview starts here: five interviews at once would be five shallow ones, and the
+ * closing message lets him pick the one worth digging into.
+ */
+async function handleSweepAnswer(
+  db: SupabaseClient,
+  chatId: number,
+  state: { context: Record<string, unknown> },
+  msg: Message,
+  text: string,
+): Promise<void> {
+  const context = state.context as {
+    asked_no?: number;
+    total?: number;
+    remaining?: { key: string; text: string }[];
+    captured?: number[];
+  };
+  const remaining = context.remaining ?? [];
+  const captured = context.captured ?? [];
+  const askedNo = Number(context.asked_no ?? 1);
+  const total = Number(context.total ?? askedNo + remaining.length);
+
+  const voice = msg.voice ?? msg.audio;
+  const nothing = !voice && (isChatter(text) || /^(no|none|nope|nothing|not really|skip|pass)\b/i.test(text));
+
+  if (!nothing) {
+    // The idea is captured quietly: one acknowledgement per answer would be five acknowledgements
+    // in a row, which reads like a machine ticking boxes rather than someone listening.
+    const before = await lastMomentId(db);
+    await captureNewMoment(db, chatId, msg, text, { quiet: true, startInterview: false });
+    const after = await lastMomentId(db);
+    if (after && after !== before) captured.push(after);
+  }
+
+  const next = remaining[0];
+  if (next) {
+    await sendMessage(chatId, `${askedNo + 1}. ${next.text}`);
+    await recordAsked(db, next.key);
+    await setState(db, chatId, "sweep", null, {
+      asked: next.key,
+      asked_no: askedNo + 1,
+      total,
+      remaining: remaining.slice(1),
+      captured,
+    });
+    return;
+  }
+
+  await finishSweep(db, chatId, captured);
+}
+
+/** The end of the sweep: what came out of it, and one tap to go deeper on any of them. */
+async function finishSweep(db: SupabaseClient, chatId: number, captured: number[]): Promise<void> {
+  await setState(db, chatId, "nothing", null);
+
+  if (captured.length === 0) {
+    await sendMessage(
+      chatId,
+      "That is the sweep done, and nothing came out of it — which happens, and is not a failure. " +
+        "Send me anything during the week and I will pick it up then.",
+    );
+    await logEvent(db, "weekly_sweep_finished", "info", { chat_id: chatId, captured: 0 });
+    return;
+  }
+
+  const { data: ideas } = await db
+    .from("moments").select("id, title").in("id", captured).eq("killed", false);
+  const named = (ideas ?? []).filter((m) => m.title);
+
+  const lines = named.map((m, i) => `${i + 1}. ${m.title}`).join("\n");
+  const buttons = named.map((m, i) => [{
+    text: named.length === 1 ? "Dig into it" : `${i + 1}`,
+    data: `swp:${m.id}`,
+  }]);
+
+  const messageId = await sendMessage(
+    chatId,
+    `That is the sweep done — ${named.length} ${named.length === 1 ? "idea" : "ideas"} out of it:\n\n` +
+      `${lines}\n\nWant to dig into one now? The rest keep, and I will come back to them.`,
+    buttons,
+  );
+  await recordSent(db, messageId, "candidates", null);
+
+  await logEvent(db, "weekly_sweep_finished", "info", { chat_id: chatId, captured: named.length });
+}
+
+/** The newest idea id, for telling whether a quiet capture actually created one. */
+async function lastMomentId(db: SupabaseClient): Promise<number | null> {
+  const { data } = await db
+    .from("moments").select("id").order("id", { ascending: false }).limit(1).maybeSingle();
+  return (data?.id as number | undefined) ?? null;
+}
+
 /** The words the model hears, mapped to the commands the bot already had. One list, no new paths. */
 const ACTION_TO_COMMAND: Record<Exclude<BotAction, "none">, string> = {
   start_interview: "interview_me",
+  weekly_sweep: "sweep",
   show_waiting: "candidates",
   review_drafts: "review",
   status: "status",
@@ -791,7 +927,7 @@ async function captureNewMoment(
   chatId: number,
   msg: Message,
   text: string,
-  opts: { quiet?: boolean } = {},
+  opts: { quiet?: boolean; startInterview?: boolean } = {},
 ): Promise<void> {
   const voice = msg.voice ?? msg.audio;
   if (!voice && text.length === 0) return;
@@ -856,6 +992,17 @@ async function captureNewMoment(
     // Named from their own words, said out loud, and changed by saying so. The first version asked
     // and would not move until it was answered, which made a label a toll gate on every thought.
     const name = await autoName(db, moment.id, text);
+
+    /*
+     * A CAPTURE THAT DOES NOT START A CONVERSATION.
+     *
+     * The weekly sweep captures five answers in a row. Each one queueing its own interview meant
+     * five interviews at once, and — found live — the last one's question overwrote what the chat
+     * was waiting on, so the sweep's closing state was replaced by a conversation nobody had asked
+     * for. A sweep answer is a note to come back to; he chooses which one to open.
+     */
+    if (opts.startInterview === false) return;
+
     await enqueue(db, "interview_step", { moment_id: moment.id });
     if (opts.quiet) {
       await setState(db, chatId, "answer", moment.id);
@@ -1581,6 +1728,24 @@ ${pending}
       await openCandidate(db, chatId, action.momentId);
       return;
 
+    // 4.2 set 2 — one of the ideas the sweep produced, chosen to go deeper on. The others stay
+    // captured, which is what makes a sweep cheap to answer: nothing he says commits him to more.
+    case "sweepdig": {
+      const { data: idea } = await db
+        .from("moments").select("title").eq("id", action.momentId).maybeSingle();
+      if (messageId) {
+        await replaceMessage(
+          chatId,
+          messageId,
+          idea?.title ? `Right — ${idea.title}. One question coming.` : "Right, one question coming.",
+        );
+      }
+      await setState(db, chatId, "answer", action.momentId);
+      await enqueue(db, "interview_step", { moment_id: action.momentId });
+      nudge();
+      return;
+    }
+
     case "conversation": {
       await recordConversation(db, action.postId, action.answer);
       const said: Record<string, string> = {
@@ -1797,6 +1962,21 @@ async function handleCommand(db: SupabaseClient, chatId: number, kind: string): 
     case "candidates":
       await offerCandidates(db, chatId, { quietIfNone: false });
       return;
+
+    case "sweep": {
+      // 4.2 set 2, on request rather than waiting for Monday. worker-sweep owns the whole flow —
+      // which five questions, in his words, and the state that carries them — so that the scheduled
+      // run and this one cannot drift apart.
+      const started = await runSweepNow(db, chatId);
+      if (!started) {
+        await sendMessage(
+          chatId,
+          "Let us finish what is open first — answer the question above, or send /stop — then ask " +
+            "me for the sweep again.",
+        );
+      }
+      return;
+    }
 
     case "review":
       // Clause 11 step 07, done where Josh already is (12.7).

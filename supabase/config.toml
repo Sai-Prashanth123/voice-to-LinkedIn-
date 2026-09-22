@@ -61,5 +61,9 @@ verify_jwt = true
 [functions.worker-learn]
 verify_jwt = true
 
+# 4.2 set 2 — the weekly sweep. Reached by cron and by the webhook when he asks for it by name.
+[functions.worker-sweep]
+verify_jwt = true
+
 [functions.worker-ops]
 verify_jwt = true

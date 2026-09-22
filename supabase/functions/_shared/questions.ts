@@ -15,6 +15,8 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { budgetRemaining, callText, MODELS } from "./llm.ts";
 
 export interface Question {
+  set_key: SetKey | null;
+  category: string | null;
   key: string;
   current_text: string;
   original_text: string;
@@ -39,7 +41,7 @@ export async function syncQuestions(db: SupabaseClient, promptSet: string): Prom
   for (const q of parsed) {
     const { data: existing } = await db
       .from("question_stats")
-      .select("key")
+      .select("key, set_key, category")
       .eq("key", q.key)
       .maybeSingle();
 
@@ -49,7 +51,19 @@ export async function syncQuestions(db: SupabaseClient, promptSet: string): Prom
         original_text: q.text,
         current_text: q.text,
         depth: q.depth,
+        set_key: q.set ?? "mine",
+        category: q.category,
       });
+      continue;
+    }
+
+    // The set and the category follow the document; the wording, the history and any rephrasing do
+    // not (4.2.6). So moving a question between sets in the library moves it in the bank, while
+    // "asked four times, produced nothing" survives the edit.
+    if (existing.set_key !== (q.set ?? "mine") || existing.category !== q.category) {
+      await db.from("question_stats")
+        .update({ set_key: q.set ?? "mine", category: q.category })
+        .eq("key", q.key);
     }
   }
 
@@ -57,23 +71,58 @@ export async function syncQuestions(db: SupabaseClient, promptSet: string): Prom
   return (data ?? []) as Question[];
 }
 
+/** Josh's four sets, keyed by the number in their heading rather than the prose after it. */
+export type SetKey = "mine" | "sweep" | "sitting" | "thirty";
+const SETS: Record<string, SetKey> = { "1": "mine", "2": "sweep", "3": "sitting", "4": "thirty" };
+
+export interface ParsedQuestion {
+  key: string;
+  text: string;
+  depth: string | null;
+  /** Which of the four sets it sits under. Null outside any of them; treated as `mine`. */
+  set: SetKey | null;
+  /** The sub-heading above it — set 3's "Recent moments", and so on. */
+  category: string | null;
+}
+
 /**
  * Lines that look like questions, keyed by a stable hash of the ORIGINAL wording so a rephrase does
  * not orphan its own history.
+ *
+ * THE SET MATTERS AS MUCH AS THE WORDING. Josh's own header table says each set does a different
+ * job — mine a moment, sweep the week, sit down for a longer session, open one of thirty specific
+ * doors — and until 0039 all four were flattened into one bank, so an interview about a specific
+ * idea could be handed "What happened this week that surprised you?".
+ *
+ * Matched on the NUMBER in the heading, not the words after the dash, because Josh renames those.
  */
-export function parsePromptSet(
-  promptSet: string,
-): { key: string; text: string; depth: string | null }[] {
-  const out: { key: string; text: string; depth: string | null }[] = [];
+export function parsePromptSet(promptSet: string): ParsedQuestion[] {
+  const out: ParsedQuestion[] = [];
   let depth: string | null = null;
+  let set: SetKey | null = null;
+  let category: string | null = null;
 
   for (const raw of promptSet.split("\n")) {
     const line = raw.trim();
     if (!line) continue;
 
-    // A markdown heading naming a depth lets a question be tagged with the rung it probes.
     if (line.startsWith("#")) {
-      const h = line.replace(/^#+\s*/, "").toLowerCase();
+      const level = line.match(/^#+/)?.[0].length ?? 1;
+      const heading = line.replace(/^#+\s*/, "");
+      const h = heading.toLowerCase();
+
+      // `## Set 2 — the weekly sweep`. A top-level heading that is not a set ends the current one,
+      // so prose after the last set does not inherit `thirty`.
+      const setNumber = heading.match(/^set\s*(\d)/i)?.[1];
+      if (level <= 2) {
+        set = setNumber ? SETS[setNumber] ?? null : null;
+        category = null;
+      } else if (!h.startsWith("depth")) {
+        // A sub-heading inside a set names the category: "Recent moments", "Wins and progress".
+        category = heading;
+      }
+
+      // A heading naming a depth lets a question be tagged with the rung it probes.
       if (h.includes("scene")) depth = "scene";
       else if (h.includes("time")) depth = "time_anchored";
       else if (h.includes("perspective") || h.includes("earned")) depth = "earned_perspective";
@@ -86,7 +135,7 @@ export function parsePromptSet(
     if (!text.includes("?") && !/^(tell|describe|walk|what|who|when|where|why|how)/i.test(text)) {
       continue;
     }
-    out.push({ key: hash(text), text, depth });
+    out.push({ key: hash(text), text, depth, set, category });
   }
   return out;
 }

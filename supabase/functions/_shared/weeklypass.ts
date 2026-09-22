@@ -52,6 +52,8 @@ export type Action =
   /* Declining the offered candidates in favour of the prompt set (4.2). */
   | { kind: "prompted" }
   | { kind: "candidate"; momentId: number }
+  /* 4.2 set 2 — digging into one of the ideas the weekly sweep produced. */
+  | { kind: "sweepdig"; momentId: number }
   /* 5.10 — correcting the pillar the interview chose. index -1 means leave it. */
   | { kind: "pillar"; momentId: number; index: number }
   /* 6.4 — bringing a parked moment back into the queue. */
@@ -121,6 +123,8 @@ export function parseAction(data: string | undefined): Action {
       return { kind: "answer", momentId: id };
     case "cand":
       return { kind: "candidate", momentId: id };
+    case "swp":
+      return { kind: "sweepdig", momentId: id };
     case "reopen":
       return { kind: "reopen", momentId: id };
     case "rsm":
