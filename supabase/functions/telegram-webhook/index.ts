@@ -1084,45 +1084,13 @@ async function captureNewMoment(
   return null;
 }
 
-
-/**
- * Acknowledgements, not material. Matched whole-string and deliberately narrow: "lost a deal today"
- * is short too, and must still become a moment. Only messages that are ENTIRELY courtesy are dropped.
+/*
+ * isChatter moved to _shared/chatter.ts so the transcribe worker can use the same rule on a
+ * transcript — a voice note has no words to judge until then. Re-exported because its test and this
+ * file's callers already import it from here.
  */
-export function isChatter(text: string): boolean {
-  const t = text.trim();
-  if (t.length === 0) return true;
-
-  // A bare @handle: somebody told to message @userinfobot who pasted it here instead. It happened
-  // twice and both are permanent entries in the bank, because 6.3 does not care how it got there.
-  if (/^@[A-Za-z0-9_]{3,}$/.test(t)) return true;
-
-  // A typo correction on its own line — "post*", "*posts". Only when the whole message is one
-  // starred word: "post* ideas" is somebody correcting themselves mid-thought and is material.
-  if (/^\*?[\p{L}]+\*$|^\*[\p{L}]+$/u.test(t)) return true;
-
-  // Emoji-only replies ("👍") are acknowledgements too.
-  if (/^[\p{Extended_Pictographic}\p{Emoji_Component}\s]+$/u.test(t)) return true;
-
-  // Chatter is a message made ENTIRELY of courtesy words, checked token by token. A single-token
-  // regex misses "okay thanks" — which is the exact phrase that created a junk moment.
-  //
-  // Any word outside the set means there is something real in there and it becomes a moment, so
-  // "no one asked about pricing" and "ok so the demo fell over" both survive.
-  const COURTESY = new Set([
-    "ok", "okay", "k", "kk", "thanks", "thank", "you", "thankyou", "ty", "ta", "cool", "nice",
-    "great", "good", "got", "it", "sure", "fine", "yep", "yup", "yeah", "yes", "no", "nope",
-    "done", "perfect", "lovely", "cheers", "np", "worries", "alright", "brilliant", "super",
-    // GREETINGS, absent until "Hello" became M-000030 and then M-000033. The set was built from
-    // acknowledgement-after-the-fact — "okay thanks" — and at that point nobody had said hello to
-    // it. A list assembled from one incident only covers that incident.
-    "hi", "hey", "hello", "hiya", "yo", "morning", "afternoon", "evening", "gm", "howdy",
-    "there", "sorry", "please", "welcome", "bye", "goodbye", "night",
-  ]);
-
-  const words = t.toLowerCase().split(/[^a-z]+/).filter(Boolean);
-  return words.length > 0 && words.every((w) => COURTESY.has(w));
-}
+import { isChatter } from "../_shared/chatter.ts";
+export { isChatter };
 
 /* ── Answering a question ─────────────────────────────────────────────────── */
 

@@ -22,6 +22,9 @@ import { logEvent } from "../db.ts";
 import { enqueue } from "../jobs.ts";
 import { pushBack } from "../pushback.ts";
 import { transcribe, type Transcription } from "../stt.ts";
+import { judgeTranscript, recentCaptures, type VoiceVerdict } from "../voice-triage.ts";
+import { triageMessage } from "./chat.ts";
+import { isChatter } from "../chatter.ts";
 import { joshChatId, sendMessage } from "../telegram.ts";
 import type { Job } from "../types.ts";
 
@@ -78,14 +81,137 @@ export async function handleTranscribe(db: SupabaseClient, job: Job): Promise<vo
     return;
   }
 
-  // Now there are words, so now it can be named. A voice note is captured before anything can read
-  // it, which is why naming happens here rather than at capture.
-  const { data: named } = await db.from("moments").select("title").eq("id", momentId).maybeSingle();
-  if (!named?.title) await autoName(db, momentId, text);
+  /*
+   * NOW THERE ARE WORDS, SO NOW THEY CAN BE JUDGED.
+   *
+   * This used to name the moment and queue an interview unconditionally, which is how Josh's sweep on
+   * 5 October put "What do you mean?" in his idea bank as an idea and then asked him a question about
+   * it. A typed message gets checked at capture; a voice note cannot be, because at capture there is
+   * nothing to read. The check belongs here, and it did not exist.
+   *
+   * See voice-triage.ts for what each verdict means and why each rule is as narrow as it is.
+   */
+  const { data: moment } = await db
+    .from("moments")
+    .select("title, chat_id, status")
+    .eq("id", momentId)
+    .maybeSingle();
+
+  const chatId = (moment?.chat_id as number | null) ?? null;
+  const verdict = judgeTranscript(
+    text,
+    await recentCaptures(db, chatId, momentId),
+    { isChatter },
+  );
+
+  if (verdict.kind !== "moment") {
+    await ruleOut(db, momentId, chatId, verdict, text);
+    return;
+  }
+
+  // A voice note is captured before anything can read it, which is why naming happens here.
+  if (!moment?.title) await autoName(db, momentId, text);
 
   // The interview picks it up from here. 4.1.3: Josh can talk for two minutes and be done — the
   // follow-up happens later, on his time.
   await enqueue(db, "interview_step", { moment_id: momentId });
+}
+
+/**
+ * A transcript that is not a moment: close the idea it was captured into, and answer the person.
+ *
+ * Killed rather than deleted (6.3), with the reason in the row, so every one of these can be read
+ * back and argued with — including by us, if a rule here turns out to be too eager.
+ *
+ * The reply matters as much as the cleanup. The failure Josh saw was not only a junk idea, it was
+ * being asked an interview question in response to "What do you mean?" — the system talking past him.
+ * Each branch below says something a person would say.
+ */
+async function ruleOut(
+  db: SupabaseClient,
+  momentId: number,
+  chatId: number | null,
+  // Every verdict except "moment" — a moment is interviewed, not ruled out, and the compiler should
+  // say so rather than this function quietly accepting one.
+  verdict: Exclude<VoiceVerdict, { kind: "moment" }>,
+  text: string,
+): Promise<void> {
+  const reason = verdict.kind === "unheard"
+    ? "The recording could not be transcribed, so there was nothing to put in the bank."
+    : verdict.kind === "chatter"
+    ? "A courtesy, not a moment."
+    : verdict.kind === "question"
+    ? "A question to the bot, not a thought about his work."
+    : `The same thing he had just said, kept on idea ${verdict.of} instead.`;
+
+  await db.from("moments").update({
+    killed: true,
+    parked_reason: reason,
+    updated_at: new Date().toISOString(),
+  }).eq("id", momentId);
+
+  await logEvent(db, "capture_ruled_out", "info", {
+    moment_id: momentId,
+    kind: verdict.kind,
+    ...(verdict.kind === "repeat" ? { same_as: verdict.of, overlap: verdict.overlap } : {}),
+    chars: text.length,
+  });
+
+  // The audio and the transcript stay on the killed moment either way. For a repeat that is the
+  // point: the second telling often has the detail the first one missed, and the interview on the
+  // original idea can still be given it.
+  if (!chatId) return;
+
+  if (verdict.kind === "unheard") {
+    await sendMessage(
+      chatId,
+      "I could not make out that recording — nothing of it reached the bank. Send it again, or type " +
+        "it if it is easier.",
+    );
+    return;
+  }
+
+  if (verdict.kind === "question") {
+    /*
+     * ANSWER HIM.
+     *
+     * The same triage the typed path uses, so a question asked by voice gets the same answer a
+     * question asked by typing would. It also writes his actual words into the conversation, which
+     * is the other half of this fault: `chat_messages` records a voice note as "(a voice note)", so
+     * everything that reads the conversation to understand the next message was blind to anything he
+     * said out loud — and he says almost everything out loud.
+     */
+    await db.from("chat_messages").insert({ chat_id: chatId, direction: "in", body: text })
+      .then(({ error }) => {
+        if (error) console.error(`chat_messages(voice) failed: ${error.message}`);
+      });
+
+    const triaged = await triageMessage(db, text, null, chatId);
+    const answer = triaged.reply?.trim();
+    await sendMessage(
+      chatId,
+      answer ||
+        "That one is a question rather than a thought to file, so I have not put it in the bank. Ask " +
+          "me again and I will answer properly.",
+    );
+    return;
+  }
+
+  if (verdict.kind === "repeat") {
+    const { data: original } = await db
+      .from("moments")
+      .select("title")
+      .eq("id", verdict.of)
+      .maybeSingle();
+
+    await sendMessage(
+      chatId,
+      `That is the same one you just told me${original?.title ? ` — "${original.title}"` : ""}, so I ` +
+        `have kept it there rather than starting a second idea about it.`,
+    );
+  }
+  // Chatter says nothing, which is the existing behaviour for a typed courtesy and the right one: a
+  // reply to "thanks" is noise in his pocket.
 }
 
 /**
