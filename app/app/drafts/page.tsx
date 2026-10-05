@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { many, one } from "@/lib/embed";
 import { supabaseServer } from "@/lib/supabase";
+import { deskPause } from "@/lib/paused";
+import { PausedNotice } from "../paused-notice";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +34,9 @@ export default async function Drafts({
 }: {
   searchParams: Promise<{ moment?: string }>;
 }) {
+  const pause = await deskPause();
+  if (pause.paused) return <PausedNotice reason={pause.reason} />;
+
   const params = await searchParams;
   const momentId = Number(params.moment);
   const db = await supabaseServer();

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { many, one } from "@/lib/embed";
 import { supabaseServer } from "@/lib/supabase";
+import { deskPause } from "@/lib/paused";
+import { PausedNotice } from "../paused-notice";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +35,10 @@ export default async function Bank({
 }: {
   searchParams: Promise<{ status?: string; q?: string }>;
 }) {
+  // Checked before anything is read, so a paused desk does not query for rows it will not show.
+  const pause = await deskPause();
+  if (pause.paused) return <PausedNotice reason={pause.reason} />;
+
   const params = await searchParams;
   const status = params.status ?? "mined";
   const q = (params.q ?? "").trim();
