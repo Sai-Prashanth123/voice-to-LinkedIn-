@@ -414,7 +414,7 @@ export const writeTools = [
         model: z.string().optional().describe("What made the judgement. Defaults to claude-code."),
       },
     },
-    async handler(args, { db }) {
+    async handler(args, { db, url, key: contextKey }) {
       if (!args.passed && !args.reason?.trim()) {
         throw new Error(
           "A rejection without a reason cannot be acted on. Say what is wrong and where — the " +
@@ -472,17 +472,70 @@ export const writeTools = [
       const done = byCheck.size;
       const failed = [...byCheck.values()].filter((r) => !r.passed).map((r) => r.check_key);
 
+      if (done < 8) {
+        return {
+          gate_run_id: row.id,
+          checks_recorded: done,
+          checks_remaining: 8 - done,
+          failed_so_far: failed,
+          note: `${8 - done} check(s) still to record. Every check runs even after one rejects — ` +
+            `Josh should see everything wrong with a draft at once, not one fault per round trip.`,
+        };
+      }
+
+      /*
+       * THE EIGHTH VERDICT HAS TO DO SOMETHING.
+       *
+       * This used to answer "All eight checks passed. The draft is ready for Josh's calendar." and
+       * that sentence was false: nothing put it in the calendar, nothing set gate_passed, nothing
+       * queued the rewrite a rejection needs, and Josh was never told. Draft 57 sat in exactly that
+       * state — eight verdicts, one rejection, and no consequence.
+       *
+       * This tool cannot do it itself. content_mcp may insert a gate_runs row and may not touch a
+       * draft, a moment or the calendar, which is the right boundary: the judgement moved to Claude,
+       * the write authority did not. So the ending is asked for through cc-submit, the one write
+       * door, which runs the same finishGate the server's own gate worker runs.
+       *
+       * If that call fails, the verdicts are still recorded and this says so rather than pretending.
+       * The draft can be closed out by asking again.
+       */
+      const key = contextKey ?? process.env.CONTENT_MCP_KEY;
+      if (!key) {
+        return {
+          gate_run_id: row.id,
+          checks_recorded: done,
+          checks_remaining: 0,
+          failed_so_far: failed,
+          note: "All eight verdicts are recorded, but no key is configured to close the draft out, " +
+            "so nothing has been decided yet: gate_passed is unset and no rewrite is queued.",
+        };
+      }
+
+      const res = await fetch(`${url}/functions/v1/cc-submit`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "gate_done", draft_id: args.draft_id }),
+      });
+      const closed = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        return {
+          gate_run_id: row.id,
+          checks_recorded: done,
+          failed_so_far: failed,
+          note: `All eight verdicts are recorded, but closing the draft out failed: ` +
+            `${closed.error ?? `cc-submit ${res.status}`}. Nothing is decided — gate_passed is ` +
+            `unset and no rewrite is queued. Ask again to finish it.`,
+        };
+      }
+
       return {
         gate_run_id: row.id,
         checks_recorded: done,
-        checks_remaining: Math.max(0, 8 - done),
+        checks_remaining: 0,
         failed_so_far: failed,
-        note: done < 8
-          ? `${8 - done} check(s) still to record. Every check runs even after one rejects — Josh ` +
-            `should see everything wrong with a draft at once, not one fault per round trip.`
-          : failed.length === 0
-            ? "All eight checks passed. The draft is ready for Josh's calendar."
-            : `All eight recorded. Rejected by: ${failed.join(", ")}.`,
+        outcome: closed.outcome,
+        note: closed.next,
       };
     },
   },

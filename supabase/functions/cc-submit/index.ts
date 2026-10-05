@@ -42,6 +42,7 @@ import { appendTurn, loadSession, renderTranscript } from "../_shared/session.ts
 import { autoName, setIdeaName } from "../_shared/idea-names.ts";
 import { verifyExtraction } from "../_shared/extraction.ts";
 import { applyDraft } from "../_shared/handlers/draft.ts";
+import { finishGate } from "../_shared/handlers/gate.ts";
 import type { Claim } from "../_shared/claims.ts";
 import type { Extraction } from "../_shared/schemas.ts";
 import { applyCandidates, type Candidate, candidateRoom } from "../_shared/triage.ts";
@@ -83,11 +84,12 @@ Deno.serve(async (req) => {
   if (body.kind === "interview_next") return await interviewNext(db, body);
   if (body.kind === "interview_answer") return await interviewAnswer(db, body);
   if (body.kind === "name") return await nameIdea(db, body);
+  if (body.kind === "gate_done") return await closeGate(db, body);
 
   if (body.kind !== "extraction") {
     return json({
       error: `unknown kind "${body.kind ?? ""}". Expected "extraction", "candidates", ` +
-        `"capture", "name", "draft", "interview_next" or "interview_answer".`,
+        `"capture", "name", "draft", "gate_done", "interview_next" or "interview_answer".`,
     }, 400);
   }
 
@@ -545,4 +547,63 @@ async function fileDraft(db: SupabaseClient, body: DraftBody) {
       : "Filed, and every claim traced. The eight checks are waiting for you: call next_work and " +
         "it hands you this draft with its rubrics, in a fresh session.",
   });
+}
+
+/**
+ * The eight verdicts are in. Give the draft its ending.
+ *
+ * WHY THIS EXISTS
+ *
+ * `record_gate_verdict` writes one row per check and has no authority to do anything else: content_mcp
+ * can insert into gate_runs and cannot update a draft, a moment or the calendar. That was fine while
+ * the server did the judging, because the server's own gate worker closed the draft out afterwards.
+ * With the gate in Claude nobody did, and draft 57 sat with eight verdicts — one of them a rejection —
+ * while `gate_passed` stayed null, no rewrite was queued and Josh was never told. The tool replied
+ * "the draft is ready for Josh's calendar", which nothing implemented.
+ *
+ * So the ending runs here, through the one write door, using the same `finishGate` the server's worker
+ * now calls. Not a second implementation: the same function, so the two paths cannot drift.
+ *
+ * It is safe to call more than once. A draft already decided returns that decision instead of queueing
+ * a second rewrite, and a draft short of eight verdicts is told what is still missing.
+ */
+async function closeGate(db: SupabaseClient, body: Record<string, unknown>): Promise<Response> {
+  const draftId = Number(body.draft_id);
+  if (!Number.isInteger(draftId)) return json({ error: "draft_id is required" }, 400);
+
+  const { data: draft } = await db.from("drafts").select("id,moment_id").eq("id", draftId).maybeSingle();
+  if (!draft) return json({ error: `no draft with id ${draftId}` }, 404);
+
+  // 7.2's warn band is carried in the draft job's payload rather than on the draft row, and the retry
+  // needs it or attempt three writes the post attempt two was warned off. The job that produced this
+  // draft is already closed, so it is read back by moment, newest first.
+  const { data: jobs } = await db.from("jobs")
+    .select("payload")
+    .eq("type", "draft")
+    .order("id", { ascending: false })
+    .limit(20);
+  const nearMiss = (jobs ?? [])
+    .map((j) => j.payload as Record<string, unknown>)
+    .find((p) => Number(p?.moment_id) === Number(draft.moment_id))?.near_miss as string | null ?? null;
+
+  const result = await finishGate(db, draftId, nearMiss);
+
+  await logEvent(db, "gate_closed_from_claude", "info", {
+    draft_id: draftId,
+    moment_id: draft.moment_id,
+    outcome: result.outcome,
+    failed: result.failed,
+  });
+
+  const next = result.outcome === "incomplete"
+    ? `Only ${result.judged} of 8 checks have a verdict. Record the rest; nothing is decided until ` +
+      `every check has answered.`
+    : result.outcome === "rejected"
+    ? `Rejected by ${result.failed.join(", ")}. The rewrite is queued with the reasons attached — ` +
+      `call next_work. After three failed attempts the idea parks instead (9.8).`
+    : result.outcome === "passed"
+    ? "Passed. It is in Josh's calendar and he has been told it is ready."
+    : "Already decided. Nothing was changed.";
+
+  return json({ ok: true, draft_id: draftId, ...result, next });
 }

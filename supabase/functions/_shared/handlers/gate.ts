@@ -217,8 +217,67 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
   // are already recorded and will be skipped.
   if (deferred) throw deferred;
 
+  await finishGate(db, draftId, nearMiss);
+}
+
+/**
+ * What happens to a draft once all eight verdicts exist, whoever reached them.
+ *
+ * WHY THIS IS ITS OWN FUNCTION NOW
+ *
+ * The judging moved into Claude: with `gate_runs_in_claude` on, the server files a draft and leaves
+ * it, and `record_gate_verdict` writes the eight rows from there. That worked — and nothing happened
+ * afterwards. Draft 57 had eight verdicts, one of them a rejection, while `gate_passed` stayed null,
+ * no rewrite was queued and Josh was never told. The tool even replied "the draft is ready for Josh's
+ * calendar", which nothing implemented.
+ *
+ * That is the same shape of fault as the 30 ungated drafts he found: a step that reports success and
+ * has no second half. The ending belongs with the verdicts, not with whichever caller reached them,
+ * so both paths run this.
+ *
+ * Idempotent on purpose. A second call after `gate_passed` is set returns what it already decided
+ * rather than queueing a second rewrite.
+ */
+export async function finishGate(
+  db: SupabaseClient,
+  draftId: number,
+  /* 7.2's warn band, carried into the retry so attempt three does not forget what attempt two was
+     warned off. Null is correct and common. */
+  nearMiss: string | null = null,
+): Promise<{ outcome: "passed" | "rejected" | "incomplete" | "already"; failed: string[]; judged: number }> {
+  const { data: draft, error } = await db.from("drafts").select("*").eq("id", draftId).single();
+  if (error || !draft) throw new Error(`draft ${draftId} not found`);
+
+  const momentId = Number(draft.moment_id);
+  const attempt = Number(draft.attempt ?? 1);
+
+  if (draft.gate_passed !== null) {
+    return {
+      outcome: "already",
+      failed: draft.gate_passed ? [] : String(draft.gate_reason ?? "").split(" | ").filter(Boolean),
+      judged: 8,
+    };
+  }
+
+  const { data: rows } = await db.from("gate_runs")
+    .select("check_key,passed,reason")
+    .eq("draft_id", draftId);
+
+  // One verdict per check, the first recorded standing — the same rule record_gate_verdict enforces.
+  const byCheck = new Map<string, { passed: boolean; reason: string | null }>();
+  for (const r of rows ?? []) {
+    if (!byCheck.has(r.check_key)) byCheck.set(r.check_key, { passed: r.passed, reason: r.reason });
+  }
+
+  // A draft is not judged until every check has answered. Closing it out early is how a draft with
+  // six verdicts gets treated as finished, which is what clause 9b exists to prevent.
+  const missing = GATE_CHECKS.filter((c) => !byCheck.has(c.key)).map((c) => c.key);
+  if (missing.length > 0) {
+    return { outcome: "incomplete", failed: [], judged: byCheck.size };
+  }
+
   const verdicts = GATE_CHECKS.map((c) => {
-    const r = already.get(c.key)!;
+    const r = byCheck.get(c.key)!;
     return { key: c.key, passed: r.passed, reason: r.reason ?? "" };
   });
 
@@ -239,7 +298,7 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
     });
 
     await retryOrPark(db, momentId, attempt, draft.body, reasons, nearMiss);
-    return;
+    return { outcome: "rejected", failed: failures.map((f) => f.key), judged: 8 };
   }
 
   await db.from("drafts").update({ gate_passed: true, gate_reason: null }).eq("id", draftId);
@@ -255,7 +314,7 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
       moment_id: momentId,
       note: "acceptance test 8 draft cleared the gate — recorded, not pushed to the calendar",
     });
-    return;
+    return { outcome: "passed", failed: [], judged: 8 };
   }
 
   await pushToCalendar(db, momentId, draftId, draft.body);
@@ -270,6 +329,8 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
   // 9.16 — push-back is optional and the system never waits on Josh. If he happens to be in the
   // session he can react; if not, the draft sits in the calendar for the weekly pass.
   await enqueue(db, "notify_draft_ready", { moment_id: momentId, draft_id: draftId });
+
+  return { outcome: "passed", failed: [], judged: 8 };
 }
 
 /**
