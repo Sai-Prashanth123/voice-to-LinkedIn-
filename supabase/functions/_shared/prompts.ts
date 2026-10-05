@@ -306,6 +306,12 @@ name. If you are genuinely unsure, that is a FAIL. Marginal work is exactly what
 
 Judge only the check you are given. Another check covers the rest.
 
+JUDGE THE POST. Where you are also shown the source material, it is context — the raw notes behind
+the post, which no reader will ever see. A failure must be something IN THE POST, and your reason
+must quote the words from the post that fail. If you cannot quote them, there is nothing to fail.
+On 5 October a post was rejected for "17 campuses" and a named initiative that appeared nowhere in
+it; both were in the notes. That is the error to avoid, and it is the easiest one to make.
+
 ${library}`;
 
 export interface GateCheckSpec {
@@ -336,7 +342,12 @@ export const GATE_CHECKS: GateCheckSpec[] = [
       `It FAILS if anything appears in the post that is not in the source — an invented quote, a ` +
       `statistic nobody supplied, a name that was never mentioned, a detail that makes the story ` +
       `better but was not given to you. Plausibility is irrelevant. If it is not in the source, it ` +
-      `is fabricated.`,
+      `is fabricated.\n\n` +
+      `THIS CHECK RUNS ONE WAY ONLY. Material in the source that the post LEAVES OUT is not a ` +
+      `failure and is not your business: a post is a selection, and most of the source should be ` +
+      `missing from it. Writing "one specific account" where the source names the account is good ` +
+      `anonymising, not an invented detail. You are looking for things ADDED, never for things ` +
+      `omitted — this check failed a real post for exactly that inversion on 5 October.`,
   },
   {
     key: "hook_opens_loop",
@@ -385,6 +396,12 @@ export const GATE_CHECKS: GateCheckSpec[] = [
       `with", "my client project". Those identify nobody, which is the entire point of anonymising. ` +
       `Whether the surrounding detail makes someone identifiable anyway is a different check, and ` +
       `not this one.\n\n` +
+      `A NAME IS ONLY A NAME WHEN IT POINTS AT SOMEBODY. A name that is part of the story rather ` +
+      `than an identification of a real person is not a failure: the wrong name on a cold email he ` +
+      `received, a name in a quoted line, a name used as an example. The test is whether a reader ` +
+      `could use it to find a real person or company this post is about. This check failed a real ` +
+      `post on 5 October for the word "Ben", which was the wrong name a stranger had put at the top ` +
+      `of an email to him — nobody was identified by it.\n\n` +
       `Permission is per post, not per person. A name being cleared elsewhere means nothing here.`,
   },
   {
@@ -395,7 +412,13 @@ export const GATE_CHECKS: GateCheckSpec[] = [
       `identifies them anyway — a figure, a niche, a timeline, or a combination of circumstances ` +
       `that only they match.\n\n` +
       `It FAILS if a reader who knows the industry could work out who is being described. ` +
-      `Anonymising the name while keeping the fingerprint is not anonymising.`,
+      `Anonymising the name while keeping the fingerprint is not anonymising.\n\n` +
+      `JUDGE THE POST, NOT THE SOURCE. You are shown the source material so you know who is being ` +
+      `protected, not so you can fail the post for what the source says. A detail only counts if a ` +
+      `READER OF THE POST would see it — quote the phrase from the post when you fail this check, ` +
+      `and if you cannot quote it, there is nothing to fail. On 5 October this check rejected a post ` +
+      `for "17 campuses" and a named initiative, neither of which appeared anywhere in it: both were ` +
+      `in the source, which no reader will ever see.`,
   },
   {
     key: "banned_phrases",
@@ -422,7 +445,10 @@ export const GATE_USER = (opts: {
   parts.push(`\n---\n\nTHE POST:\n\n${opts.body}`);
 
   if (opts.entry) {
-    parts.push(`\n---\n\nTHE SOURCE MATERIAL IT WAS BUILT FROM:\n`);
+    parts.push(
+      `\n---\n\nTHE SOURCE MATERIAL IT WAS BUILT FROM — his raw notes, which NO READER SEES. ` +
+        `Use it to check what the post claims, never as something the post failed to include:\n`,
+    );
     for (const [field, value] of Object.entries(opts.entry)) {
       parts.push(`### ${field}\n${value}\n`);
     }

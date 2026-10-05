@@ -447,9 +447,19 @@ async function fileDraft(db: SupabaseClient, body: DraftBody) {
   if (!moment) return json({ error: `no moment with id ${momentId}` }, 404);
   if (moment.killed) return json({ error: `moment ${momentId} has been killed` }, 409);
 
-  // Mined or queued is a first draft; drafted is a rewrite. Anything earlier has not been
-  // interviewed (4.3.3), and anything later has already left the writing stage.
-  if (!["mined", "queued", "drafted"].includes(moment.status)) {
+  /*
+   * `gated` BELONGS ON THIS LIST, AND LEAVING IT OFF WAS A DEAD END.
+   *
+   * Mined or queued is a first draft; drafted is a rewrite; GATED is a draft the gate rejected — the
+   * one case where a rewrite is most obviously wanted. Without it the system told Josh to rewrite a
+   * post and then refused the rewrite, saying the idea had "already moved past drafting". He reported
+   * it on 5 October with both of his most recent ideas stuck exactly there, and he was right: there
+   * was no way out of that state from any surface.
+   *
+   * The loop guard is not this list. It is the three-strike park in applyDraft (9.8), which counts
+   * attempts from the waiting draft job and parks the idea after the third failure.
+   */
+  if (!["mined", "queued", "drafted", "gated"].includes(moment.status)) {
     return json({
       error: `"${moment.title}" is ${moment.status}, so it cannot be drafted yet.`,
       next: moment.status === "captured" || moment.status === "half_mined"
@@ -516,12 +526,23 @@ async function fileDraft(db: SupabaseClient, body: DraftBody) {
     attempt,
     claims_verified: filed.verified,
     failures: filed.failures,
-    next: filed.gateQueued
-      ? "Filed. The server is running the eight checks now. If it is rejected, it comes back to " +
-        "next_work with the reasons attached."
-      : attempt >= 3
-      ? "The claim ledger failed on the third attempt, so the idea has been parked (9.8)."
-      : "The claim ledger failed, so the checks were not run. It is back on next_work with the " +
-        "failures attached — fix those claims against what he actually said.",
+    /*
+     * SAY WHAT ACTUALLY HAPPENED.
+     *
+     * This read the queued-gate flag alone, so once the gate moved into Claude a perfectly verified
+     * draft was answered with "the claim ledger failed, so the checks were not run" — which was
+     * false twice over, and is exactly the kind of message that makes a working system look broken.
+     * The two facts are independent: did the ledger verify, and who runs the checks.
+     */
+    next: !filed.verified
+      ? attempt >= 3
+        ? "The claim ledger failed on the third attempt, so the idea has been parked (9.8)."
+        : "The claim ledger failed, so the checks were not run. It is back on next_work with the " +
+          "failures attached — fix those claims against what he actually said."
+      : filed.gateQueued
+      ? "Filed, and every claim traced. The server is running the eight checks now. If it is " +
+        "rejected, it comes back to next_work with the reasons attached."
+      : "Filed, and every claim traced. The eight checks are waiting for you: call next_work and " +
+        "it hands you this draft with its rubrics, in a fresh session.",
   });
 }

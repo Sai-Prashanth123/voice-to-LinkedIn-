@@ -56,6 +56,59 @@ export const workTools = [
     async handler(_args, context) {
       const { db } = context;
 
+      /*
+       * JUDGING COMES BEFORE WRITING.
+       *
+       * A filed draft that nobody has judged blocks its own idea: it cannot be approved, and it
+       * cannot be rewritten until the checks say what is wrong with it. The server used to run the
+       * gate itself on whatever free tier was configured, which on 5 October rejected a real post
+       * for a phrase that was not in it. With `gate_runs_in_claude` on, the draft waits here instead
+       * — for the strong model that is already writing them.
+       */
+      const ungated = await db.select("drafts", {
+        select: "id,moment_id,created_at,gate_passed",
+        gate_passed: "is.null",
+        order: "id.asc",
+        limit: 20,
+      });
+
+      for (const draft of ungated) {
+        const [moment] = await db.select("moments", {
+          select: "id,title,status,killed",
+          id: `eq.${draft.moment_id}`,
+          limit: 1,
+        });
+        if (!moment || moment.killed || moment.status === "parked") continue;
+
+        // A draft part-way through its eight checks is still this job; one already finished is not.
+        const verdicts = await db.select("gate_runs", {
+          select: "check_key",
+          draft_id: `eq.${draft.id}`,
+        });
+        const judged = new Set(verdicts.map((v) => v.check_key));
+        if (judged.size >= 8) continue;
+
+        const brief = await viaTool("get_gate_brief", { draft_id: draft.id }, context);
+        return {
+          work: "gate",
+          draft_id: draft.id,
+          moment_id: draft.moment_id,
+          name: moment.title ?? null,
+          checks_already_judged: [...judged],
+          brief,
+          how: [
+            "Judge each remaining check on its own rubric alone. Do not average across them, and do " +
+              "not let a verdict on one influence another.",
+            "Judge the POST. The material is context; a failure has to be something a reader would " +
+              "see, and your reason must quote it from the post.",
+            "Be adversarial — if you are genuinely unsure, that is a fail.",
+            "Call record_gate_verdict once per check, naming the sentence rather than the rule.",
+          ],
+          then: "Run every check even after one fails: he should see everything wrong at once. The " +
+            "server files the result and, if it was rejected, offers the rewrite here next.",
+        };
+      }
+
       // Oldest first. A rewrite Josh asked for yesterday should not wait behind a first draft that
       // arrived this morning.
       const jobs = await db.select("jobs", {

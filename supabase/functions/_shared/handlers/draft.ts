@@ -14,7 +14,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { callStructured, MODELS, modelName } from "../llm.ts";
 import { verifyDraft, type Claim } from "../claims.ts";
-import { getMaterial, getMoment, getNames, logEvent, park, sourceEntry } from "../db.ts";
+import { getMaterial, getMoment, getNames, getSetting, logEvent, park, sourceEntry } from "../db.ts";
 import { clearedNames, unclearedNames } from "../names.ts";
 import { enqueue } from "../jobs.ts";
 import { sendParked } from "../parked.ts";
@@ -212,6 +212,31 @@ export async function applyDraft(db: SupabaseClient, d: DraftToFile): Promise<Fi
 
     await retryOrPark(db, momentId, attempt, d.body, verification.failures, nearMiss);
     return { draftId: inserted.id, verified: false, failures: verification.failures, gateQueued: false };
+  }
+
+  /*
+   * WHO JUDGES THE DRAFT.
+   *
+   * The eight checks are the hardest judgement in the build — "could anyone else have written this?"
+   * is the whole point of it — and on the server they run on whatever free tier is configured. On
+   * 5 October that was gemini-3.1-flash-lite, which failed a real post of Josh's for "17 campuses",
+   * a phrase that appears nowhere in it.
+   *
+   * Claude is already writing the drafts through the connector, and `get_gate_brief` and
+   * `record_gate_verdict` have always existed. So with `gate_runs_in_claude` on, the server files
+   * the draft and leaves it; `next_work` offers it as the next piece of work and the judgement
+   * happens where the strong model already is, at no cost.
+   *
+   * The setting exists because that trade is real: nothing is judged until someone opens Claude. Set
+   * it false and the server takes the gate back, with no deploy.
+   */
+  if (await getSetting(db, "gate_runs_in_claude", true)) {
+    await logEvent(db, "gate_waiting_for_claude", "info", {
+      moment_id: momentId,
+      draft_id: inserted.id,
+      attempt,
+    });
+    return { draftId: inserted.id, verified: true, failures: [], gateQueued: false };
   }
 
   await enqueue(db, "gate", { draft_id: inserted.id, moment_id: momentId, attempt, near_miss: nearMiss });
