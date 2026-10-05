@@ -56,42 +56,103 @@ if (!postsPath) {
 
 /* ── Measure ──────────────────────────────────────────────────────────────── */
 
+/**
+ * THE EIGHT HANDLES, AND NOTHING ELSE THAT IS IN THE FILE.
+ *
+ * A profile scrape returns the subject's FEED, not only their own posts: reposts, and other people's
+ * posts the subject engaged with. Grouping by author alone turns those into accounts of their own —
+ * the 5 October scrape would have measured a DM-setter, a dog rescue page and a billboard
+ * appreciation post, and reported each to Josh as "new account". Clause 8.3 names eight writers.
+ * Nobody else gets measured.
+ */
+const SENTINELS = new Set([
+  "demandjen1", "ryanscarlin", "outboundphd", "curtishowland",
+  "adam-treboutat", "juliacarter98", "amangrowth", "mattjbarker1",
+]);
+
 function measure(posts) {
   const byHandle = new Map();
+  let foreign = 0;
   for (const p of posts) {
     if (p.is_repost || !(p.text ?? "").trim()) continue;
     const h = p.author_handle ?? "unknown";
+    if (!SENTINELS.has(h)) { foreign++; continue; }
     if (!byHandle.has(h)) byHandle.set(h, { name: p.author_name ?? h, rows: [] });
-    byHandle.get(h).rows.push({ ...measurePost(p.text), posted_at: p.posted_at });
+    byHandle.get(h).rows.push({
+      ...measurePost(p.text),
+      posted_at: p.posted_at,
+      /*
+       * WHETHER THIS POST'S SHAPE CAN BE MEASURED AT ALL.
+       *
+       * `paragraphs` and `above_fold_words` are counted from line breaks. The 5 October scrape
+       * returned every post as one unbroken line, so both collapsed to one — and the diff would have
+       * reported an 85% drop in paragraph counts across all seven writers as a finding about their
+       * writing. It was a finding about the scraper.
+       *
+       * A post with no line break is still measured for length, rhythm and shape, and is left out of
+       * the two measures that need the breaks. Reported, never guessed.
+       */
+      has_breaks: p.text.includes("\n"),
+    });
   }
 
   const report = [];
   for (const [handle, { name, rows }] of [...byHandle].sort((a, b) => a[0].localeCompare(b[0]))) {
     const dates = rows.map((r) => r.posted_at).filter(Boolean).sort();
+    const shaped = rows.filter((r) => r.has_breaks);
     report.push({
       handle, name,
       posts_measured: rows.length,
       window: dates.length ? { from: dates[0].slice(0, 10), to: dates[dates.length - 1].slice(0, 10) } : null,
+      // Length and rhythm survive a scrape that lost the line breaks. Everything below the next
+      // comment does not, so it is measured over `shaped` alone.
       median_words: median(rows.map((r) => r.words)),
-      above_fold_words_median: median(rows.map((r) => r.above_fold_words)),
-      opening_words_median: median(rows.map((r) => r.opening_words)),
-      paragraphs_median: median(rows.map((r) => r.paragraphs)),
-      opening_shapes: tally(rows.map((r) => r.opening_shape)),
-      close_shapes: tally(rows.map((r) => r.close_shape)),
-      list_rate: +(rows.filter((r) => r.uses_list).length / rows.length).toFixed(2),
       sd_median: median(rows.map((r) => r.sentence_words_sd)),
+      /*
+       * EVERY MEASURE BELOW IS DERIVED FROM LINES, SO ALL OF THEM NEED THE BREAKS.
+       *
+       * Without them a post is one single line, and each of these reads the WHOLE POST where it
+       * means to read one line: openingShape matched "number_claim" on 4 of 7 writers because
+       * somewhere in 200 words there is a digit and the word "I"; closeShape matched "direct_ask"
+       * because somewhere there is the word "comment"; uses_list went false on a writer who bullets
+       * nearly every post. The 5 October run reported all of that as writers changing their habits.
+       */
+      above_fold_words_median: shaped.length ? median(shaped.map((r) => r.above_fold_words)) : null,
+      opening_words_median: shaped.length ? median(shaped.map((r) => r.opening_words)) : null,
+      paragraphs_median: shaped.length ? median(shaped.map((r) => r.paragraphs)) : null,
+      opening_shapes: shaped.length ? tally(shaped.map((r) => r.opening_shape)) : null,
+      close_shapes: shaped.length ? tally(shaped.map((r) => r.close_shape)) : null,
+      list_rate: shaped.length
+        ? +(shaped.filter((r) => r.uses_list).length / shaped.length).toFixed(2)
+        : null,
+      /** How many of this writer's posts the shape measures above actually rest on. */
+      shape_basis: shaped.length,
     });
   }
 
   const all = [...byHandle.values()].flatMap((v) => v.rows);
+  const shapedAll = all.filter((r) => r.has_breaks);
   return {
     measured_at: new Date().toISOString(),
     accounts: report.length,
     posts: all.length,
+    /** How many of those posts still had their line breaks, and so could be measured for shape. */
+    shape_basis: shapedAll.length,
+    /** Feed noise the eight-handle filter dropped. A big number means the scrape, not the writers. */
+    skipped_not_a_sentinel: foreign,
+    /*
+     * THESE THREE ARE FRACTIONS, AND THE DENOMINATOR IS shape_basis.
+     *
+     * They are the counts that corroborate Josh's own rules, and the section states them as "4 of
+     * 59". A later run over a different number of posts makes the raw count incomparable — 2 of 59
+     * and 13 of 112 are nearly the same rate and look like a sixfold rise — so the denominator
+     * travels with them and the diff compares rates.
+     */
     totals: {
-      opens_with_question: all.filter((r) => r.opening_shape === "question").length,
-      engagement_asks: all.filter((r) => r.close_shape === "engagement_ask").length,
-      direct_asks: all.filter((r) => r.close_shape === "direct_ask").length,
+      of: shapedAll.length,
+      opens_with_question: shapedAll.filter((r) => r.opening_shape === "question").length,
+      engagement_asks: shapedAll.filter((r) => r.close_shape === "engagement_ask").length,
+      direct_asks: shapedAll.filter((r) => r.close_shape === "direct_ask").length,
     },
     report,
   };
@@ -124,7 +185,8 @@ function diff(prev, next) {
       ["sd_median", "sentence-length variation"],
     ]) {
       const a = was[field], b = now[field];
-      if (!a) continue;
+      // A null means this run could not measure it, which is not a change in how anyone writes.
+      if (!a || b == null) continue;
       const move = Math.abs(b - a) / a;
       if (move >= MATERIAL) {
         changes.push({ handle: now.handle, what: label, was: a, now: b, move: +(move * 100).toFixed(0) + "%" });
@@ -143,12 +205,24 @@ function diff(prev, next) {
   // The three counts that corroborate Josh's own rules. A move here matters more than any
   // single account's habits, because these are what the section actually claims.
   for (const [k, label] of [
-    ["opens_with_question", "posts opening with a question"],
-    ["engagement_asks", "posts asking for engagement"],
-    ["direct_asks", "posts carrying a direct ask"],
+    ["opens_with_question", "share of posts opening with a question"],
+    ["engagement_asks", "share asking for engagement"],
+    ["direct_asks", "share carrying a direct ask"],
   ]) {
-    if (prev.totals?.[k] !== next.totals[k]) {
-      changes.push({ handle: "(all)", what: label, was: prev.totals?.[k], now: next.totals[k] });
+    // Rates, because the corpus is a different size every run. `of` is absent from a measurement
+    // taken before this was understood, and the post count is the right denominator for those.
+    const wasOf = prev.totals?.of ?? prev.shape_basis ?? prev.posts;
+    const nowOf = next.totals.of || next.posts;
+    if (!wasOf || !nowOf || prev.totals?.[k] == null) continue;
+    const a = prev.totals[k] / wasOf, b = next.totals[k] / nowOf;
+    const pct = (x) => Math.round(x * 100) + "%";
+    if (Math.abs(b - a) >= 0.1) {
+      changes.push({
+        handle: "(all)",
+        what: label,
+        was: `${prev.totals[k]} of ${wasOf} (${pct(a)})`,
+        now: `${next.totals[k]} of ${nowOf} (${pct(b)})`,
+      });
     }
   }
 
@@ -181,13 +255,21 @@ function block(m) {
   L.push("");
   L.push("| Account | Posts | Median words | Above fold | Paragraphs | Lists | Variation |");
   L.push("|---|---|---|---|---|---|---|");
+  // A dash where the corpus could not answer. A number nobody can source is worse than a gap.
+  const n = (v) => (v == null ? "—" : v);
   for (const r of m.report) {
-    L.push(`| ${r.name} | ${r.posts_measured} | ${r.median_words} | ${r.above_fold_words_median} | ` +
-      `${r.paragraphs_median} | ${Math.round(r.list_rate * 100)}% | ${r.sd_median} |`);
+    L.push(`| ${r.name} | ${r.posts_measured} | ${r.median_words} | ${n(r.above_fold_words_median)} | ` +
+      `${n(r.paragraphs_median)} | ${Math.round(r.list_rate * 100)}% | ${r.sd_median} |`);
   }
   L.push("");
   L.push(`_Measured ${m.measured_at.slice(0, 10)} across ${m.accounts} accounts and ${m.posts} posts. ` +
     `Their words are not stored anywhere in this system._`);
+  if (m.shape_basis != null && m.shape_basis < m.posts) {
+    L.push("");
+    L.push(`_Above-fold and paragraph counts come from the ${m.shape_basis} of those posts that still ` +
+      `had their line breaks when they were collected. A dash means the rest of that row could not be ` +
+      `measured, rather than measuring as one long paragraph._`);
+  }
   L.push("");
   L.push(END);
   return L.join("\n");
@@ -218,6 +300,14 @@ const d = diff(prev, next);
 console.log("\n  Sentinel refresh\n");
 console.log("  " + "─".repeat(66));
 console.log(`  ${next.accounts} accounts, ${next.posts} posts`);
+if (next.shape_basis < next.posts) {
+  console.log(`  shape measured on ${next.shape_basis} of them — ${next.posts - next.shape_basis} ` +
+    `arrived with their line breaks stripped, so opening, close, paragraph, above-fold and list`);
+  console.log(`  figures leave those out rather than reading the whole post as one line`);
+}
+if (next.skipped_not_a_sentinel) {
+  console.log(`  ${next.skipped_not_a_sentinel} feed items by other authors ignored (8.3: eight handles)`);
+}
 console.log(`  opens with a question ${next.totals.opens_with_question} · ` +
   `engagement asks ${next.totals.engagement_asks} · direct asks ${next.totals.direct_asks}`);
 

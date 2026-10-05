@@ -33,7 +33,24 @@ import sentinels from "../../data/josh/sentinels/latest.json" with { type: "json
 import law from "../../data/josh/law/law.json" with { type: "json" };
 
 /** The four whose structure matches what his own rules describe. See resources.mjs for why. */
+
+/**
+ * The spread of habitual post length across the writers, as a phrase.
+ *
+ * It was written out as "53 to 408 words" in three tool descriptions. The 5 October refresh moved the
+ * top of that range to 422 and all three went quietly stale, which is the failure the measurements
+ * exist to prevent. Derived here, once.
+ */
+export function medianWordRange(rows) {
+  const xs = (rows ?? []).map((r) => r.median_words).filter((n) => typeof n === "number");
+  if (xs.length === 0) return null;
+  return { low: Math.min(...xs), high: Math.max(...xs) };
+}
+
 const SCENE = new Set(["demandjen1", "juliacarter98", "outboundphd", "mattjbarker1"]);
+
+/** Read once at load, from the measurements themselves, so no description can go stale on its own. */
+const RANGE = medianWordRange(sentinels.report) ?? { low: 0, high: 0 };
 
 const wordsOf = (list) => (list ?? []).map((e) => String(e?.word ?? e));
 
@@ -115,8 +132,8 @@ export const voiceTools = [
           caution: "Matt Barker is not a peer reference. He is where these rules came from, so " +
             "his cadence is the most likely to leak — be suspicious of a draft that starts " +
             "sounding like him.",
-          length: "Their medians run 53 to 408 words and all of it works. No target length goes " +
-            "near a draft.",
+          length: `Their medians run ${RANGE.low} to ${RANGE.high} words and all of it works. No ` +
+            "target length goes near a draft.",
         },
 
         // The live sections, so an edit Josh makes reaches this the same way it reaches the drafter.
@@ -277,8 +294,14 @@ export const sentinelTools = [
             "not something the numbers decided. measure_draft compares rhythm against the scene " +
             "four only, because the other three are a different kind of post.",
           not_a_target:
-            "A range is what seven people who all work happen to do. Their medians run from 53 to " +
-            "408 words and every one of them works, so there is no correct length to hit.",
+            `A range is what ${sentinels.report.length} people who all work happen to do. Their ` +
+            `medians run from ${RANGE.low} to ${RANGE.high} words and every one of them works, so ` +
+            "there is no correct length to hit.",
+          shape_basis:
+            "Where a writer's row carries shape_basis, the opening, close, paragraph, above-fold " +
+            "and list figures rest on that many of their posts rather than all of them: a scrape " +
+            "that loses the line breaks cannot be read for shape, and those posts are left out " +
+            "instead of being counted as one long paragraph.",
         },
       };
     },

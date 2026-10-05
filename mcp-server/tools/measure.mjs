@@ -34,8 +34,12 @@ import { z } from "zod";
 
 import { measurePost, per1k, tokens } from "../../scripts/lib/prose.mjs";
 import { scan, HIGH_CONFIDENCE } from "../aitells.mjs";
+import { medianWordRange } from "./voice.mjs";
 import voiceprint from "../../data/josh/law/voiceprint.json" with { type: "json" };
 import sentinels from "../../data/josh/sentinels/latest.json" with { type: "json" };
+
+/** The spread of habitual length, derived rather than written out. See voice.mjs. */
+const RANGE = medianWordRange(sentinels.report) ?? { low: 0, high: 0 };
 
 /**
  * The four reference writers whose STRUCTURE matches what Josh's own rules describe — long, prose
@@ -165,13 +169,10 @@ export const measureTools = [
 
         length: {
           words: m.words,
-          against_all_seven: placement(
-            m.words,
-            { low: Math.min(...(sentinels.report ?? []).map((r) => r.median_words)),
-              high: Math.max(...(sentinels.report ?? []).map((r) => r.median_words)) },
-          ),
-          note: "Their medians run from 53 to 408 words and all of it works. There is no target " +
-            "length, and the formatting section says nothing gets padded to reach one.",
+          against_all_seven: placement(m.words, RANGE),
+          note: `Their medians run from ${RANGE.low} to ${RANGE.high} words and all of it works. ` +
+            "There is no target length, and the formatting section says nothing gets padded to " +
+            "reach one.",
         },
 
         surface: {
