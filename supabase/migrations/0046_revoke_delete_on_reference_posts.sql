@@ -1,0 +1,28 @@
+-- Clause 6.3 has no exceptions, including the one I argued for in 0044.
+--
+-- 0044 granted DELETE on reference_writer_posts to service_role, deliberately, with this reasoning:
+-- "These are somebody else's words. They can be refreshed and they can be removed, which is the one
+-- place in this schema where deletion is the right answer." That reads well and it was wrong.
+--
+-- Eval case S0-04 asserts the invariant flatly: no application role can delete or truncate anything.
+-- It failed on exactly one row out of every table in the schema, this one, and the harness was
+-- right. Every other table restricts DELETE to `postgres`, which is the owner rather than an
+-- application role.
+--
+-- Two reasons to take the grant back rather than carve out the exception.
+--
+-- Nothing uses it. load-reference-posts.mjs upserts on activity_id with merge-duplicates, so a
+-- refresh overwrites in place and never removes a row. Verified against the live table on 9 October:
+-- 70 posts stored, 70 of them through that path. The capability was hypothetical, and a hypothetical
+-- capability that can erase a corpus is a liability with no matching asset.
+--
+-- And the value of this particular invariant is that it is absolute. "No application role can delete
+-- anything" is checkable in one query and survives a careless migration. "No application role can
+-- delete anything except where somebody wrote a convincing comment" is not an invariant, it is a
+-- convention, and the first exception is what makes the second one easy to argue for. Josh inherits
+-- whichever of those two he is handed.
+--
+-- If these posts ever genuinely need removing, that is an operator doing it as `postgres`, visibly,
+-- once. It should not be something the application can do by accident at three in the morning.
+
+revoke delete, truncate on public.reference_writer_posts from service_role, anon, authenticated, public;

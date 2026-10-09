@@ -40,6 +40,16 @@ function credentials() {
     // than from the database — system_health() deliberately names secrets without returning them,
     // and a harness that worked around that would defeat the reason it was written that way.
     botToken: field("TELEGRAM_BOT_TOKEN") ?? null,
+    /*
+     * Through field() like every other credential here, which it was not until 9 October.
+     *
+     * functions() read process.env.SUPABASE_ACCESS_TOKEN directly, so a token sitting in eval/.env
+     * next to the other three was never seen — and the three cases that depend on it reported "no
+     * SUPABASE_ACCESS_TOKEN, so the deployed function list cannot be read" while the token was on
+     * line 5 of that file and answered the API with a 200 when curled by hand. Three deployment
+     * checks had been blocked on a credential that was present the whole time.
+     */
+    accessToken: field("SUPABASE_ACCESS_TOKEN") ?? null,
   };
 }
 
@@ -107,15 +117,31 @@ export async function openLive() {
    * has not checked.
    */
   async function functions() {
-    const pat = process.env.SUPABASE_ACCESS_TOKEN;
+    const pat = creds.accessToken;
+
+    // null means one thing only: nobody supplied a token. Every other failure throws, because the
+    // callers turn null into "no SUPABASE_ACCESS_TOKEN" and that sentence has to be true when it is
+    // printed. A rejected token and an absent one are the two failures the runbook warns look
+    // identical, and reporting the second when it is the first sends the reader to the wrong file.
     if (!pat) return null;
+
     const ref = (creds.url.match(/https:\/\/([a-z0-9]+)\.supabase\.co/) ?? [])[1];
-    if (!ref) return null;
+    if (!ref) {
+      throw new Error(`SUPABASE_URL is not a project URL, so there is no ref to query: ${creds.url}`);
+    }
+
     const res = await fetch("https://api.supabase.com/v1/projects/" + ref + "/functions", {
       headers: { Authorization: "Bearer " + pat },
       signal: AbortSignal.timeout(30000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const body = (await res.text().catch(() => "")).slice(0, 200);
+      throw new Error(
+        `the Supabase API refused the access token: HTTP ${res.status}. ` +
+          `The token is present, so this is a rejected or expired credential rather than a missing ` +
+          `one. ${body}`,
+      );
+    }
     return await res.json();
   }
 
