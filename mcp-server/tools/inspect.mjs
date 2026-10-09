@@ -410,13 +410,55 @@ export const inspectTools = [
       });
       if (args.status) q.set("status", "eq." + args.status);
 
+      /*
+       * The draft list is the one `/review` reads out to him, so it answers "what needs a decision
+       * from you" rather than "what rows exist". A draft on a killed or parked idea needs no
+       * decision, and showing it asks him to make one.
+       *
+       * Measured on 9 October: five posts came back as waiting on him and two were real. The others
+       * were an acceptance fixture written that morning, a draft whose idea was parked in August,
+       * and an August leftover. `next_action` already excludes killed moments for exactly this
+       * reason — its own comment records telling the operator two posts were waiting when both were
+       * fakes — but the tool he actually sees had no moment filter at all, so the fix had never
+       * reached the list it mattered most on.
+       *
+       * Only for drafts. Scheduled and published stay unfiltered: that is the record of what went
+       * out, and nothing in this system hides what happened, including on an idea later killed.
+       */
+      const reviewing = args.status === "draft";
+      if (reviewing) {
+        q.set("select", q.get("select") + ",moments!inner(killed,status)");
+        q.set("moments.killed", "is.false");
+        q.set("moments.status", "neq.parked");
+      }
+
       const data = await rows(db, "posts?" + q);
+
+      /*
+       * Say how many were withheld rather than quietly showing fewer. A list that silently shrinks
+       * is the same class of fault in the other direction: he would have no way to tell "nothing is
+       * waiting" from "something was filtered out of your view".
+       */
+      let withheld = 0;
+      if (reviewing) {
+        const all = await rows(db, "posts?select=id&status=eq.draft&limit=100");
+        withheld = Math.max(0, all.length - data.length);
+        for (const p of data) delete p.moments;
+      }
+
       const unauthorised = data.filter(
         (p) => (p.status === "published" || p.status === "scheduled") && !p.marked_ready_at,
       );
 
       return {
         posts: data,
+        ...(withheld > 0
+          ? {
+            withheld_from_review: withheld,
+            withheld_means: `${withheld} draft(s) sit on ideas that were killed or parked, so ` +
+              `they need no decision and are not listed. list_drafts still shows them.`,
+          }
+          : {}),
         // If this is ever non-empty something has gone very wrong, and it should be the first
         // thing anyone reading this notices rather than a row they have to spot themselves.
         published_without_josh: unauthorised.length,
