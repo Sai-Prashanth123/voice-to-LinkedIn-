@@ -20,7 +20,7 @@ import { announcement, markAnnounced, undeclared } from "../_shared/providers.ts
 import { overall, score, summarise, voiceGuideWarning } from "../_shared/acceptance.ts";
 import { gatherCounts } from "../_shared/acceptance-data.ts";
 import { ReportSchema } from "../_shared/schemas.ts";
-import { joshChatId, sendMessage } from "../_shared/telegram.ts";
+import { notice } from "../_shared/notices.ts";
 
 Deno.serve(async (req) => {
   const db = admin();
@@ -247,8 +247,21 @@ async function daily(db: SupabaseClient): Promise<Response> {
     }
   }
 
+  /*
+   * CLAUSE 13'S DELIVERY, WITHOUT A CHANNEL.
+   *
+   * These alerts are the point of this worker: the risk is not that the system breaks, it is that it
+   * breaks quietly and Josh finds out three weeks later when the calendar is empty. They were one
+   * Telegram message. Nothing can push to Claude Code, so they wait where system_status reads them —
+   * which is honest about the cost: he learns on his next session rather than at the time.
+   *
+   * `warn`, not `info`: every one of these is something already wrong or about to be.
+   */
   if (alerts.length > 0) {
-    await sendMessage(joshChatId(), alerts.join("\n\n"));
+    await notice(db, "ops_daily", alerts.join("\n\n"), {
+      severity: "warn",
+      actedOn: ["system_status", "next_action"],
+    });
   }
 
   return json({ ok: true, mode: "daily", alerts: alerts.length });
@@ -356,8 +369,9 @@ async function monthly(db: SupabaseClient): Promise<Response> {
     .limit(12);
 
   if (changes && changes.length > 0) {
-    await sendMessage(
-      joshChatId(),
+    await notice(
+      db,
+      "monthly_library",
       `What changed in the library this month:\n\n` +
         changes
           .map((c) =>
@@ -366,12 +380,13 @@ async function monthly(db: SupabaseClient): Promise<Response> {
             } (${new Date(c.created_at as string).toLocaleDateString("en-GB")})`,
           )
           .join("\n") +
-        `\n\nIf any of that made things worse, you can roll it back in the library and the next ` +
-          `draft uses the old wording.`,
+        `\n\nIf any of that made things worse it can be rolled back, and the next draft uses the ` +
+          `old wording. get_section_history shows every version.`,
+      { actedOn: ["get_section_history"] },
     );
   }
 
-  await sendMessage(joshChatId(), stats);
+  await notice(db, "monthly_stats", stats);
 
   // ── 12.14 — what is working and what is not, with the posts NAMED ──────────
   const { data: posts } = await db
@@ -410,10 +425,12 @@ async function monthly(db: SupabaseClient): Promise<Response> {
       promptVersion: PROMPT_VERSION,
     }, { db });
 
-    await sendMessage(
-      joshChatId(),
+    await notice(
+      db,
+      "monthly_report",
       `What worked:\n${report.what_is_working}\n\nWhat did not:\n${report.what_is_not}\n\n` +
         `${report.recommendation}`,
+      { actedOn: ["get_outcomes", "propose_library_change"] },
     );
   }
 
@@ -437,8 +454,9 @@ async function monthly(db: SupabaseClient): Promise<Response> {
       `  ${r.n} ${r.name}: ${r.blocker ?? r.actual}`,
     );
 
-    await sendMessage(
-      joshChatId(),
+    await notice(
+      db,
+      "acceptance",
       `Against the acceptance tests: ${summarise(results)}.\n\n` +
         `17a, the finish line: ${finish.actual}.\n\n` +
         (lines.length > 0
@@ -447,6 +465,7 @@ async function monthly(db: SupabaseClient): Promise<Response> {
         `Nothing here is a judgement on the writing - it is what has and has not been ` +
           `measured yet.` +
         (voiceGuideWarning(counts) ? `\n\n${voiceGuideWarning(counts)}` : ""),
+      { actedOn: ["get_acceptance"] },
     );
   } catch (err) {
     // The monthly numbers above are the point of this run. A scoreboard that fails must not take

@@ -24,10 +24,7 @@ import {
 import { creditSession, recordAsked, type SetKey, syncQuestions } from "../questions.ts";
 import { type Extraction, ExtractionSchema, NextQuestionSchema } from "../schemas.ts";
 import { appendTurn, deepest, loadSession, renderTranscript } from "../session.ts";
-import { type Button, joshChatId, sendMessage } from "../telegram.ts";
-import { questionOuts } from "../interviewouts.ts";
-import { chatForMoment, getState, setState, statesFor } from "../chat-state.ts";
-import { sendParked } from "../parked.ts";
+import { notice } from "../notices.ts";
 import { isRealName, unclearedNames } from "../names.ts";
 import type { InterviewDepth, Job } from "../types.ts";
 
@@ -66,11 +63,8 @@ export interface NextStep {
   alreadyOpen?: boolean;
 }
 
-/** How long a queued interview waits when the chat is already mid-question on something else. */
-const WAIT_YOUR_TURN_MS = 3 * 60_000;
-
 /**
- * The Telegram job. Chooses, then delivers — unless that chat is already mid-question.
+ * The queued step. It chooses the next question and records it; asking is the caller's job.
  *
  * ONE CONVERSATION AT A TIME.
  *
@@ -85,32 +79,22 @@ const WAIT_YOUR_TURN_MS = 3 * 60_000;
 export async function handleInterviewStep(db: SupabaseClient, job: Job): Promise<void> {
   const momentId = Number(job.payload.moment_id);
 
-  if (await chatIsBusyElsewhere(db, momentId)) {
-    await enqueue(db, "interview_step", { moment_id: momentId }, {
-      runAfter: new Date(Date.now() + WAIT_YOUR_TURN_MS),
-    });
-    return;
-  }
-
-  const step = await chooseNextQuestion(db, momentId);
-  await deliverQuestion(db, step);
+  /*
+   * IT CHOOSES THE QUESTION. IT NO LONGER DELIVERS IT.
+   *
+   * `deliverQuestion` sent the chosen question to a Telegram chat. With that gone there is nobody to
+   * send to — nothing can push into Claude Code — but the choosing still has to happen unattended,
+   * because both callers are: `closeStaleConversations` nudging an interview that never started, and
+   * an idea being reopened. So the question is recorded as a turn and waits, and
+   * `next_interview_question` is how it gets asked.
+   *
+   * The "is this chat busy elsewhere" guard went with it. It existed because four of Josh's ideas
+   * were once mid-interview at once and the thread read 6 then 3. One session is one conversation,
+   * so the problem it solved cannot arise.
+   */
+  await chooseNextQuestion(db, momentId);
 }
 
-/** Is this idea's chat already waiting on an answer about something else? */
-async function chatIsBusyElsewhere(db: SupabaseClient, momentId: number): Promise<boolean> {
-  const chatId = await chatForMoment(db, momentId);
-  const state = await getState(db, chatId);
-
-  // A seeding sitting runs one moment straight into the next by design (clause 6), so it is never
-  // "busy elsewhere" — and a chat waiting on this very idea is exactly who this step is for.
-  if (state.awaiting !== "answer") return false;
-  if (!state.moment_id || state.moment_id === momentId) return false;
-
-  // Busy only while a question is actually open. A chat pointed at an idea whose last turn is an
-  // answer is between questions, and holding this one back would stall both.
-  const other = await loadSession(db, state.moment_id);
-  return other.turns[other.turns.length - 1]?.role === "question";
-}
 
 /**
  * Everything that decides what happens next, and nothing that sends anything.
@@ -197,13 +181,19 @@ export async function chooseNextQuestion(
    * Set 1 is always allowed: once the session has a scene in it, the depth ladder is what takes it
    * further whatever door it came through. Set 2 is never in here — the sweep asks its own five.
    */
-  const seeding = (await statesFor(db, momentId)).some((s) => s.awaiting === "seeding");
+  /*
+   * WHICH DOOR THE IDEA CAME THROUGH, NOT WHICH CHAT IS BUSY.
+   *
+   * This asked the conversation's state whether a seeding sitting was running, because seeding was a
+   * Telegram flow: one moment rolled into the next inside a chat. That state is gone with the chat,
+   * and `moment.source` answers the same question from the idea itself — which is the more honest
+   * place for it, since the set a question comes from is a fact about the idea rather than about
+   * whichever surface is open.
+   *
+   * Clause 6's thirty prompts are untouched. A prompted session still draws on them.
+   */
   const allowed = new Set<SetKey>(
-    seeding
-      ? ["thirty", "mine"]
-      : moment.source === "prompted_session"
-      ? ["sitting", "thirty", "mine"]
-      : ["mine"],
+    moment.source === "prompted_session" ? ["sitting", "thirty", "mine"] : ["mine"],
   );
 
   const bank = questions
@@ -319,109 +309,6 @@ export async function chooseNextQuestion(
 }
 
 /**
- * Putting a chosen question on Telegram. The only Telegram-aware half of the old function.
- *
- * A surface that is not Telegram — the MCP interview tools — calls chooseNextQuestion and skips
- * this entirely, which is the whole point of the split.
- */
-export async function deliverQuestion(db: SupabaseClient, step: NextStep): Promise<void> {
-  const { action, momentId } = step;
-
-  if (action === "parked") {
-    // These two were inside the park branch before. They are Telegram, so they live here now.
-    await advanceSeeding(db);
-  await startNextWaitingIdea(db, momentId);
-    await sendParked(
-      db,
-      momentId,
-      `Parked that one — ${step.parkReason || "there is no story behind it yet"}.\n\n` +
-        `It stays in the bank. Something that is not ready now is often the right post later.`,
-    );
-    return;
-  }
-
-  if (action !== "asked" || !step.question || step.alreadyOpen) return;
-
-  /*
-   * THE QUESTION SAYS WHICH IDEA IT IS ABOUT.
-   *
-   * "3 of at most 8" means nothing on its own when more than one idea has ever been in play, and
-   * Josh read a run of them as the bot resetting itself. One conversation at a time is the fix; this
-   * is the other half of it, because a queued idea will still arrive after a gap, and an idea he
-   * chose from a list is not necessarily the one he last spoke about.
-   */
-  const { data: moment } = await db
-    .from("moments").select("title, source").eq("id", momentId).maybeSingle();
-  const about = moment?.title
-    ? `On "${moment.title}" — `
-    // A prompted session has nothing to name it after until he answers. Saying so is still better
-    // than a bare number when a second idea is waiting behind it.
-    : moment?.source === "prompted_session"
-    ? "On the questions you asked for — "
-    : "";
-
-  const text = (step.encouragement
-    ? `${step.encouragement}\n\n${step.question}`
-    : step.question) + (step.progress ? `\n\n${about}${step.progress}` : "");
-
-  /*
-   * Every question carries a way out that is not silence.
-   *
-   * Before these buttons a question had exactly two responses: type an answer, or say nothing. Five
-   * interviews were sitting on the second, and the system read all five the same way — as Josh
-   * being busy — when they are three different facts: the question is wrong, there is nothing more
-   * to say, or the moment is not worth it. Silence cannot tell them apart, so nothing downstream
-   * could either.
-   *
-   * "That is enough" is the one the prompt already believes in and could never hear: it tells the
-   * interviewer to stop and write up what it has, which clause 5 calls a real outcome rather than a
-   * failure. It is also the answer to "how do I know when an interview is finished" — he decides.
-   */
-  const messageId = await sendMessage(await chatForMoment(db, momentId), text, questionOuts(momentId));
-
-  // So that a reply is unambiguously an answer to THIS question, even days later (5.11).
-  if (messageId) {
-    await db.from("sent_messages").insert({
-      telegram_message_id: messageId,
-      kind: "question",
-      moment_id: momentId,
-    });
-  }
-
-  await pointStateAtMoment(db, momentId);
-}
-
-/**
- * Point the conversation at the moment a question was just asked about.
- *
- * Asking and waiting are the same event, so this belongs here rather than only at the call sites
- * that happen to start an interview. Without it, an interview started anywhere other than the
- * webhook — a re-open from the bank page (6.4), for instance — asks its question and then files the
- * answer as a brand new moment, which is the exact failure re-opening exists to prevent. The bank
- * page cannot do it itself: `conversation_state` grants `authenticated` select only, deliberately,
- * because the bot owns what it is waiting on.
- *
- * Only overwrites states that mean "waiting on an answer, or waiting on nothing". A pending name
- * clearance or a half-answered image question is a different thing Josh is mid-way through, and
- * stealing it would lose his reply.
- */
-async function pointStateAtMoment(db: SupabaseClient, momentId: number): Promise<void> {
-  const chatId = await chatForMoment(db, momentId);
-  const state = await getState(db, chatId);
-
-  const awaiting = state.awaiting ?? "nothing";
-  if (!["nothing", "answer", "seeding"].includes(awaiting)) return;
-
-  await db.from("conversation_state").upsert({
-    chat_id: chatId,
-    // A seeding sitting stays seeding: that is what tells extract to open the next moment.
-    awaiting: awaiting === "seeding" ? "seeding" : "answer",
-    moment_id: momentId,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: "chat_id" });
-}
-
-/**
  * 5.9 — write structured material back to the idea bank, and record every name for clearance (5.7).
  */
 export async function handleInterviewExtract(db: SupabaseClient, job: Job): Promise<void> {
@@ -459,11 +346,34 @@ export async function handleInterviewExtract(db: SupabaseClient, job: Job): Prom
  *
  * The caller supplies the extraction. It does NOT supply what happens next.
  */
+export interface Filed {
+  momentId: number;
+  title: string | null;
+  pillar: string | null;
+  audience: string | null;
+  /** 9.12 — names that need a decision before this can be drafted. Blocks the drafter if ignored. */
+  uncleared: { id: number; name: string; kind: string }[];
+  /**
+   * Set when the interview produced nothing worth writing and the idea was parked instead.
+   *
+   * Clause 1: "if the material is not there in a given week, fewer posts is the correct outcome." A
+   * park is a real result and the caller has to be able to say so, rather than reporting a filed
+   * idea that is not there.
+   */
+  parked?: string;
+}
+
+/** The parked outcome, reported the same way as a filed one. */
+function parkedResult(momentId: number, reason: string): Filed {
+  return { momentId, title: null, pillar: null, audience: null, uncleared: [], parked: reason };
+}
+
 export async function applyExtraction(
   db: SupabaseClient,
   momentId: number,
   extracted: Extraction,
-): Promise<void> {
+  opts: { quiet?: boolean } = {},
+): Promise<Filed> {
   const blank = (s: string) => (s && s.trim().length > 0 ? s.trim() : null);
 
   await db.from("material").upsert({
@@ -500,11 +410,13 @@ export async function applyExtraction(
     .some((v) => v && v.trim().length > 0);
 
   if (!hasSubstance) {
-    await park(db, momentId, "The interview did not surface a specific moment, detail or realisation.");
+    const why = "The interview did not surface a specific moment, detail or realisation.";
+    await park(db, momentId, why);
     await logEvent(db, "moment_parked", "info", { moment_id: momentId, reason: "no substance" });
-    await advanceSeeding(db);
-  await startNextWaitingIdea(db, momentId);
-    return;
+    if (!opts.quiet) {
+      await notice(db, "parked", why, { momentId, actedOn: ["reopen_idea"] });
+    }
+    return parkedResult(momentId, why);
   }
 
   // A scene with nothing learned from it is not a post.
@@ -529,16 +441,17 @@ export async function applyExtraction(
       reason: "scene without a realisation",
       strength: extracted.strength,
     });
-    // The message above promises he can add to it later. That promise now has a button behind it.
-    await sendParked(
-      db,
-      momentId,
-      "There is a moment here but nothing you took from it yet — no realisation, nothing that " +
-        "changed. Add to it whenever it clicks and I will pick it back up.",
-    );
-    await advanceSeeding(db);
-  await startNextWaitingIdea(db, momentId);
-    return;
+    /*
+     * The park reason promises he can add to it later, and that promise needs somewhere to live.
+     * It was a Telegram message with a Reopen button under it; it is a notice carrying the tool that
+     * does the same thing. Either way the point is that the promise is keepable.
+     */
+    const why = "There is a moment here but nothing you took from it yet — no realisation, nothing " +
+      "that changed. Add to it whenever it clicks and I will pick it back up.";
+    if (!opts.quiet) {
+      await notice(db, "parked", why, { momentId, actedOn: ["reopen_idea"] });
+    }
+    return parkedResult(momentId, why);
   }
 
   const decays = extracted.time_sensitive && extracted.decays_in_days > 0
@@ -570,33 +483,53 @@ export async function applyExtraction(
   // back to needing a decision, because re-opening is where it becomes a different post.
   const uncleared = await unclearedNames(db, momentId);
 
-  // ONE message: what it was filed as, and who it mentions. These used to be two paths, and the name
-  // path returned before reaching the pillar confirmation — so 5.10 never fired on a moment with a
-  // person in it, which is most moments worth writing.
-  await confirmFiled(db, momentId, m?.title ?? null, uncleared);
+  /*
+   * IT REPORTS WHAT IT FILED. IT DOES NOT ANNOUNCE IT.
+   *
+   * This used to end by sending Josh a message — what it was filed as, which pillar, and a row of
+   * buttons for any name needing clearance. That made the one write path Claude Code depends on
+   * reach into Telegram: `submit_extraction` → here → `confirmFiled` → `sendMessage`. Deleting the
+   * Telegram transport would therefore have broken capture, the interview and extraction all at
+   * once, which is the opposite of what removing a surface should cost.
+   *
+   * So the facts come back to the caller, which knows whether a person is waiting. Claude Code says
+   * them in the session; the queue path leaves a notice, because an extraction that happened while
+   * he was away is exactly the kind of fact that has nowhere else to go.
+   *
+   * The name question goes with it. It was asked here, as buttons, while the moment was fresh —
+   * good reasoning for a phone. In a session the caller asks it in words and `clear_names` records
+   * the answer, and silence still leaves them uncleared, which 9.12 calls the safe default.
+   */
+  const { data: filedRow } = await db
+    .from("moments")
+    .select("pillar, audience")
+    .eq("id", momentId)
+    .maybeSingle();
 
-  // Only claim the conversation when there is nothing else going on.
-  //
-  // Setting `name_clearance` used to overwrite `seeding`, which ended a cold-start sitting without a
-  // word at the first moment involving a person. The clearance question does not need the state: the
-  // message is recorded as `names`, so a reply to it is unambiguous whatever else is happening, and
-  // the buttons carry the name id directly. Silence leaves them uncleared, which 9.12 already calls
-  // the safe default.
-  if (uncleared.length > 0) {
-    const chatId = await chatForMoment(db, momentId);
-    const state = await getState(db, chatId);
+  const filed: Filed = {
+    momentId,
+    title: (m?.title as string | null) ?? null,
+    pillar: (filedRow?.pillar as string | null) ?? null,
+    audience: (filedRow?.audience as string | null) ?? null,
+    uncleared: uncleared.map((n) => ({ id: n.id, name: n.name, kind: n.kind })),
+  };
 
-    if (state.awaiting === "nothing" || state.awaiting === "answer") {
-      await setState(db, chatId, "name_clearance", momentId, {
-        name_ids: uncleared.map((n) => n.id),
-      });
+  if (!opts.quiet) {
+    const lines = [filed.title ? `"${filed.title}" is mined and ready to write.` : "An idea is mined."];
+    if (filed.pillar) lines.push(`Filed under ${filed.pillar}.`);
+    if (filed.uncleared.length > 0) {
+      lines.push(
+        `It mentions ${filed.uncleared.map((n) => n.name).join(", ")}. Nothing can be drafted from ` +
+          `it until you say whether those may be named.`,
+      );
     }
+    await notice(db, "idea_mined", lines.join(" "), {
+      momentId,
+      actedOn: filed.uncleared.length > 0 ? ["clear_names", "next_work"] : ["next_work"],
+    });
   }
 
-  // The cold start: one moment rolls straight into the next rather than ending the sitting. Runs on
-  // EVERY path out of extract now, including the one with names.
-  await advanceSeeding(db);
-  await startNextWaitingIdea(db, momentId);
+  return filed;
 }
 
 /** What Josh originally sent, whether typed or transcribed. */
@@ -612,188 +545,6 @@ export async function seedText(db: SupabaseClient, momentId: number): Promise<st
     .join("\n\n") || "(nothing captured)";
 }
 
-/**
- * 5.10 — "Must tag the moment to a pillar AND SAY WHICH, so Josh can correct it."
- *
- * The tagging was already happening; the saying was not. The confirmation used to read only "Got it
- * — saved as M-000003", so Josh never learned what the system had decided and the "so he can correct
- * it" half of the requirement — the whole reason it exists — never happened.
- *
- * Where he has defined pillars, each becomes a tap. Where he has not, the message says so plainly
- * rather than showing a category the system invented.
- *
- * IT ALSO CARRIES THE NAME QUESTION (9.12), AND THAT MATTERS MORE THAN IT LOOKS
- *
- * These used to be two separate paths, and the name path `return`ed before reaching this one. So a
- * moment mentioning a person — which is most moments worth writing — never got its pillar
- * confirmation at all. 5.10's "so Josh can correct it" simply did not happen on the material most
- * likely to need correcting. M-000003 has four uncleared names and never once received one.
- *
- * One message rather than two, because he is being asked about one moment: what it was filed under,
- * who it mentions, and both sets of buttons together. Two notifications for one thought is how a
- * system starts feeling like work.
- */
-async function confirmFiled(
-  db: SupabaseClient,
-  momentId: number,
-  title: string | null,
-  uncleared: { id: number; name: string; kind: string }[] = [],
-): Promise<number | null> {
-  const { data: moment } = await db
-    .from("moments")
-    .select("pillar, audience, strength")
-    .eq("id", momentId)
-    .maybeSingle();
-
-  const library = await loadLibrary(db, "interview");
-  const pillars = parsePillars(library.sections.pillars ?? "");
-
-  const lines = [title ? `Got it — "${title}" is saved.` : `Got it — saved.`];
-
-  if (moment?.pillar) lines.push(`Filed under ${moment.pillar}.`);
-  else if (pillars.length > 0) lines.push(`I could not place it in one of your pillars.`);
-
-  if (moment?.audience) lines.push(`Written for ${moment.audience}.`);
-  else lines.push(`I was not sure who it is for — I will work that out when I write it.`);
-
-  // 9.12 — "Where a moment does not work without naming someone, the system must ask Josh."
-  // Asked here, while the moment is fresh, rather than at drafting time when he may be nowhere near
-  // his phone. Silence leaves them uncleared, which is the safe default and blocks nothing.
-  if (uncleared.length > 0) {
-    const list = uncleared.map((n) => n.name).join(", ");
-    lines.push(
-      "",
-      `It mentions ${list}. May I name ${uncleared.length === 1 ? "them" : "any of them"}?`,
-      `If you leave this, I write it without naming anyone — and without describing them closely ` +
-        `enough to be recognised.`,
-    );
-  } else {
-    lines.push("", "I will pick it up when it is the right one to write.");
-  }
-
-  // Buttons only where there is something real to choose between. Offering a picker of categories
-  // the system made up would be worse than saying nothing.
-  const rows: Button[][] = [];
-
-  // Clearance is per NAME and per post (9.10), so each one is its own decision rather than a blanket
-  // yes. A tap beats a sentence: he is usually walking.
-  for (const n of uncleared) {
-    rows.push([
-      { text: `Name ${n.name}`, data: `name:${n.id}:y` },
-      { text: `Not ${n.name}`, data: `name:${n.id}:n` },
-    ]);
-  }
-
-  if (pillars.length > 0) {
-    rows.push(...chunk(pillars.map((p, i) => ({ text: p, data: `pil:${momentId}:${i}` })), 2));
-    rows.push([{ text: "Leave the pillar as is", data: `pil:${momentId}:-1` }]);
-  }
-
-  const buttons = rows.length > 0 ? rows : undefined;
-
-  const messageId = await sendMessage(
-    await chatForMoment(db, momentId),
-    pillars.length > 0 ? `${lines.join("\n")}\n\nWrong pillar? Change it here.` : lines.join("\n"),
-    buttons,
-  );
-
-  if (messageId) {
-    // Recorded as `names` when there is something to clear, so a typed REPLY to this message is
-    // unambiguous clearance whatever else the conversation is doing — which is what lets a seeding
-    // sitting carry on instead of stopping to wait for an answer.
-    await db.from("sent_messages").insert({
-      telegram_message_id: messageId,
-      kind: uncleared.length > 0 ? "names" : "other",
-      moment_id: momentId,
-    });
-  }
-
-  return messageId;
-}
-
-function chunk<T>(items: T[], size: number): T[][] {
-  const rows: T[][] = [];
-  for (let i = 0; i < items.length; i += size) rows.push(items.slice(i, i + size));
-  return rows;
-}
-
-
-/**
- * The cold start (clause 6).
- *
- * "The build must include a seeding session: a long, deliberate interview aimed at filling the bank
- * with twenty to thirty mined moments before anything else runs."
- *
- * One moment finishing rolls straight into the next rather than stopping, because the point is a
- * single sitting rather than twenty-five separate decisions to continue. Progress is reported so it
- * feels finite. Clause 1 still governs: if the moments are not there, stopping short is correct, and
- * /stop ends it at any point with everything kept (4.2.5).
- *
- * Called at EVERY point a moment reaches its end, including the ones that park. A parked moment is
- * an ordinary outcome — "if the material is not there, fewer posts is the correct outcome" — and if
- * only the successful path rolled on, the first thin thought would quietly end the sitting and Josh
- * would be left waiting on a bot that had stopped. Returns false when no sitting is running, which
- * is how every one of those call sites stays a no-op the rest of the time.
- */
-export async function advanceSeeding(db: SupabaseClient): Promise<boolean> {
-  // A seeding sitting belongs to whoever started it, which is the chat whose state says so.
-  const { data: sitting } = await db
-    .from("conversation_state").select("chat_id").eq("awaiting", "seeding").limit(1).maybeSingle();
-  if (!sitting) return false;
-  const chatId = Number(sitting.chat_id);
-
-  const target = await getSetting(db, "seed_target", 25);
-  const { count: mined } = await db
-    .from("moments")
-    .select("*", { count: "exact", head: true })
-    .in("status", ["mined", "queued", "drafted", "gated", "scheduled", "published"]);
-
-  const done = mined ?? 0;
-  if (done >= target) {
-    await setState(db, chatId, "nothing", null);
-
-    await sendMessage(
-      chatId,
-      `That is ${done} moments in the bank — enough to tune everything else against.\n\n` +
-        `Well done, that was the hard part.`,
-    );
-    return true;
-  }
-
-  await sendMessage(chatId, `${done} of ${target}. Next one.`);
-  await startNextSeedMoment(db);
-  return true;
-}
-
-/**
- * Open the next moment in a seeding sitting.
- *
- * Kept here rather than in the webhook because seeding continues from wherever the previous moment
- * finished — which is a worker, not a message. The state stays `seeding` so the next answer routes
- * to this moment and the sitting continues rather than ending after one.
- */
-export async function startNextSeedMoment(db: SupabaseClient, chatId?: number): Promise<void> {
-  const sittingChat = chatId ?? Number(
-    (await db.from("conversation_state").select("chat_id").eq("awaiting", "seeding").limit(1)
-      .maybeSingle()).data?.chat_id ?? joshChatId(),
-  );
-  const { data: moment } = await db.from("moments").insert({
-    source: "prompted_session",
-    status: "captured",
-    chat_id: sittingChat,
-  }).select("id").single();
-  if (!moment) return;
-
-  await db.from("raw_inputs").insert({
-    moment_id: moment.id,
-    kind: "text",
-    text_body: "(seeding session — filling the bank before anything else runs)",
-  });
-
-  await setState(db, sittingChat, "seeding", moment.id);
-
-  await enqueue(db, "interview_step", { moment_id: moment.id });
-}
 
 
 /** The one fixed question in the system: what he came back to say. */
@@ -813,66 +564,4 @@ async function askReopeningQuestion(db: SupabaseClient, momentId: number): Promi
   // Recorded, not sent. deliverQuestion puts it on Telegram when that is the surface; the MCP
   // interview tools return it to whoever asked instead.
   return question;
-}
-
-
-/**
- * When one interview ends, open the next idea that chat is holding.
- *
- * ONE AT A TIME ONLY WORKS IF SOMETHING MOVES THE QUEUE.
- *
- * A thought sent mid-interview is now saved rather than started, and the person is told it will be
- * picked up afterwards. This is what keeps that promise: on every way out of an interview — mined,
- * parked, or stopped — the chat's oldest untouched idea starts, so nothing waits on someone
- * remembering it exists.
- *
- * A seeding sitting is left alone: `advanceSeeding` already rolls one moment into the next, and two
- * mechanisms doing the same job would open two.
- */
-export async function startNextWaitingIdea(
-  db: SupabaseClient,
-  finishedMomentId: number,
-): Promise<boolean> {
-  const chatId = await chatForMoment(db, finishedMomentId);
-  const state = await getState(db, chatId);
-
-  if (state.awaiting === "seeding") return false;
-  if (!["nothing", "answer"].includes(state.awaiting)) return false;
-
-  // Another idea is mid-question in this chat — it owns the thread until it is done.
-  if (state.moment_id && state.moment_id !== finishedMomentId) {
-    const other = await loadSession(db, state.moment_id);
-    if (other.turns[other.turns.length - 1]?.role === "question") return false;
-  }
-
-  const { data: waiting } = await db
-    .from("moments")
-    .select("id, title")
-    .eq("chat_id", chatId)
-    .eq("killed", false)
-    .eq("status", "captured")
-    .neq("id", finishedMomentId)
-    .order("captured_at", { ascending: true })
-    .limit(10);
-
-  for (const idea of waiting ?? []) {
-    // Untouched only. An idea part-way through has its own queued step and does not need a second.
-    const { count } = await db
-      .from("interview_turns")
-      .select("*", { count: "exact", head: true })
-      .eq("moment_id", idea.id);
-    if ((count ?? 0) > 0) continue;
-
-    await setState(db, chatId, "answer", idea.id);
-    await enqueue(db, "interview_step", { moment_id: idea.id });
-    await sendMessage(
-      chatId,
-      idea.title
-        ? `Next one you sent me: "${idea.title}". A question about it coming.`
-        : `On to the next one you sent me — a question about it coming.`,
-    );
-    return true;
-  }
-
-  return false;
 }

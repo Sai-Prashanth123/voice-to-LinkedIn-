@@ -19,7 +19,7 @@ import { recordEditDiff } from "../_shared/outcome.ts";
 import { embed, embeddingProvider } from "../_shared/embeddings.ts";
 import { json } from "../_shared/jobs.ts";
 import { getAuth, publish } from "../_shared/linkedin.ts";
-import { joshChatId, sendMessage } from "../_shared/telegram.ts";
+import { notice } from "../_shared/notices.ts";
 
 Deno.serve(async () => {
   const db = admin();
@@ -88,12 +88,20 @@ Deno.serve(async () => {
       await db.from("posts").update({ status: "failed", publish_error: message }).eq("id", post.id);
       // 13.2 — Josh hears about it rather than finding a gap in his feed.
       await logEvent(db, "publish_failed", "error", { post_id: post.id, error: message });
-      try {
-        await sendMessage(
-          joshChatId(),
-          `A post did not go out and needs you: ${message}\n\nIt is still in the calendar.`,
-        );
-      } catch { /* logged above */ }
+      /*
+       * THE ONE THAT HURTS, AND IT IS WORTH NAMING.
+       *
+       * 13.2 wants a failure to surface rather than be swallowed, and a push could tell him within
+       * the minute. A notice tells him when he next opens a session, which on a Saturday could be
+       * two days. That is the real cost of removing every push channel and it is written down here,
+       * in the handover, and in the migration — not discovered later from an empty feed.
+       */
+      await notice(
+        db,
+        "publish_failed",
+        `A post did not go out and needs you: ${message}\n\nIt is still in the calendar.`,
+        { severity: "error", postId: post.id, actedOn: ["list_calendar", "mark_ready"] },
+      );
       results.push({ id: post.id, ok: false, error: message });
     }
   }

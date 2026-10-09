@@ -123,9 +123,23 @@ test("all eight passing puts it in the calendar and tells Josh", async () => {
   // The two halves the old code only claimed: the calendar, and the message to him.
   // The calendar is the `posts` table — the row Josh's weekly pass reads.
   assert.ok(writes.some((w) => w.table === "posts"), "nothing was pushed to the calendar");
+  /*
+   * He is told, and the shape of "told" changed on 9 October.
+   *
+   * This asserted a `notify_draft_ready` job, which existed only to send a Telegram message. With no
+   * push channel left, the fact waits in `notices` and `system_status` reads it. What must stay true
+   * is that passing the gate produces something he will see — a pass that reaches the calendar
+   * silently is how a draft sits unnoticed for three weeks.
+   */
   assert.ok(
-    queued(writes).includes("notify_draft_ready"),
-    "Josh was never told the draft was ready",
+    writes.some((w) => w.table === "notices" && w.op === "insert"),
+    "nothing tells Josh the draft is ready",
+  );
+  const told = writes.find((w) => w.table === "notices");
+  assert.match(String(told?.row.kind), /draft_ready/);
+  assert.ok(
+    String(told?.row.acted_on).includes("mark_ready"),
+    "the notice does not say what he can do about it",
   );
 });
 

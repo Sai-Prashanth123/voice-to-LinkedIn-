@@ -25,6 +25,7 @@ import { clearedNames, unclearedNames } from "../names.ts";
 import { enqueue } from "../jobs.ts";
 import { loadLibrary } from "../library.ts";
 import { CHECK_NEEDS_SECTION, notJudged, unjudgeableChecks } from "../views.ts";
+import { notice } from "../notices.ts";
 // Re-exported because gate-basis.test.ts imports them from here, and because this is where a
 // reader looking for the gate rule will go first.
 export { notJudged, unjudgeableChecks };
@@ -326,9 +327,29 @@ export async function finishGate(
 
   await logEvent(db, "gate_passed", "info", { moment_id: momentId, draft_id: draftId, attempt });
 
-  // 9.16 — push-back is optional and the system never waits on Josh. If he happens to be in the
-  // session he can react; if not, the draft sits in the calendar for the weekly pass.
-  await enqueue(db, "notify_draft_ready", { moment_id: momentId, draft_id: draftId });
+  /*
+   * 9.16 — push-back is optional and the system never waits on Josh.
+   *
+   * This queued a `notify_draft_ready` job, which either sent him the draft or scheduled a digest of
+   * several. Both existed only to send a Telegram message, and a digest of waiting drafts is anyway
+   * derivable: `list_calendar` with status "draft" IS the digest, always current, and it now returns
+   * the body so a draft can be read back to him.
+   *
+   * What is not derivable is "this one is new since you last looked", so that is the notice — and
+   * `announced_at` keeps its meaning for the same reason.
+   */
+  const { data: named } = await db
+    .from("moments").select("title").eq("id", momentId).maybeSingle();
+
+  await notice(
+    db,
+    "draft_ready",
+    `A draft cleared all eight checks and is in the calendar${named?.title ? `: "${named.title}"` : ""}.`,
+    {
+      momentId,
+      actedOn: ["list_calendar", "mark_ready", "push_back_on_draft"],
+    },
+  );
 
   return { outcome: "passed", failed: [], judged: 8 };
 }

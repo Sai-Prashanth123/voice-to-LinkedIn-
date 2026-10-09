@@ -24,8 +24,7 @@ import { loadSecrets } from "../_shared/secrets.ts";
 import { checkRetelling, loadThresholds, type DedupResult } from "../_shared/dedup.ts";
 import { canSeeImages } from "../_shared/llm.ts";
 import { recordEditDiff } from "../_shared/outcome.ts";
-import { joshChatId, sendMessage } from "../_shared/telegram.ts";
-import { roundupOuts } from "../_shared/interviewouts.ts";
+import { notice } from "../_shared/notices.ts";
 import { enqueue, json } from "../_shared/jobs.ts";
 import {
   applyRecencySpacing,
@@ -235,11 +234,13 @@ Deno.serve(async () => {
    */
   if (wrote > 0) {
     try {
-      await sendMessage(
-        joshChatId(),
+      await notice(
+        db,
+        "ready_to_write",
         `${wrote === 1 ? "An idea is" : `${wrote} ideas are`} ready to write.\n\n` +
-          `Open Claude and say "write the next one" — it will pick ${wrote === 1 ? "it" : "them"} ` +
-          `up with everything you told me, and I will check each draft before it reaches you.`,
+          `Say "write the next one" — it will pick ${wrote === 1 ? "it" : "them"} up with ` +
+          `everything you told me, and every draft is checked eight ways before you see it.`,
+        { actedOn: ["next_work"] },
       );
     } catch (err) {
       // A notification failure must not undo a selection that already happened.
@@ -677,7 +678,17 @@ async function remindStalledInterviews(db: SupabaseClient): Promise<void> {
     `Leave them and I will close them on their own.`;
 
   try {
-    await sendMessage(joshChatId(), text, roundupOuts(listed.map((w) => w.id)));
+    /*
+     * The buttons under this message were the useful part of it — resume, skip, that's enough, park.
+     * They become the tools that do the same things, which is also more honest: a button only worked
+     * while the message was the newest thing in the chat.
+     *
+     * This reminder is why the function exists. Five interviews once sat open for a month with
+     * nobody noticing, and nothing else in the system was looking.
+     */
+    await notice(db, "stalled_interviews", text, {
+      actedOn: ["next_interview_question", "skip_question", "end_interview", "park_idea"],
+    });
   } catch (err) {
     // 13.2 — a reminder that failed to send must not look like a reminder that was not due. Logged
     // as an error and NOT recorded as sent, so the next sweep tries again in four hours.
@@ -832,8 +843,9 @@ async function resumeDeferredVisuals(db: SupabaseClient): Promise<void> {
   // flight would be a message every four hours saying the same thing.
   if (resumed.length === 0) return;
 
-  await sendMessage(
-    joshChatId(),
+  await notice(
+    db,
+    "visuals_resumed",
     resumed.length === 1
       ? `The image you sent for ${resumed[0]} can be rebuilt now — doing it.`
       : `${resumed.length} images you sent can be rebuilt now — doing them.`,

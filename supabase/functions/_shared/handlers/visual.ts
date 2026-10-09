@@ -10,7 +10,6 @@
  * 10.7: not every post gets an image. Nothing here runs unless Josh sends one.
  */
 
-import { chatForMoment, setState } from "../chat-state.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { initWasm, Resvg } from "npm:@resvg/resvg-wasm@2";
 import { callStructured, canSeeImages, MODELS, provider } from "../llm.ts";
@@ -18,7 +17,7 @@ import { getMaterial, logEvent, sourceEntry } from "../db.ts";
 import { loadLibrary } from "../library.ts";
 import { PROMPT_VERSION, VISUAL_SYSTEM } from "../prompts.ts";
 import { VisualSchema } from "../schemas.ts";
-import { joshChatId, sendMessage, sendPhoto } from "../telegram.ts";
+import { notice } from "../notices.ts";
 import type { Job } from "../types.ts";
 
 let wasmReady: Promise<void> | null = null;
@@ -79,8 +78,9 @@ export async function handleVisual(db: SupabaseClient, job: Job): Promise<void> 
       updated_at: new Date().toISOString(),
     }).eq("id", momentId);
 
-    await sendMessage(
-      joshChatId(),
+    await notice(
+      db,
+      "visual_deferred",
       "I have kept your image, but I cannot rebuild it on the model provider currently configured " +
         "— it cannot see pictures. It is on the list, and I will rebuild it and tell you the moment " +
         "that changes. Nothing is lost.",
@@ -189,16 +189,31 @@ export async function handleVisual(db: SupabaseClient, job: Job): Promise<void> 
   await db.from("moments").update({ visual_pending: null }).eq("id", momentId);
 
   const caption = `${result.notes}\n\nSay "another" if you want a different take on it.`;
-  if (png) await sendPhoto(joshChatId(), png, caption);
-  else await sendMessage(joshChatId(), `Rebuilt it, but could not rasterise. ${result.notes}`);
+  /*
+   * THE IMAGE IS STORED, NOT SENT.
+   *
+   * `sendPhoto` put the rebuilt picture in his chat, which is the one thing a notice cannot carry.
+   * What matters for clause 11.3 is that `rendered_path` is written and the calendar entry points at
+   * it — that happens above, and `worker-publish` reads it when the post goes out. So this says it
+   * exists and where, and the session can open the file.
+   */
+  await notice(
+    db,
+    png ? "visual_ready" : "visual_not_rasterised",
+    png
+      ? `${caption}\n\nStored with the post. It goes out attached to it.`
+      : `Rebuilt the image but could not rasterise it, so the post would publish without it. ${result.notes}`,
+    { severity: png ? "info" : "warn", momentId, actedOn: ["list_calendar"] },
+  );
 
-  // Leave the door open for 10.6 without demanding he use it: anything other than "another" is
-  // treated as him having moved on.
-  await setState(db, await chatForMoment(db, momentId), "visual_feedback", momentId, {
-    source_path: sourcePath,
-    taking,
-    post_doing: postDoing,
-  });
+  /*
+   * 10.6 — another take, without demanding he ask for one.
+   *
+   * This armed a chat state so that his next message could be read as "do another". In a session
+   * there is nothing to arm: he says "try again, take the look rather than the structure" and the
+   * visual brief is fetched again. The state was the awkward half of a conversation the surface now
+   * has for free.
+   */
 }
 
 async function nextVersion(db: SupabaseClient, momentId: number): Promise<number> {

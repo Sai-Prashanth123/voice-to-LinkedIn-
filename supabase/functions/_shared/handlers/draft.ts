@@ -17,7 +17,7 @@ import { verifyDraft, type Claim } from "../claims.ts";
 import { getMaterial, getMoment, getNames, getSetting, logEvent, park, sourceEntry } from "../db.ts";
 import { clearedNames, unclearedNames } from "../names.ts";
 import { enqueue } from "../jobs.ts";
-import { sendParked } from "../parked.ts";
+import { notice } from "../notices.ts";
 import { loadLibrary } from "../library.ts";
 import { DRAFT_USER, DRAFTER_SYSTEM, PROMPT_VERSION } from "../prompts.ts";
 import { DraftSchema } from "../schemas.ts";
@@ -267,15 +267,20 @@ export async function retryOrPark(
     );
     await logEvent(db, "moment_parked", "warn", { moment_id: momentId, failures });
 
-    // The reason above promises a way back, and until 6.4 was built there was none: the moment
-    // parked silently and anything he sent afterwards opened a new one. Telling him is also the
-    // honest half of 9.8 — a draft that will never arrive should not just quietly not arrive.
-    await sendParked(
+    /*
+     * The honest half of 9.8: a draft that will never arrive should not just quietly not arrive.
+     *
+     * The park reason promises a way back, and that promise needs something behind it. It was a
+     * Telegram message with a Reopen button; it is a notice carrying the tool that does the same
+     * thing. Either way, the point is that three failed attempts are reported rather than absorbed.
+     */
+    await notice(
       db,
-      momentId,
+      "parked",
       "I could not get this one past the gate in three attempts. " +
         (failures[0] ?? "") +
         "\n\nUsually that means there is not enough real material here yet. It stays in the bank.",
+      { severity: "warn", momentId, actedOn: ["reopen_idea", "get_moment"] },
     );
     return;
   }

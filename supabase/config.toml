@@ -8,16 +8,14 @@
 # Declaring it in the repo means the setting is reviewed like code, and a redeploy cannot quietly
 # drift from it.
 #
-# Only two functions are reachable without a JWT, and both authenticate themselves:
-#   telegram-webhook   — Telegram sends a shared secret in x-telegram-bot-api-secret-token
+# Three functions are reachable without a JWT, and each authenticates itself:
 #   transcript-webhook — the call recorder sends a shared secret in a header or query string
+#   mcp                — clients send Authorization: Bearer <mcp token>, checked in auth.mjs
+#   linkedin-oauth     — LinkedIn redirects a browser here with a code and a state we signed
 #
 # Everything else is invoked by pg_cron with the service_role key and must stay closed.
 
 project_id = "uzqvebxcxgmseqjhfpku"
-
-[functions.telegram-webhook]
-verify_jwt = false
 
 # The MCP endpoint carries its OWN auth: clients send `Authorization: Bearer <mcp token>`, and
 # Supabase's JWT check would reject exactly the header the protocol uses.
@@ -49,9 +47,6 @@ verify_jwt = true
 [functions.worker-triage]
 verify_jwt = true
 
-[functions.worker-slack]
-verify_jwt = true
-
 [functions.worker-publish]
 verify_jwt = true
 
@@ -61,9 +56,12 @@ verify_jwt = true
 [functions.worker-learn]
 verify_jwt = true
 
-# 4.2 set 2 — the weekly sweep. Reached by cron and by the webhook when he asks for it by name.
-[functions.worker-sweep]
-verify_jwt = true
-
 [functions.worker-ops]
 verify_jwt = true
+
+# LinkedIn redirects a BROWSER here, so it cannot carry a Supabase JWT. It validates the signed
+# state parameter it issued instead. Declared because this was previously only a --no-verify-jwt
+# flag on a deploy command: sticky, therefore working, and one bulk deploy away from a 401 that
+# nothing would explain.
+[functions.linkedin-oauth]
+verify_jwt = false

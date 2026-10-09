@@ -186,7 +186,9 @@ Deno.serve(async (req) => {
     }, 422);
   }
 
-  await applyExtraction(db, momentId, body.extracted);
+  // quiet: a person is waiting in the session, so the facts are reported in the reply below rather
+  // than left as a notice for someone to find later.
+  const filed = await applyExtraction(db, momentId, body.extracted, { quiet: true });
 
   await logEvent(db, "extraction_applied", "info", {
     moment_id: momentId,
@@ -205,10 +207,23 @@ Deno.serve(async (req) => {
     pillar: after?.pillar ?? null,
     verified: verdict.checked,
     not_verified: verdict.not_checked,
+    /*
+     * 9.12 — the names it picked up, and whether any of them block a draft.
+     *
+     * This used to be a Telegram message with a button per name, sent from inside applyExtraction.
+     * It comes back here instead, because the caller is in a session with him and can simply ask.
+     * It matters that it is said at all: the drafter REFUSES a body containing an uncleared name, so
+     * an extraction that quietly recorded two uncleared names and said nothing is an idea that
+     * cannot be written and does not explain why.
+     */
+    uncleared_names: filed.uncleared.map((n) => n.name),
     // Parking is a correct outcome and the caller should not read it as a failure.
-    note: after?.status === "parked"
-      ? "Applied, and the moment parked itself: there is a scene here but nothing taken from it. " +
-        "Josh has been told, and it reopens the moment he adds to it."
+    note: filed.parked
+      ? `Applied, and the moment parked itself: ${filed.parked} It reopens the moment he adds to it.`
+      : filed.uncleared.length > 0
+      ? `Applied and mined. Before it can be drafted, ask him whether ` +
+        `${filed.uncleared.map((n) => n.name).join(" and ")} may be named, and record the answer ` +
+        `with clear_names — the drafter refuses a post containing a name he has not cleared.`
       : "Applied. The moment is mined and can now be selected for drafting.",
   });
 });
