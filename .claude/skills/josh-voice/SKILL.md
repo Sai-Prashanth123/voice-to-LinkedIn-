@@ -57,8 +57,10 @@ Compress it to one clause; do not delete it. It is the voice.
 **4. Addressing the reader constantly.** "Your" is the word the reference accounts use most and
 Josh uses least. Their posts are aimed at you; his talk is about a situation.
 
-**5. Padding to a length.** The eight reference writers' median post length spans 53 to 408 words
-and all of it works. No target length goes near a draft.
+**5. Padding to a length.** The reference writers' median post lengths span an eightfold range and
+all of it works, so no target length goes near a draft. Do not take the numbers from this file —
+`get_sentinels` derives them from the current measurements, and the figures once written here were
+wrong within a month of being typed (seven writers, not eight; 422 words at the top, not 408).
 
 ## Structure
 

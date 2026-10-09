@@ -89,8 +89,8 @@ Deno.serve(async () => {
       ran_short: true,
       short_reason:
         `${waiting} draft${waiting === 1 ? " is" : "s are"} waiting on you. Nothing new was ` +
-        `written until you have been through ${waiting === 1 ? "it" : "them"} — /review whenever ` +
-        `you have ten minutes.`,
+        `written until you have been through ${waiting === 1 ? "it" : "them"} — ask for the drafts ` +
+        `whenever you have ten minutes.`,
       skipped: [],
     });
     return json({ ok: true, inHand, unreviewed: waiting, wrote: 0, reason: "drafts awaiting review" });

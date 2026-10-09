@@ -133,7 +133,7 @@ async function checkState(state: string | null): Promise<string | null> {
 async function callerIsAllowed(req: Request): Promise<string | null> {
   const header = req.headers.get("Authorization") ?? "";
   const jwt = header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
-  if (!jwt) return "sign in to The desk first — this link needs your session";
+  if (!jwt) return "this link has expired or was not issued by us — start again from Claude Code";
 
   const url = Deno.env.get("SUPABASE_URL");
   const anon = Deno.env.get("SUPABASE_ANON_KEY");
@@ -232,7 +232,7 @@ async function callback(req: Request): Promise<Response> {
   }
 
   const bad = await checkState(url.searchParams.get("state"));
-  if (bad) return page("Not connected", `<p>${bad}. Start again from The desk.</p>`, 400);
+  if (bad) return page("Not connected", `<p>${bad}. Start again from Claude Code.</p>`, 400);
 
   const code = url.searchParams.get("code");
   if (!code) return page("Not connected", "<p>LinkedIn returned no code.</p>", 400);

@@ -79,7 +79,8 @@ placeholder, so there was nothing to compare a draft to and everything looked co
 
 `record_gate_verdict` tells you how many remain and what has failed so far. When all eight are in:
 
-- **All passed** — the draft goes to Josh's calendar as a draft. It still is not published;
-  only he can do that.
+- **All passed** — the draft is filed in the calendar, where `list_calendar` shows it with its text.
+  It is NOT published: only Josh can do that, with `mark_ready`, and that is the one thing in this
+  system which authorises a post to go out.
 - **Any failed** — use the `draft-post` skill to re-draft. The new brief will carry these
   rejections, so fix them specifically rather than starting again.

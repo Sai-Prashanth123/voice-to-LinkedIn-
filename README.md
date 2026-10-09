@@ -1,94 +1,126 @@
-# A content system that writes from lived experience
+# Your content system
 
-Built for Josh Fryszer (Slingshot GTM) by Thought Pilot, against build specification v2.0 of
-20 August 2026.
+Josh — this turns things that actually happened to you at work into LinkedIn posts that sound like
+you. You talk, it asks a few questions, it writes, it checks the draft eight ways, and then you
+decide. It never publishes anything you have not approved.
 
-The job: capture the moments worth writing about while they are still fresh, interview Josh about
-them until there is real material, and turn that material into LinkedIn drafts that sound like him.
-Four to five posts a week, with his only involvement being one calendar pass.
+**The test every post has to pass:** could anyone else have written this? If yes, it fails. A post
+earns its place because you were in that room and had that conversation.
 
-**The test everything is measured against:** could anyone else have written this? If yes, it fails.
+Everything happens in Claude Code. There is no app to open and no bot to message.
 
 ---
 
-## Layout
+## Setting it up, once
+
+**1. Install Claude Code** — <https://claude.com/claude-code>
+
+**2. Get this repo onto your machine**
 
 ```
-docs/
-  00-spec-understanding.md   every clause, restated in build terms
-  01-recommendations.md      the clause-16 decisions and the tool list (15.1)
-  02-cost-model.md           running cost, confirmed in writing (15.7, 15.8)
-  03-runbook.md              how to run it, change it, and fix it (14.4)
-
-supabase/
-  migrations/                the schema. The spec's hard rules are enforced here, not in code.
-  functions/
-    _shared/                 claim ledger, prompts, models, library loader, diff, Telegram, LinkedIn
-    telegram-webhook/        the one surface Josh touches on his phone
-    worker-dispatch/         the pipeline: transcribe, interview, draft, gate, visual
-    worker-select/           what gets written next, and what has already been told
-    worker-triage/           calls, Claude Code and Slack — candidates only
-    worker-publish/          publishes what Josh marked ready, on his date
-    worker-metrics/          engagement at seven days
-    worker-learn/            evidenced proposals, for Josh to approve
-    worker-ops/              silence alerts, queue warnings, monthly reports
-  tests/                     rebuilds the schema and asserts the rules still hold
-
-cc-agent/                    runs on Josh's machine; filters Claude Code logs locally
-eval/                        regression harness, filter calibration, syntax check
+git clone <the repo URL we send you>
+cd josh-content-system
 ```
 
-## The four rules, and where they are enforced
+**3. Fill in one file**
 
-Three of these are stated in the spec as absolutes and one is stated three times. None of them is
-enforced by asking a model nicely.
+```
+cp mcp-server/.env.example mcp-server/.env
+```
 
-| Rule | Enforced by |
+Open `mcp-server/.env` and paste the two values we send you separately: the project URL and the key.
+
+> That key is the key to your idea bank. Do not paste it into a chat, a ticket or a screenshot. If it
+> ever gets out, tell us and we will issue a new one — it takes a minute.
+
+**4. Install the one dependency**
+
+```
+cd mcp-server && npm install && cd ..
+```
+
+**5. Open Claude Code in this folder and say hello**
+
+```
+claude
+```
+
+It will ask you once to approve the content system. Say yes. Then just type `hello` — it will tell
+you what is waiting and what is worth doing first.
+
+---
+
+## The five things to say
+
+You can talk to it normally. These are the shortcuts when you know what you want:
+
+| Type this | What happens |
 |---|---|
-| **The system never publishes on its own** (11.2) | Check constraints on `posts`. A row cannot reach `published` without `marked_ready_at`. |
-| **No fabrication** (5.4, 9.4) | The claim ledger: the drafter must cite a verbatim source span for every claim, verified mechanically in `_shared/claims.ts` before the gate spends a token. |
-| **Nothing is ever deleted** (6.3) | DELETE revoked from every role the system runs as. |
-| **Candidates only from automatic inputs** (4.3.3) | Triage writes moments at `half_mined`; the selector only reads `mined`, which only the interview produces. |
+| `/waiting` | What is waiting on you, and the one thing worth doing next |
+| `/capture` | Save something that just happened, and start asking about it |
+| `/interview` | Answer the questions on an idea that is already waiting |
+| `/write` | Write the next post that is ready |
+| `/review` | Go through the drafts, approve or reject them |
+| `/sentinels` | Read Matt Barker and the other writers you chose |
 
-Plus the one clause 12 singles out: the lived-experience test and the no-fabrication rule are **not
-tunable by the learning loop**, whatever the numbers say. They live in a locked library section and a
-database trigger rejects any proposal against it.
+Or in plain English: *"something just happened"*, *"write the next one"*, *"show me the drafts"*,
+*"how does Matt Barker open his posts"*, *"put that one out Tuesday"*.
 
-## Running the tests
+---
 
-```bash
-bash supabase/tests/run-migrations.sh              # schema + 13 assertions on the enforced rules
-node --test supabase/functions/_shared/*.test.ts   # claim ledger, edit classification
-deno check supabase/functions/*/index.ts           # every edge function type-checks
-cd app && npx tsc --noEmit && npx next build       # the web app
+## How a post actually gets made
+
+1. **You say what happened.** Half a sentence is enough. "Cold email landed addressed to Ben."
+2. **It asks a few questions,** one at a time — what happened before, who was there, their actual
+   words, what changed. You can answer three and stop; it will wait.
+3. **It writes the post** from your answers and nothing else. Every fact in it traces back to
+   something you said. If a detail is missing, the post works around it rather than inventing it.
+4. **It checks the draft eight ways** before you see it — including whether anyone else could have
+   written it, and whether every claim traces to your material.
+5. **You decide.** Approve it with a date, ask for a rewrite in your own words, change a line
+   yourself, or drop it.
+
+Nothing goes to LinkedIn except a post you have approved with a date. The database refuses every
+other route.
+
+---
+
+## Two things worth knowing
+
+**It will sometimes write nothing, and that is correct.** If the material is not there in a given
+week, fewer posts is the right outcome. It is built to run short rather than pad.
+
+**The thing that would improve it most is a recording of you talking.** Not about how you write —
+just you making a case for something, for fifteen minutes, unprompted. The voice guide is currently
+built from calls where your job was asking questions, which shows how you ask and not how you argue.
+Paste a transcript into a session any time and say "add this to the voice interview".
+
+---
+
+## When something looks wrong
+
+Say *"is it working?"*. If you want to check from a terminal:
+
+```
+node scripts/smoke.mjs      # thirty seconds, reads only, changes nothing
 ```
 
-The regression harness (`node eval/regression.mjs --compare`) re-drafts a fixed set of real moments
-against the current library and diffs the result against the previous run. Run it before and after any
-library change — it is what makes tuning measurable rather than a matter of taste, and it is how
-17a's finish line gets reached.
+If a post was due and did not go out, say *"what happened to the post that was scheduled"* — it will
+have been recorded, and the reason with it.
 
-## Status
+---
 
-**Verified by running:** the schema and every guarantee above (13 assertions, rebuilt from scratch),
-the claim ledger (16 tests), edit classification (8 tests), the Claude Code filter (calibrated
-against a real corpus), the web app (type-checks and builds, 8 routes).
+## What is where
 
-**Written but not yet executed:** the pipeline itself — capture, interview, drafting, the gate,
-selection, publishing, metrics, learning, and both automatic inputs. All five ways in exist in code.
-None has run against live keys, and a first real run should be expected to find things that static
-checking cannot.
+```
+.claude/skills/       how it writes, how it judges, how it keeps your voice
+.claude/commands/     the shortcuts above
+mcp-server/           the tools Claude uses to reach your idea bank
+supabase/             the database and the jobs that run on a schedule
+scripts/              refreshing the reference writers, rebuilding the voice guide
+data/josh/            your voice law set and the measured voiceprint
+docs/                 the runbook, the handover, and the spec as we read it
+```
 
-**Blocked on Josh**, in the order it blocks work:
-
-1. The **voice guide**, built from a recording of him talking — not his archive (8a). On the critical
-   path; until it exists, drafts will be fluent and generic, which is the exact failure the spec is
-   written to prevent.
-2. The rest of the **reference library** — pillars, frameworks, hooks, closes, audience, prompt set.
-   Every section is seeded and empty.
-3. The **seeding session** — 20–30 mined moments. Everything downstream is tuned against them, and
-   the regression harness has nothing to measure until they exist.
-4. **Which call recorder** he uses, **brand guidelines** for visuals, and the **LinkedIn Community
-   Management** request for post analytics.
-
-See `docs/01-recommendations.md` §3 for the full list and §4 for two questions that need his answer.
+`docs/04-handover.md` is the one to read if you ever want to take this over entirely, or hand it to
+someone else. Everything runs in accounts you own.

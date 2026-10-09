@@ -234,7 +234,7 @@ export const inspectTools = [
       if (mined.length > 0) {
         actions.push({
           do: `Draft ${mined.length} mined moment(s)`,
-          where: "the draft-post prompt, or worker-select on its four-hourly tick",
+          where: "Claude Code — next_work, then the draft-post skill",
           why: "These have material and no draft. This is the only state where writing is possible.",
         });
       }
@@ -242,7 +242,7 @@ export const inspectTools = [
       if (halfMined.length > 0) {
         actions.push({
           do: `Answer the interview on ${halfMined.length} candidate(s) — start with "${halfMined[0].title ?? "an unnamed idea"}"`,
-          where: "Telegram",
+          where: "Claude Code — next_interview_question, then answer_interview",
           why: "A candidate cannot be drafted until Josh has been interviewed about it (4.3.3). " +
             "With nothing mined, this is what everything else is waiting on.",
         });
@@ -259,7 +259,7 @@ export const inspectTools = [
       if (captured.length > 0) {
         actions.push({
           do: `${captured.length} input(s) captured but never mined`,
-          where: "Telegram",
+          where: "Claude Code — next_interview_question, or park_idea if it is not worth it",
           why: "The interview stalled or never finished on these. They expire on their own after " +
             "7 to 14 days, taking whatever they have.",
         });

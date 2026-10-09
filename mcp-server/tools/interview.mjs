@@ -64,8 +64,8 @@ export const interviewTools = [
       title: "Put a thought into the idea bank",
       description:
         "Capture something that happened to Josh — a scene, a line someone said, a thing that " +
-        "changed his mind — and start its interview. This is the same door Telegram uses, so a " +
-        "thought captured here is indistinguishable from one sent to the bot. " +
+        "changed his mind — and start its interview. This is the only door now, and the reply " +
+        "carries the first question so the conversation simply continues. " +
         "Capture his OWN words as closely as you can: everything downstream is checked against " +
         "this text span by span, and a tidied-up paraphrase is a worse source than a rough " +
         "sentence. Do not capture questions, instructions or your own summaries. " +
@@ -74,7 +74,8 @@ export const interviewTools = [
         "the system derives a handle from their own words. The reply carries the name it used and " +
         "the FIRST interview question: tell them both, ask the question, then pass their answer to " +
         "answer_interview. If the name is wrong they say so, and you call name_idea. " +
-        "The interview happens here only; nothing is sent to Telegram.",
+        "The interview happens in the session: ask what comes back, and pass his answer to " +
+        "answer_interview exactly as he said it.",
       inputSchema: {
         text: z.string().min(1).describe(
           "What happened, in his words. A fragment is fine — the interview is what fills it out.",
