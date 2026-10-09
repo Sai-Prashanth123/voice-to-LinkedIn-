@@ -35,13 +35,23 @@ What does not: his turn that renames the reader's problem — state it, deny it,
 which is the exact construction Josh's banned-phrases list forbids. And his close: he asks in nearly
 every post, where Josh's rule rations a direct ask to one in five.
 
-## To refresh the measurements
+## To refresh them
+
+Three steps, and they are deliberately separate — a script that both fetched and judged would have to
+be trusted about what it discarded.
 
 ```
-node scripts/load-reference-posts.mjs --posts <scrape.json> --apply   # the posts themselves
-node scripts/sentinel-refresh.mjs    --posts <scrape.json>            # dry run: what moved
-node scripts/sentinel-refresh.mjs    --posts <scrape.json> --apply    # opens one proposal
+node scripts/scrape-sentinels.mjs --check                             # validate the token, spend nothing
+node scripts/scrape-sentinels.mjs --out data/josh/sentinels/scrape-<date>.json
+node scripts/load-reference-posts.mjs --posts <that file> --apply     # so Josh can read them
+node scripts/sentinel-refresh.mjs    --posts <that file>              # dry run: what moved
+node scripts/sentinel-refresh.mjs    --posts <that file> --apply      # opens one proposal
 ```
+
+The fetch needs `APIFY_TOKEN` in `.env`. Without it, everything already stored stays readable and
+simply stops being refreshed. There is also `refresh_sentinels`, which re-measures from the posts
+already stored and needs no token or file at all — use that when the question is "have the numbers
+moved", and the scrape when the question is "what have they posted lately".
 
 The refresh never changes the library by itself. It opens a proposal with its evidence, and Josh
 decides with `decide_proposal` — `list_proposals` shows what is waiting. Most runs correctly produce
