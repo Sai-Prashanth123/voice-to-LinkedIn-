@@ -194,7 +194,7 @@ export function resourcesFor(context) {
       config: {
         title: "The reference writers, measured",
         description:
-          "Structural measurements of 59 posts across seven accounts Josh chose: median length, " +
+          "Structural measurements of the posts across the accounts Josh chose: median length, " +
           "opening length, paragraphs, list rate, opening and closing shapes, sentence-length " +
           "variation. THEIR WORDS ARE NOT HERE and never will be (8.3) — the derivation refuses " +
           "to emit anything containing a run of the source text, so a draft cannot quote what " +

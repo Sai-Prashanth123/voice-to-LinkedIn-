@@ -31,7 +31,7 @@ import { sessionTools } from "./sessions.mjs";
 import { trackingTools } from "./tracking.mjs";
 import { measureTools } from "./measure.mjs";
 import { scrubTools } from "./scrub.mjs";
-import { sentinelTools, voiceTools } from "./voice.mjs";
+import { referencePostTools, sentinelTools, voiceTools } from "./voice.mjs";
 import { interviewTools } from "./interview.mjs";
 // Imported last and registered last: it calls the brief tools through the same registry, so it
 // must not be pulled in while that registry is still being assembled.
@@ -50,6 +50,8 @@ export const tools = [
   ...scrubTools,
   ...voiceTools,
   ...sentinelTools,
+  // The posts themselves, which he asked for and could not reach.
+  ...referencePostTools,
   ...workTools,
   ...interviewTools,
   ...writeTools,

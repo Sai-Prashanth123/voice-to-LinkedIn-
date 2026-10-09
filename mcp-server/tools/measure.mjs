@@ -25,7 +25,7 @@
  *    figures are a baseline for his thinking, not a target for his posts. The lexicon travels
  *    between the two registers; the sentence lengths do not."
  *
- * So sentence length is compared against the SENTINEL corpus — 59 real posts by seven writers he
+ * So sentence length is compared against the SENTINEL corpus — the real posts by the writers he
  * chose — and the lexicon and surface habits come from the voiceprint. Using his spoken sd of 16.3
  * as a target would be a confident, precise and completely wrong instruction.
  */
@@ -40,6 +40,10 @@ import sentinels from "../../data/josh/sentinels/latest.json" with { type: "json
 
 /** The spread of habitual length, derived rather than written out. See voice.mjs. */
 const RANGE = medianWordRange(sentinels.report) ?? { low: 0, high: 0 };
+
+/** Read from the measurements rather than written out. See the note in voice.mjs. */
+const MEASURED = sentinels.posts ??
+  (sentinels.report ?? []).reduce((n, r) => n + (r.posts_measured ?? 0), 0);
 
 /**
  * The four reference writers whose STRUCTURE matches what Josh's own rules describe — long, prose
@@ -75,7 +79,7 @@ export const measureTools = [
       title: "Measure a draft against the corpus, before the gate",
       description:
         "Deterministic measurements of a post — sentence rhythm, surface habits, vocabulary — " +
-        "compared against the 59 reference posts and Josh's computed voiceprint. No model call, " +
+        `compared against the ${MEASURED} reference posts and Josh's computed voiceprint. No model call, ` +
         "so it costs nothing and cannot invent. Run it BEFORE create_draft: it catches the " +
         "mechanical faults that otherwise take a full gate run to discover. It is a measurement " +
         "and not a verdict: nothing here passes or fails a draft, and the gate still decides.",
@@ -125,7 +129,7 @@ export const measureTools = [
       if (m.opening_shape === "question") {
         flags.push(
           `The first line is a question. The hook rules say never open with one, and 55 of the ` +
-          `59 reference posts do not.`,
+          `${MEASURED} reference posts do not.`,
         );
       }
       if (avoided.length > 0) {
@@ -162,7 +166,7 @@ export const measureTools = [
           shortest: m.shortest_sentence,
           longest: m.longest_sentence,
           against_the_scene_writers: placement(m.sentence_words_sd, sceneBand),
-          note: "Compared with the 59 measured reference posts, NOT with his voiceprint. That is " +
+          note: `Compared with the ${MEASURED} measured reference posts, NOT with his voiceprint. That is ` +
             "computed from speech, and the voiceprint says outright that its rhythm figures do " +
             "not transfer to writing.",
         },
