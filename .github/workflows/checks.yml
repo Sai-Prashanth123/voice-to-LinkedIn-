@@ -105,11 +105,23 @@ jobs:
         run: npm ci
       - name: The tool registry has no duplicate names
         run: node mcp-server/index.mjs --tools
-      - name: The MCP server's own tests
-        # 101 of them, and none touches the network: the suite builds a fake db and asserts on what
-        # the tools ask it for. They were left out of CI for no reason anyone recorded.
+      - name: The MCP server's credential-free tests
+        # 52 of the 101. The other 49 read the live project, and this step claimed otherwise on its
+        # first attempt: "none touches the network" was wrong, CI failed on
+        # `undefined/rest/v1/library_sections`, and the laptop had hidden it because the suite picks
+        # credentials out of .env at the repo root, mcp-server/ or eval/ — so emptying one of the
+        # three proves nothing. The only honest probe was hiding all three.
+        #
+        # capabilities, index and tools are the live ones and are excluded BY NAME rather than by a
+        # conditional skip on a missing secret. That distinction is the whole point of the policy in
+        # the header: a skip reports green while checking nothing, and a named exclusion is visible
+        # in the diff. A new test file is included by default, so one that needs the database fails
+        # here loudly instead of quietly not running.
         working-directory: mcp-server
-        run: node --test
+        run: |
+          files=$(ls *.test.mjs | grep -vE '^(capabilities|index|tools)\.test\.mjs$')
+          echo "running: $files"
+          node --test $files
 
   migrations:
     name: Migrations build from nothing
