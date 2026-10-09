@@ -99,14 +99,28 @@ Everything you have already recorded is untouched: every voice note, every trans
 
 ## Getting connected
 
-1. Clone the repo we have sent you.
-2. `cd` into it, then `cd mcp-server && npm install && cd ..`
-3. `cp mcp-server/.env.example mcp-server/.env` and paste the two values we are sending separately.
-4. `node mcp-server/index.mjs --check` — you want `ok`.
-5. `claude`, then type `hello`.
+**The quickest way, and the one that also works on your phone.** Nothing to install. In Claude's
+settings, under Connectors, add a custom connector with the URL and token we are sending separately.
+Then just talk to it. You get every tool: capture a thought, run an interview, read your drafts,
+approve a post, read Matt Barker.
 
-`README.md` has all of that with the alternatives, and section 10 covers the three failures that look
-identical and are not.
+**The fuller way, on your laptop.** Clone the repo and run it locally, which adds the three writing
+skills, the shortcut commands and the maintenance scripts. The skills are what hold the writing
+standard, so drafting is noticeably better here:
+
+```bash
+git clone <the repo we sent you> josh-content-system
+cd josh-content-system/mcp-server && npm install && cd ..
+cp mcp-server/.env.example mcp-server/.env     # paste the two values we send
+node mcp-server/index.mjs --check              # expect: ok
+claude
+```
+
+Then type `hello`.
+
+Use the connector for capturing and reviewing wherever you are, and the laptop when you want
+something written. `README.md` has both in full, plus Codex and Cursor if you would rather use those,
+and section 10 covers the three failures that look identical and are not.
 
 ---
 
