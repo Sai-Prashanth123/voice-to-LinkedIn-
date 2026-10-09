@@ -41,17 +41,23 @@ Three steps, and they are deliberately separate — a script that both fetched a
 be trusted about what it discarded.
 
 ```
-node scripts/scrape-sentinels.mjs --check                             # validate the token, spend nothing
+node scripts/scrape-sentinels.mjs --check                             # credentials, spend nothing
 node scripts/scrape-sentinels.mjs --out data/josh/sentinels/scrape-<date>.json
 node scripts/load-reference-posts.mjs --posts <that file> --apply     # so Josh can read them
 node scripts/sentinel-refresh.mjs    --posts <that file>              # dry run: what moved
 node scripts/sentinel-refresh.mjs    --posts <that file> --apply      # opens one proposal
 ```
 
-The fetch needs `APIFY_TOKEN` in `.env`. Without it, everything already stored stays readable and
-simply stops being refreshed. There is also `refresh_sentinels`, which re-measures from the posts
-already stored and needs no token or file at all — use that when the question is "have the numbers
-moved", and the scrape when the question is "what have they posted lately".
+**Which question you are asking decides which backend to use, and the script will not guess for
+you.** The console (`XP_API_KEY`) is the default: fast, already paid for, and it returns post text
+with the **line breaks stripped** — verified 9 October, 70 of 70 posts came back as one unbroken
+paragraph. Since every shape measurement is counted from line breaks, that file is marked
+`shape_measurable: false`, stores fine, and cannot feed a refresh. Apify (`APIFY_TOKEN`, `--via
+apify`) is slower and charged per run but keeps the breaks, so it is the only one that can.
+
+So: **the console for "what have they written lately"**, **Apify for "has their structure moved"**,
+and **`refresh_sentinels` for "have the numbers moved"** — that one re-measures what is already
+stored and needs no key and no file at all.
 
 The refresh never changes the library by itself. It opens a proposal with its evidence, and Josh
 decides with `decide_proposal` — `list_proposals` shows what is waiting. Most runs correctly produce

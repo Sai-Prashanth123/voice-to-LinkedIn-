@@ -85,7 +85,21 @@ function credentials() {
 /* ── Read and shape ───────────────────────────────────────────────────────── */
 
 const raw = JSON.parse(readFileSync(postsPath, "utf8"));
-const items = Array.isArray(raw) ? raw : (raw.items ?? []);
+
+/*
+ * Three shapes, because three things produce this file: a bare array from the console export that
+ * seeded the first corpus, `{items}` from a raw Apify dataset dump, and `{posts}` with its
+ * provenance from `scrape-sentinels.mjs`. Accepting all three costs one line; guessing wrong costs
+ * a run that reports zero posts and reads like the writers have gone quiet.
+ */
+const items = Array.isArray(raw) ? raw : (raw.posts ?? raw.items ?? []);
+if (raw.source) {
+  console.log(
+    `\n  from ${raw.source}${raw.job ? ` job ${raw.job}` : ""}` +
+      `${raw.fetched_at ? `, fetched ${raw.fetched_at.slice(0, 16).replace("T", " ")}` : ""}` +
+      (raw.shape_measurable === false ? " — flat text, shape columns will be left null" : ""),
+  );
+}
 
 let skippedForeign = 0;
 let skippedRepost = 0;

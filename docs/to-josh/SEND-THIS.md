@@ -118,6 +118,35 @@ loses.
 
 ---
 
+## The scraping, and the one decision it needs from you
+
+The reference writers can now be refreshed from the repo — `scripts/scrape-sentinels.mjs`, proven
+against the live API on 9 October: 70 posts across all eight writers, Matt Barker current to that
+morning, and `adam-treboutat` returning nine after a month of returning nothing.
+
+It runs on either of two backends, and **this is a decision about the contract, not about code**:
+
+| | The console | Apify |
+|---|---|---|
+| Key | `XP_API_KEY` — ours | `APIFY_TOKEN` — his |
+| Whose infrastructure | **Thought Pilot's** | a vendor's |
+| Line breaks | stripped | preserved |
+| So it can answer | what they wrote lately | whether their structure moved |
+
+Sending him the console key makes it work immediately and leaves him depending on a service we run,
+which is the thing clause 14.3 is about — if we stopped work, his refresh stops with us. Apify costs
+him a few dollars a run and depends on nobody here.
+
+**The honest recommendation:** set up Apify on his account before handover, and keep the console key
+as ours for as long as we are doing the work. He gets a path that outlives us; we keep the fast one
+for our own runs. If you would rather hand him the console key, it works today — just say in the note
+that it points at our infrastructure, so he is choosing it knowingly.
+
+Either way the posts already stored stay readable with no key at all, and `refresh_sentinels`
+re-measures them with no key and no file.
+
+---
+
 ## Do not send
 
 | | Why |
