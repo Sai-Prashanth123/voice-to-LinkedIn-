@@ -61,9 +61,7 @@ first, and an intermittent failure in it reads as a broken schema.
 | Supabase | Organisation and project, **Pro** | Pro is for backups and storage — see the cost model |
 | Anthropic | API key | The one thing that has never been configured. No draft has yet cleared the gate without it |
 | Deepgram | API key | Transcription |
-| Telegram | A bot via `@BotFather` | New token; the chat id is Josh's own |
 | LinkedIn | Developer app | Posting is self-serve; analytics needs Community Management review, so start it early |
-| Vercel | Hobby account | For The desk |
 | GitHub | Repository | This repo, pushed |
 
 Groq and Hugging Face are optional after that — they exist because the Anthropic key never arrived.
@@ -85,16 +83,20 @@ select vault.create_secret('<service_role_key>', 'service_role_key');
 ### 3. Secrets and functions
 
 ```bash
-supabase secrets set ANTHROPIC_API_KEY=... DEEPGRAM_API_KEY=... TELEGRAM_BOT_TOKEN=... \
-  TELEGRAM_CHAT_ID=... TELEGRAM_WEBHOOK_SECRET=... TRANSCRIPT_WEBHOOK_SECRET=... \
-  LINKEDIN_CLIENT_ID=... LINKEDIN_CLIENT_SECRET=... APP_URL=https://<the-desk>
+supabase secrets set ANTHROPIC_API_KEY=... OPENAI_API_KEY=... GEMINI_API_KEY=... \
+  HUGGINGFACE_API_KEY=... TRANSCRIPT_WEBHOOK_SECRET=... \
+  LINKEDIN_CLIENT_ID=... LINKEDIN_CLIENT_SECRET=... \
+  MCP_READ_TOKEN=... MCP_WRITE_TOKEN=...
 
-supabase functions deploy telegram-webhook transcript-webhook worker-dispatch worker-select \
-  worker-triage worker-slack worker-publish worker-metrics worker-learn worker-ops
+supabase functions deploy mcp cc-submit transcript-webhook worker-dispatch worker-select \
+  worker-triage worker-publish worker-metrics worker-learn worker-ops linkedin-oauth
 ```
 
-`telegram-webhook` and `transcript-webhook` deploy with `--no-verify-jwt`; both check their own
-shared secret instead.
+Three functions are reachable without a Supabase JWT, and each authenticates itself:
+`transcript-webhook` and the MCP connector check their own credential, and `linkedin-oauth` validates
+the signed state it issued. All three are declared in `supabase/config.toml` rather than passed as a
+flag on the command line — the flag is sticky per function, so one bulk deploy without it closes a
+door silently and the only symptom is a 401 nobody can explain.
 
 ### 4. The data
 
@@ -105,9 +107,13 @@ behind it, so do it first and check the counts rather than assuming:
 In Claude Code:  "export the idea bank"     → idea-bank-<date>.json
 ```
 
-The desk's `/export` page used to do this and was deleted before the rest of the desk was. The export
-is a clause 14.2 guarantee — no lock-in — so it is being rebuilt as a tool rather than left as a gap.
-Until it lands, the fallback is `pg_dump` against the project, which is in the section below.
+That is the `export_bank` tool, built on 9 October. The web app had an `/export` page which was
+deleted some months before the rest of it, and nothing replaced it until now — so for a while this
+document described a guarantee the system could not honour.
+
+It uses a deny list rather than an allow list: every table in `public` is exported unless it is
+deliberately named as excluded, with the reason. That direction matters, because the failure mode of
+the other one is a table quietly missing from his copy of his own data.
 
 `linkedin_auth` is excluded by design — the tokens are re-issued against the new app, not moved.
 After importing, compare row counts table by table before pointing anything at the new project.
@@ -118,34 +124,38 @@ Recorded because it is not obvious from the code, and because two of these are d
 
 | | |
 |---|---|
-| The desk | `https://the-desk-saip00519-gmailcoms-projects.vercel.app` |
-| Vercel project | `the-desk`, on a personal Vercel account |
-| Function region | `syd1`, chosen to sit beside the Supabase project rather than an ocean away |
 | Supabase | `uzqvebxcxgmseqjhfpku`, `ap-southeast-2`, Thought Pilot organisation |
-| Sign-in | one address only, and it fails closed if that setting is missing |
+| Function region | `syd1`, chosen to sit beside the Supabase project rather than an ocean away |
+| The connector | `https://<ref>.supabase.co/functions/v1/mcp`, carrying its own bearer token |
+| Access | Claude only. No sign-in, no allowlist, no hosted page |
 
-**The project was renamed to `the-desk`, and the alias followed on the next deploy.** The old
-`app-` URL still resolves but is frozen on whatever was deployed before the rename, which is worse
-than a dead link: it serves a stale app rather than an error. Do not rename a project after handing
-out its URL — or if you do, re-point NEXT_PUBLIC_SITE_URL, the Vault APP_URL and the Supabase
-redirect list, and redeploy, which is what had to happen here.
+**There is no web deployment any more.** The Next.js app and the Telegram bot were removed on
+9 October 2026, which also removed four accounts from this list: Vercel, a Telegram bot, a Deepgram
+key and a Slack token.
 
-`desk.thought-pilot.com` is already added and verified on the project. It needs one CNAME record
-(`desk` -> `4890da21ee6ce82f.vercel-dns-017.com.`) and then three values move with it:
-`NEXT_PUBLIC_SITE_URL` on Vercel, `APP_URL` in Supabase Vault, and the redirect list in Supabase
-auth. At handover that domain becomes one of Josh's, and the same three values move again.
+One lesson from the app worth keeping, because it generalises: it was renamed once after its URL had
+been handed out, and the old URL kept resolving — frozen on the deploy from before the rename. That
+is worse than a dead link, because it serves something stale rather than an error. If you ever hand
+out a URL for anything here, do not rename the thing behind it.
 
 ### 5. Point things at it
 
+Nothing to register with a third party — which is the main thing that got simpler.
+
 ```bash
-curl "https://api.telegram.org/bot<NEW_TOKEN>/setWebhook" \
-  -d "url=https://<new-ref>.supabase.co/functions/v1/telegram-webhook" \
-  -d "secret_token=<TELEGRAM_WEBHOOK_SECRET>"
+# Mint the connector's tokens on the new project and set them on it:
+node mcp-server/mint-http-tokens.mjs --set
+
+# Mint the scoped database key, so the connector is not running as the service role:
+SUPABASE_ACCESS_TOKEN=sbp_... node mcp-server/mint-key.mjs --write
 ```
 
-Then Vercel: set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-`NEXT_PUBLIC_SITE_URL` and `ALLOWED_EMAIL`, and add the deployed origin to the Supabase auth redirect
-allowlist.
+Then point Claude at it: `SUPABASE_URL` and `CONTENT_MCP_KEY` in `mcp-server/.env` for a local
+server, or the connector URL and an MCP token for the hosted one. `README.md` has both, written for
+someone who is not an engineer.
+
+The call-transcript webhook is the one external thing left to re-point, if that integration is in
+use: it takes `TRANSCRIPT_WEBHOOK_SECRET` and the new function URL.
 
 ### 6. Strip the two Thought Pilot references
 
@@ -156,7 +166,7 @@ allowlist.
 ### 7. Rotate, before any real material goes in
 
 Every key used during the build is Thought Pilot's and has been handled on a development machine:
-Deepgram, Telegram, Groq, Hugging Face, the Supabase service role and a Supabase personal access
+Groq, Hugging Face, the MCP connector tokens, the Supabase service role and a Supabase personal access
 token. None of them is Josh's and none of them has ever touched real client material — every moment
 in the development project is synthetic — so 15.5's duty to disclose is not triggered.
 
@@ -169,7 +179,8 @@ bash supabase/tests/run-migrations.sh    # the schema applies from nothing
 npx deno test --allow-all supabase/functions/_shared/
 ```
 
-Then, in the new project: send a voice note and confirm a moment appears; run `/status`; confirm the
+Then, in the new project, from a Claude session: capture a thought and confirm it comes back named
+with a question; ask "is it working?" and read the answer; and the next morning confirm the
 daily 08:00 message arrives the next morning. If a service is in use that is not on the tool list,
 the system will say so itself (15.3).
 

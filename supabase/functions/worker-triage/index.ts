@@ -136,7 +136,15 @@ async function sweep(db: SupabaseClient): Promise<Response> {
 
     const p = job.payload as { source: MomentSource; source_ref: string; digest: string };
     if (p.source === "slack" && !slackEnabled) {
-      // 4.5.2 — off by default until Josh says otherwise.
+      /*
+       * 4.5.2 — off by default until Josh says otherwise, and now off permanently: `worker-slack`
+       * was deleted on 9 October, so nothing creates these any more.
+       *
+       * The branch stays rather than being tidied away. Its job now is to close out a job queued
+       * before that deletion: without it, a stranded one would be handed a triage prompt for a
+       * source with nothing behind it, fail, and retry its way to `dead`. Closing it is both
+       * cheaper and more honest than making the queue carry an error about a surface that is gone.
+       */
       await db.from("jobs").update({ status: "done" }).eq("id", job.id);
       continue;
     }

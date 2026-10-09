@@ -13,10 +13,11 @@ another developer, or to read yourself at nine on a Monday when the calendar loo
 
 | Part | Where it runs | What it does |
 |---|---|---|
-| **Telegram bot** | Supabase Edge Function `telegram-webhook` | Everything you touch on your phone: voice notes, typed thoughts, images, answering questions, pushing back on a draft |
-| **Queue dispatcher** | Edge Function `worker-dispatch`, every minute | Runs the pipeline: transcribe → interview → extract → draft → gate → visual |
+| **The MCP connector** | Edge Function `mcp` | What Claude talks to. Every tool you use lives here |
+| **The write door** | Edge Function `cc-submit` | The only thing that writes to your bank. Claude asks; this validates and writes |
+| **Queue dispatcher** | Edge Function `worker-dispatch`, every minute | Runs the pipeline: interview → extract → gate → visual |
 | **Selector** | Edge Function `worker-select`, every 4 hours | Decides what gets written next; keeps ~2 weeks queued; blocks retold stories |
-| **Triage** | Edge Function `worker-triage`, every 15 min | Turns call transcripts, Claude Code digests and Slack into *candidates* — never drafts |
+| **Triage** | Edge Function `worker-triage`, every 15 min | Turns call transcripts and Claude Code digests into *candidates* — never drafts |
 | **Call transcripts** | Edge Function `transcript-webhook` | Receives a webhook when a call ends. Adapters for Fireflies, Fathom and Otter/Granola, plus a generic reader for anything else |
 | **Slack** | Edge Function `worker-slack`, 09:00 and 17:00 on weekdays | Reads the channels Josh is in. **Does nothing unless `slack_enabled` is true** |
 | **Publisher** | Edge Function `worker-publish`, every 5 min | Publishes posts you marked ready, on the date you set |
@@ -91,36 +92,35 @@ supabase db push                      # applies supabase/migrations in order
 select vault.create_secret('https://<ref>.supabase.co/functions/v1', 'functions_base_url');
 select vault.create_secret('<service_role_key>', 'service_role_key');
 
-# Telegram access
-# After migration 0035 and the webhook deploy, a new person sends /start and is registered
-# automatically. Approved users share the same bank and drafts; no Vault edit is needed per user.
+# Access
+# There is no allowlist to manage. The only way in is Claude, holding one of two credentials:
+# CONTENT_MCP_KEY for a local server, or an MCP token for the hosted connector.
 
 # 3. Edge function environment
 supabase secrets set \
   ANTHROPIC_API_KEY=... \
-  DEEPGRAM_API_KEY=... \
   OPENAI_API_KEY=... \
-  TELEGRAM_BOT_TOKEN=... \
-  TELEGRAM_CHAT_ID=... \
-  TELEGRAM_WEBHOOK_SECRET=... \
+  GEMINI_API_KEY=... \
+  HUGGINGFACE_API_KEY=... \
   TRANSCRIPT_WEBHOOK_SECRET=... \
-  SLACK_USER_TOKEN=... \
   LINKEDIN_CLIENT_ID=... \
-  LINKEDIN_CLIENT_SECRET=...
+  LINKEDIN_CLIENT_SECRET=... \
+  MCP_READ_TOKEN=... \
+  MCP_WRITE_TOKEN=...
 
 # 4. Deploy
-supabase functions deploy telegram-webhook transcript-webhook worker-dispatch \
-  worker-select worker-triage worker-slack worker-publish worker-metrics \
-  worker-learn worker-ops
+supabase functions deploy mcp cc-submit transcript-webhook worker-dispatch \
+  worker-select worker-triage worker-publish worker-metrics \
+  worker-learn worker-ops linkedin-oauth
 
-# 5. Point Telegram at the webhook
-curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
-  -d "url=https://<ref>.supabase.co/functions/v1/telegram-webhook" \
-  -d "secret_token=<TELEGRAM_WEBHOOK_SECRET>"
-
-# 6. The web app
-cd app && npm install && vercel deploy --prod
+# 5. Connect Claude
+# Nothing to register with a third party. See README.md — a local server reads mcp-server/.env,
+# and the hosted connector takes a bearer token.
 ```
+
+> **Deleted on 9 October 2026:** `telegram-webhook`, `worker-sweep`, `worker-slack` and the Next.js
+> app. If any of them is still deployed in a project you are looking at, see `docs/closeout.md` —
+> deleting a function from the repository does not undeploy it.
 
 **LinkedIn.** Create an app at developer.linkedin.com under the Slingshot GTM page. Add the "Share on
 LinkedIn" product (self-serve, instant) for posting. Separately request Community Management API
@@ -242,7 +242,7 @@ order by created_at desc limit 20;
 
 | Symptom | Most likely cause | Check |
 |---|---|---|
-| Sent a voice note, heard nothing | Telegram webhook not reaching Supabase | `getWebhookInfo` on the Telegram API; then Supabase function logs |
+| Said something, nothing happened | Claude is not actually connected | `node mcp-server/index.mjs --check`, then the Supabase function logs |
 | Voice notes land but no questions come | Queue not being ticked, or the model call failing | `select * from jobs where status in ('pending','dead') order by id desc limit 20;` |
 | Nothing being drafted | Nothing mined, or the selector found nothing strong enough | `select status, count(*) from moments group by status;` |
 | Drafts never appear in the calendar | The gate is rejecting everything | `select check_key, count(*) from gate_runs where passed = false group by 1;` |
@@ -269,8 +269,8 @@ what each running part costs, in the place you would look when a bill surprises 
 | The same work today, with no Anthropic key | $0 | Groq, Hugging Face free tiers |
 | Transcription | ~$2/mo | Deepgram |
 | Dedup embeddings | $0 | Hugging Face free tier |
-| The desk | $0 | Vercel Hobby |
-| Telegram, LinkedIn, GitHub | $0 | — |
+| Claude | your own subscription | the only surface there is |
+| LinkedIn, GitHub | $0 | — |
 
 **Budget $53/month. Today it is closer to $25**, because the model work is on free tiers — which is
 also why no draft has yet cleared all eight gate checks. See "What is actually being spent today" in

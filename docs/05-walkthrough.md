@@ -5,10 +5,15 @@ end."*
 
 About forty minutes. Record it; the recording is the deliverable, not this document.
 
+**Rewritten on 9 October 2026.** The previous version had him send a voice note to a Telegram bot,
+open the web app's library page, and run `/review` on his phone. None of those exist. One surface
+now: Claude.
+
 ## The one rule for whoever runs it
 
-**Josh does everything. We watch.** A walkthrough where he sends the voice note, edits the rule and
-taps the button is one he can repeat next week. A demonstration is one he has to be shown again.
+**Josh does everything. We watch.** A walkthrough where he captures the thought, approves the post
+and adds the rule himself is one he can repeat next week. A demonstration is one he has to be shown
+again.
 
 Every step below is written as something for him to do. If he gets stuck, that is the most valuable
 thing the recording captures — note it and fix the system rather than coaching him past it.
@@ -17,138 +22,113 @@ thing the recording captures — note it and fix the system rather than coaching
 
 ## Before the call
 
-- [ ] The desk is reachable and he can sign in — his address, not ours (15.4)
-- [ ] Telegram bot responds to `/status` from his phone
-- [ ] At least one draft is sitting in the calendar, so the weekly pass has something in it
-- [ ] `node eval/acceptance.mjs` run that morning, so the numbers in section 7 are current
-- [ ] Screen sharing on his machine, not ours
+- [ ] He has the repo URL, and has cloned it
+- [ ] He has the two values, sent separately from the repo link
+- [ ] `node mcp-server/index.mjs --check` returns `ok` **on his machine**
+- [ ] There is at least one draft waiting, so `/review` has something real in it
+- [ ] There is at least one idea mid-interview, so `/interview` does too
+- [ ] `scripts/smoke.mjs` is clean, so a red light in the call is a real finding
+
+If the first three are not true, stop and fix them before the call. Twenty minutes of setup debugging
+is not a walkthrough, and it is the part he should never have to see twice.
 
 ---
 
-## 1 · What this is, in one minute (2 min)
+## 1. He opens it (5 min)
 
-Say it once, plainly, and do not repeat it later:
+**He runs `claude` in the project folder and types `hello`.**
 
-> It turns things you already say into posts only you could have written. You talk; it asks; it
-> writes; nothing goes out without you.
+What should happen: it greets him, says what is waiting, and names the one thing worth doing first.
+No tool names, no lists of capabilities.
 
-Then show the shape — five ways in, one idea bank, one calendar — and move on. The rest of the call
-is him using it.
+Then **he types `/waiting`**. If anything has happened while nobody was looking — a parked idea, a low
+queue, a failed publish — it reads it out and clears it.
 
-Runbook: §1 What each part does.
+> Say out loud, here, that this is now the only way anything reaches him. Nothing will message him.
+> If that is wrong for how he works, this is the moment to hear it.
 
----
+## 2. He captures something real (8 min)
 
-## 2 · Capture, from his phone (6 min)
+**He says something that actually happened this week.** Half a sentence. Not a test phrase — the
+system is being judged on his material, so use his material.
 
-**He sends a voice note to the bot.** A real one, about something that actually happened this week.
-Not a test sentence — the system's whole quality argument rests on lived experience, and a fake one
-teaches him the wrong habit.
+Watch for:
 
-Then, while it transcribes:
+- It names the idea from his own words, and says the name in passing rather than asking him for one
+- It asks **one** question, not five
+- His answer goes in untouched. Ask him to check that what came back is what he said
 
-- He sends a **typed** thought
-- He sends a **photo** of a diagram, and answers the two questions it asks
+**He answers two or three questions, then stops** — `/interview` or just trailing off. The point to
+make: he can leave it half-answered and come back, and nothing is lost or nagging.
 
-**What to point out:** it comes back with a question, not a post. That is 5.5 — the interviewer never
-writes. And he can ignore the question for a day; 4.1.3 means a two-minute session is a complete one.
+## 3. He writes one (10 min)
 
-**What he should take away:** capture costs seconds and never blocks him.
+**He types `/write`.**
 
----
+While it works, show him what it is reading: `get_drafting_brief` is his own material plus the
+reference library, and nothing else. No web access, no other ideas, no archive.
 
-## 3 · The interview, and being allowed to stop (5 min)
+When the draft lands, **he reads it before anything else happens.** The question to ask him, exactly:
 
-**He answers the question.** Then another. Then he types `/stop` mid-way.
+> Could anyone else have written this?
 
-**What to point out:** parking is a real outcome, not a failure. 5.8 caps the questions, and a moment
-that will not open is kept rather than padded (6.3 — nothing is ever deleted). Show him the parked
-moment in the bank and the **Add to this one** button that brings it back.
+If yes, that is the most useful thing in the recording. Do not defend the draft — ask what is missing
+and whether the interview should have asked for it.
 
----
+## 4. The checks run (5 min)
 
-## 4 · The library — the part that matters most (8 min)
+**He asks for the gate.** Eight checks, each judged on its own rubric.
 
-This is the section to spend time on. If he changes nothing else himself, it should be this.
+Show him a rejection if there is one to show — including one of the three that were wrong on
+5 October, now fixed and kept as a test. The point: a rejection tells him which sentence and why, and
+a rewrite carries the reasons forward.
 
-**He opens The desk → Library**, and:
+## 5. He decides (7 min)
 
-- Reads `core_rules`, which is locked. Explain why: the lived-experience test and the no-fabrication
-  rule are the two things the learning loop structurally cannot touch, whatever the numbers say.
-- Edits **one hook rule**, saves, and sees the version go up.
-- Rolls it back, and sees the reason and date on each version (12.12).
-- From Telegram, sends `/rule never use the word journey` and picks the section — a rule added in
-  under a minute, from his phone (8.8).
+**He goes through `/review`.** On one draft, each of these at least once:
 
-**What to point out:** seven sections are still empty and waiting on him, and the voice guide is the
-one that carries everything. Show him the proposal the system has already written from his recording,
-if there is one.
+- `put it out <a day>` — and see that it comes back with the date and nothing else to do
+- `hold that one`, with a reason in his words — and see the reason recorded
+- an edit to one line — and see the change measured
 
-Runbook: §5 How to change things.
+Say plainly: **marking it ready is the only thing that authorises publishing.** The database refuses
+every other route, four ways. Nothing in the system can decide to post for him.
 
----
+## 6. He changes a rule (5 min)
 
-## 5 · The weekly pass (7 min)
+**He says a rule out loud** — "never use the word journey", or whatever he actually dislikes.
 
-**In Telegram, he runs `/review`.** He should:
+It goes into the library immediately, and the **next** draft is written against it. No deploy, no
+waiting, no asking us. Then `get_section_history` shows it, and shows that it can be rolled back if
+the posts get worse.
 
-- Answer the conversation question, or skip it — and be told plainly that skipping is fine and it
-  stops asking after twice (12.8)
-- Schedule one draft with a tap
-- Reject one with **Not this one**, and leave the one-line verdict it asks for
-- Open the rewrite link and edit a post properly in the calendar
+Then the other half: **he reads one of his reference writers.** `/sentinels`, then "show me Matt
+Barker's last three posts". Say which two of Matt's moves are deliberately ruled out for him, and
+why — that is the part he is most likely to disagree with, and disagreement is useful.
 
-**What to point out:** nothing published. Marking ready is his authorisation and the only one — and
-the database refuses to store a published post without it, so it is not a promise about our code.
+## 7. When it breaks (5 min)
 
----
+Show him the three things, in this order:
 
-## 6 · When it breaks (5 min)
+```bash
+node mcp-server/index.mjs --check
+node scripts/smoke.mjs
+```
 
-**Show him a real daily message.** Then:
+and in a session, "is it working?".
 
-- Where the queue-low warning comes from, and why running short is sometimes the correct answer (7.7)
-- That errors surface once and do not repeat every morning
-- That the system tells him if it starts using a service he was not told about (15.3)
-- The four checks in the runbook when something looks wrong
-
-**What he should take away:** silence is not the same as nothing happening, and the system knows the
-difference.
-
-Runbook: §4 What to check first when something breaks.
+Then the honest part: **nothing can tell him when something fails.** A post that does not go out
+records why and waits for his next session. `/waiting` is how he finds out. If that is not good
+enough, email alerts on his own account are about an hour's work.
 
 ---
 
-## 7 · What it costs, and where it stands (5 min)
+## What to write down afterwards
 
-- The month's spend, from the monthly message he already receives
-- The two decisions that cost money and why we would not economise on either: the eight-check gate,
-  and Supabase Pro for backups
-- **The acceptance scoreboard** — the twelve component tests, what each is waiting on, and 17a. Be
-  straight about the number. Today it is zero of twelve and none of them are failing.
+- Every place he hesitated, and what he expected instead
+- Every word he used for something we call by another name
+- Anything he asked for that is not there
+- Whether the draft passed his own test, in his words
 
-Runbook: §4b What it costs · §6b Where the build stands.
-
----
-
-## 8 · It is yours, and it runs without us (5 min)
-
-**He clicks Export**, and opens the file. Twenty-two tables, his data, no lock-in.
-
-Then walk `OWNERSHIP.md` and `docs/04-handover.md`:
-
-- Everything transfers on payment, including the prompts and the library
-- No component needs a licence from us
-- The migration into his accounts has been rehearsed, not just written — and the two steps that have
-  not been proven are named in the document rather than glossed
-
-**Close on the honest position:** until the accounts are in his name, 14.3 is not met. That is the
-next thing, and it is a checklist rather than a project.
-
----
-
-## After the call
-
-- [ ] Recording saved somewhere he owns
-- [ ] Anything he got stuck on written down as a fix, not a coaching note
-- [ ] Any question he asked twice — that is a documentation gap, not his fault
+The first two go into the library and the tool descriptions. The third goes on the roadmap. The fourth
+is the only measure of whether any of this worked.
