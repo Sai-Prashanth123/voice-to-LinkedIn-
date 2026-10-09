@@ -46,9 +46,10 @@ psql_run < "$ROOT/supabase/tests/shim.sql"
 echo "==> migrations"
 for f in "$ROOT"/supabase/migrations/*.sql; do
   name="$(basename "$f")"
-  # pg_cron and pg_net are Supabase-provided; the shim supplies their surface instead.
-  sed -e '/create extension if not exists pg_cron/d' \
-      -e '/create extension if not exists pg_net/d' "$f" | psql_run >/dev/null
+  # pg_cron and pg_net are Supabase-provided; the shim supplies their surface instead. The patterns
+  # live in managed-extensions.sed because the CI workflow needs the same ones, and when they were
+  # inline here CI diverged and failed on every push for three days.
+  sed -f "$ROOT/supabase/tests/managed-extensions.sed" "$f" | psql_run >/dev/null
   echo "    ok  $name"
 done
 

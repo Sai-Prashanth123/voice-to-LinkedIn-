@@ -2,10 +2,27 @@
 #
 # WHY THIS DID NOT EXIST BEFORE
 #
-# There are 125 Deno tests, 26 MCP tests and 110 end-to-end cases in here, and the only thing that
+# There are 152 Deno tests, 101 MCP tests and 112 end-to-end cases in here, and the only thing that
 # ever ran them was a person remembering to. Every regression this build has had was found by
 # somebody noticing — including a worker deployed two days stale, and a draft reporting itself
 # fully gated with two checks never run.
+#
+# AND WHY IT THEN WENT RED FOR THREE DAYS WITHOUT ANYONE LOOKING
+#
+# Added on 6 October, failing from the first push to 9 October: every single run. Not one of the
+# three jobs was broken by a code change — each was a way this file disagreed with how the same
+# checks run locally, so `deno test` and `node --test` passed on a laptop while CI failed, and the
+# laptop was the one being reported. Fixed on 9 October:
+#
+#   1. `node mcp-server/index.mjs --tools` EXECUTES the server, so it needs the SDK installed.
+#      There was no npm step, so it died on an import before reading a single tool name.
+#   2. `supabase/functions/mcp` has its own deno.json import map. `deno check` without --config
+#      cannot see zod or the MCP SDK and reported 18 missing dependencies for one function.
+#   3. The migration job inlined its own copy of the two `create extension` lines to strip, and
+#      run-migrations.sh had the real one. They drifted. Both now read managed-extensions.sed.
+#
+# The lesson is in the shape of all three: a CI job that re-states what a local script already does
+# is a second copy, and a second copy drifts. Where a command exists, call it.
 #
 # WHAT RUNS HERE AND WHAT CANNOT
 #
@@ -34,7 +51,7 @@ concurrency:
 
 jobs:
   shared:
-    name: Shared logic (125 tests)
+    name: Shared logic
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,10 +61,20 @@ jobs:
       - name: Type-check every edge function
         # A function that no longer compiles is a function that will fail on deploy, and the deploy
         # is the one moment nobody is watching a terminal.
+        #
+        # --config where the function has its own deno.json. The MCP connector does, because it
+        # imports the SDK and zod by bare specifier; without it this step reported 18 phantom
+        # missing dependencies and said nothing about the other eleven functions.
         run: |
           for f in supabase/functions/*/index.ts; do
-            echo "checking $f"
-            deno check --allow-import "$f"
+            dir="$(dirname "$f")"
+            if [ -f "$dir/deno.json" ]; then
+              echo "checking $f (with $dir/deno.json)"
+              deno check --allow-import --config "$dir/deno.json" "$f"
+            else
+              echo "checking $f"
+              deno check --allow-import "$f"
+            fi
           done
       - name: Run the shared tests
         run: deno test --allow-all supabase/functions/_shared/
@@ -63,13 +90,26 @@ jobs:
       - name: Every script parses
         # These are one-shot operational scripts run by hand against the live database. A syntax
         # error in one is only discovered at the moment somebody needs it, usually under pressure.
+        #
+        # `node --check` is syntax only and resolves no imports, which is why this step passed while
+        # the next one failed.
         run: |
           for f in scripts/*.mjs scripts/lib/*.mjs eval/*.mjs eval/e2e/*.mjs eval/e2e/cases/*.mjs \
                    mcp-server/*.mjs mcp-server/tools/*.mjs cc-agent/*.mjs; do
             node --check "$f"
           done
+      - name: Install the MCP server's dependencies
+        # The step below runs the server rather than parsing it. npm ci needs the lockfile to match
+        # package.json; if that ever drifts this fails loudly here instead of in a session.
+        working-directory: mcp-server
+        run: npm ci
       - name: The tool registry has no duplicate names
         run: node mcp-server/index.mjs --tools
+      - name: The MCP server's own tests
+        # 101 of them, and none touches the network: the suite builds a fake db and asserts on what
+        # the tools ask it for. They were left out of CI for no reason anyone recorded.
+        working-directory: mcp-server
+        run: node --test
 
   migrations:
     name: Migrations build from nothing
@@ -89,14 +129,27 @@ jobs:
       - name: Apply every migration in order to an empty database
         # 14.3 promises the system can be rebuilt from this repository into Josh's own account. The
         # only way to know that is to do it, every time, rather than the day it matters.
+        #
+        # managed-extensions.sed is shared with run-migrations.sh. Keeping the patterns here instead
+        # is what made this job fail on every push from 6 October.
         env:
           PGPASSWORD: postgres
         run: |
           psql -h localhost -U postgres -f supabase/tests/shim.sql
           for f in supabase/migrations/*.sql; do
             echo "applying $(basename "$f")"
-            psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f "$f"
+            sed -f supabase/tests/managed-extensions.sed "$f" \
+              | psql -h localhost -U postgres -v ON_ERROR_STOP=1
           done
           psql -h localhost -U postgres -c \
             "select count(*) as tables from information_schema.tables
              where table_schema='public' and table_type='BASE TABLE';"
+      - name: Assertions about the schema that was just built
+        # run-migrations.sh applies these locally and CI did not, so an assertion could fail for
+        # days without anyone seeing it.
+        env:
+          PGPASSWORD: postgres
+        run: |
+          if [ -f supabase/tests/assertions.sql ]; then
+            psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/tests/assertions.sql
+          fi
