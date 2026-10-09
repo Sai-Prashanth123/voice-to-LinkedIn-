@@ -3,7 +3,7 @@
  *
  * WHY IT DETECTS BUT DOES NOT REWRITE
  *
- * The source document (ai-trait-scrubber.md) is written for a pipeline where the scrubber rewrites
+ * The source document (docs/reference/ai-trait-scrubber.md) is written for a pipeline where the scrubber rewrites
  * and hands a certificate to the next stage. That shape does not survive the move here, and forcing
  * it would make the result worse.
  *
@@ -119,7 +119,64 @@ export const scrubTools = [
         };
       }
 
+      /*
+       * SCRUB, OR START AGAIN?
+       *
+       * This pass used to hand back findings and leave the caller to fix them line by line, however
+       * many there were. That is right for a draft with three tells in it and wrong for a draft that
+       * is AI-voiced to the core: sanding each flagged line individually converges everything to the
+       * same beige, because what gets fixed is the surface and what is wrong is the register.
+       *
+       * The rule is borrowed from a working system that had the same problem and measured its way
+       * out: if clearing the findings would mean rewriting more than about a third of the lines, the
+       * draft is not a good post with slop on top. Re-read the voice brief and write it again whole,
+       * in one breath.
+       *
+       * Counted in LINES touched rather than findings, because ten flags on one sentence is one
+       * sentence to fix, and the question being asked is how much of the post survives.
+       */
+      const bodyLines = body.split(/\n/).map((l) => l.trim()).filter(Boolean);
+      const touched = new Set(
+        result.findings.map((f) => f.line).filter((n) => Number.isInteger(n)),
+      );
+      const share = bodyLines.length > 0 ? touched.size / bodyLines.length : 0;
+
+      /*
+       * A ratio needs enough lines to mean anything.
+       *
+       * The threshold is a third, and on a three-line post a single flagged line is already 33% — so
+       * the first version of this told the writer to throw away one of Josh's genuinely good drafts
+       * because one line of it mentioned a number. The ratio only becomes evidence of a register
+       * problem once there is a post's worth of lines to be wrong about.
+       *
+       * So two conditions, not one: a third of the lines AND at least three of them. Below that it is
+       * an ordinary scrub, which is the cheaper mistake — fixing three lines by hand costs nothing,
+       * and rewriting a good post wholesale loses it.
+       */
+      const RE_VOICE_SHARE = 0.3;
+      const RE_VOICE_MIN_LINES = 3;
+
+      const action = result.findings.length === 0
+        ? "clean"
+        : share > RE_VOICE_SHARE && touched.size >= RE_VOICE_MIN_LINES
+        ? "re-voice"
+        : "scrub";
+
       return {
+        action,
+        action_means: action === "clean"
+          ? "Nothing mechanical to fix. The judgement questions below still apply — they are the half " +
+            "a regex cannot answer."
+          : action === "scrub"
+          ? `${touched.size} of ${bodyLines.length} lines carry a finding. Fix them in place, keeping ` +
+            `his phrasing: the point is to remove the tell, not to smooth the line.`
+          : `${touched.size} of ${bodyLines.length} lines carry a finding — more than a third. STOP ` +
+            `scrubbing. A draft this far in is not a good post with slop on top of it, and fixing ` +
+            `each line separately is how every post ends up sounding the same. Re-read ` +
+            `get_voice_brief and the idea's material, then write it again whole, in one go.`,
+        lines_touched: touched.size,
+        lines_total: bodyLines.length,
+
         findings: result.findings,
         counts: result.counts,
         measured: result.measured,

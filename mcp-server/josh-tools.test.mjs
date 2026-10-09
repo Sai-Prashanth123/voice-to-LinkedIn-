@@ -116,6 +116,10 @@ test("the tools a person would reach for by name all exist", () => {
     "record_post_verdict", // "that one landed"
     "record_conversation", // "it got me a call"
     "mark_notices_read",
+    // Running the machinery, rather than waiting for its schedule.
+    "run_worker", // "why has nothing been chosen"
+    "refresh_sentinels", // "have their habits changed"
+    "export_bank", // "give me my data"
   ];
 
   assert.deepEqual([...joshToolNames].sort(), [...expected].sort());

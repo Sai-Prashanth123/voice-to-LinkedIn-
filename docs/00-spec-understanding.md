@@ -10,7 +10,7 @@ where the spec is silent, ambiguous, or in tension with itself.
 Nothing here changes the spec. Where I disagree or see a risk, I say so and mark it clearly.
 
 **Provenance.** Checked against the full source at
-`C:\Users\saip0\OneDrive\Documents\Content System Build Spec.html` (the body lives in
+`C:\Users\saip0\OneDrive\Documents\docs/from-josh/build-spec-v2.0.html` (the body lives in
 `Content System Build Spec_files\saved_resource.html`). The prose is identical to what was supplied, and
 the clause 2 flow diagram — which renders as an inline SVG and is invisible to a plain text extraction —
 was pulled out separately and matches the screenshots verbatim. **116 numbered requirements** across

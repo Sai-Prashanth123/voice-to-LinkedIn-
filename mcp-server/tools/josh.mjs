@@ -346,6 +346,57 @@ export const joshTools = [
     handler: (args, { url, key }) => post(url, key, { kind: "conversation", ...args }),
   },
 
+  /* ── Running the machinery, from a session ──────────────────────────────── */
+
+  {
+    name: "run_worker",
+    config: {
+      title: "Run one of the scheduled jobs now",
+      description:
+        "The scheduled jobs normally run on their own — selection every four hours, learning on " +
+        "Mondays, the health check daily. Use this when Josh does not want to wait: \"why has " +
+        "nothing been chosen\", \"check if anything is broken\", \"look for library changes now\". " +
+        "Publishing is deliberately NOT on the list: a post goes out on the date he set, never " +
+        "because something asked for it now.",
+      inputSchema: {
+        worker: z.enum(["select", "learn", "ops", "triage"]).describe(
+          "select = choose what to write next · learn = look for library changes · " +
+            "ops = the health check · triage = read waiting candidates",
+        ),
+      },
+    },
+    handler: (args, { url, key }) => post(url, key, { kind: "run_worker", ...args }),
+  },
+
+  {
+    name: "refresh_sentinels",
+    config: {
+      title: "Re-measure the reference writers",
+      description:
+        "Re-measures the eight reference writers from the posts already stored and records what " +
+        "moved as a proposal for Josh to approve. Use it after a fresh scrape, or when he asks " +
+        "whether their habits have changed. It never changes the library by itself — that is " +
+        "deliberate, and decide_proposal is how a change lands. Most runs correctly find nothing " +
+        "worth proposing.",
+      inputSchema: {},
+    },
+    handler: (args, { url, key }) => post(url, key, { kind: "refresh_sentinels", ...args }),
+  },
+
+  {
+    name: "export_bank",
+    config: {
+      title: "Export everything in the idea bank",
+      description:
+        "Every idea, interview answer, draft, verdict and library section as one JSON object. This " +
+        "is the no-lock-in guarantee: the work is his, with nothing held hostage. Use it when he " +
+        "asks for his data, wants a backup, or is handing the system to someone else. Credentials " +
+        "are left out on purpose and it says which tables were skipped and why.",
+      inputSchema: {},
+    },
+    handler: (args, { url, key }) => post(url, key, { kind: "export_bank", ...args }),
+  },
+
   {
     name: "mark_notices_read",
     config: {

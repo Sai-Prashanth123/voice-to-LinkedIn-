@@ -43,6 +43,7 @@ import { autoName, setIdeaName } from "../_shared/idea-names.ts";
 import { verifyExtraction } from "../_shared/extraction.ts";
 import { applyDraft } from "../_shared/handlers/draft.ts";
 import * as decisions from "./decisions.ts";
+import * as maintenance from "./maintenance.ts";
 import type { Body } from "./decisions.ts";
 import { finishGate } from "../_shared/handlers/gate.ts";
 import type { Claim } from "../_shared/claims.ts";
@@ -126,6 +127,11 @@ Deno.serve(async (req) => {
     conversation: decisions.recordConversationRoute,
 
     notices_read: decisions.noticesRead,
+
+    // The three the pipeline could not do from a session at all. See maintenance.ts.
+    run_worker: maintenance.runWorker,
+    refresh_sentinels: maintenance.refreshSentinels,
+    export_bank: maintenance.exportBank,
   };
 
   const route = ROUTES[String(body.kind ?? "")];

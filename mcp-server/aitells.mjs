@@ -3,7 +3,7 @@
  *
  * WHY THIS EXISTS
  *
- * ai-trait-scrubber.md states the problem better than a comment can: loading rules as context is
+ * docs/reference/ai-trait-scrubber.md states the problem better than a comment can: loading rules as context is
  * not enforcement. A model handed a list of banned constructions and asked to check itself will
  * report that it checked itself. It is not lying — it has no mechanism to run thirty-one rules
  * against a hundred lines and count.
@@ -34,7 +34,7 @@
  *
  * RULE IDS MATCH THE SOURCE DOCUMENT
  *
- * A finding cites 2C-2, and 2C-2 is a real heading in ai-trait-scrubber.md. Anyone can go and read
+ * A finding cites 2C-2, and 2C-2 is a real heading in docs/reference/ai-trait-scrubber.md. Anyone can go and read
  * why. Paraphrasing the rule into a new numbering would make the document and the code two
  * standards, and then the question "which one is right" has no answer.
  */

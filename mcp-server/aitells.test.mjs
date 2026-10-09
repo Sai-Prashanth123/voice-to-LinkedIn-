@@ -6,7 +6,7 @@
  * everything and still look green, and the symptom in production is a writer who stops reading the
  * findings because they are always the same length.
  *
- * The four worked examples in ai-trait-scrubber.md are used as known answers. If the document and
+ * The four worked examples in docs/reference/ai-trait-scrubber.md are used as known answers. If the document and
  * this code ever disagree, one of them is wrong and this is where it surfaces — which is the whole
  * reason the rule ids match the document's headings rather than being renumbered.
  */
