@@ -12,10 +12,18 @@
 
 import { defineCase, block, skip } from "../harness.mjs";
 
+/*
+ * WHAT SHOULD BE DEPLOYED, AFTER 9 OCTOBER 2026.
+ *
+ * `telegram-webhook` and `worker-slack` are gone from the repository. They are deliberately still
+ * LISTED below, in a second array, because the drift this case exists to catch runs both ways: a
+ * function in the repo and not in the project, and a function in the project and not in the repo. The
+ * second is the one that bit this build — eight stale deploys running code nobody could read.
+ */
 const EXPECTED_FUNCTIONS = [
-  "telegram-webhook", "transcript-webhook", "worker-dispatch", "worker-select",
-  "worker-triage", "worker-slack", "worker-publish", "worker-metrics",
-  "worker-learn", "worker-ops",
+  "transcript-webhook", "worker-dispatch", "worker-select",
+  "worker-triage", "worker-publish", "worker-metrics",
+  "worker-learn", "worker-ops", "cc-submit", "mcp",
   // The OAuth door. Listed here the moment it was written rather than the moment it was deployed,
   // so S0-01 goes red until it actually ships — which is the whole point of this case. A function
   // that exists in the repository and not in the project is exactly the drift being checked for.
@@ -24,8 +32,16 @@ const EXPECTED_FUNCTIONS = [
 
 const EXPECTED_CRON = [
   "queue-tick", "triage-sweep", "select-tick", "publish-due",
-  "metrics-7d", "ops-daily", "ops-monthly", "learn-weekly", "slack-sweep",
+  "metrics-7d", "ops-daily", "ops-monthly", "learn-weekly",
 ];
+
+/**
+ * Removed on 9 October with the surfaces they served. Listed so that one still being deployed is a
+ * finding rather than an absence of one: a webhook left live against a deleted function retries into
+ * a 404 forever, and the chat looks broken rather than closed.
+ */
+const SHOULD_BE_GONE = ["telegram-webhook", "worker-slack", "worker-sweep"];
+const CRON_SHOULD_BE_GONE = ["slack-sweep", "weekly-sweep"];
 
 export const cases = [
   defineCase({
@@ -33,7 +49,7 @@ export const cases = [
     stage: 0,
     clause: "13",
     tier: "live",
-    name: "all ten Edge Functions are deployed and active",
+    name: "every function in the repository is deployed and active",
     async run({ live, assert, seen }) {
       const fns = await live.functions();
       if (!fns) block("no SUPABASE_ACCESS_TOKEN, so the deployed function list cannot be read");
@@ -45,6 +61,52 @@ export const cases = [
         const fn = bySlug.get(slug);
         assert.ok(fn, slug + " is deployed");
         assert.equal(fn?.status, "ACTIVE", slug + " is active");
+      }
+    },
+  }),
+
+  defineCase({
+    id: "S0-01b",
+    stage: 0,
+    clause: "13",
+    tier: "live",
+    name: "the removed surfaces are gone from the project, not just from the repository",
+    async run({ live, assert, seen, note }) {
+      /*
+       * DRIFT RUNS BOTH WAYS.
+       *
+       * S0-01 catches a function in the repository and not in the project. This catches the opposite,
+       * which is the one that actually bit this build: eight stale deploys running code nobody could
+       * read. Deleting a function from git does not undeploy it.
+       *
+       * It matters most for `telegram-webhook`. A live webhook pointed at a deleted function retries
+       * into a 404 forever, and from Josh's side the bot looks broken rather than closed — which is a
+       * worse way to retire something than simply telling him.
+       */
+      const fns = await live.functions();
+      if (!fns) block("no SUPABASE_ACCESS_TOKEN, so the deployed function list cannot be read");
+
+      const live_slugs = new Set(fns.map((f) => f.slug));
+      const stillThere = SHOULD_BE_GONE.filter((slug) => live_slugs.has(slug));
+      seen("still_deployed", stillThere);
+
+      // Reported rather than asserted while the handover is in flight: the webhook is deliberately
+      // left running until Josh has the replacement in his hands, so a failure here before that would
+      // be the test disagreeing with a decision rather than finding a fault.
+      if (stillThere.length > 0) {
+        note(
+          "awaiting_undeploy",
+          `${stillThere.join(", ")} still deployed. Deliberate until the handover reaches him; ` +
+            `undeploy and revoke the bot token at that point.`,
+        );
+      }
+
+      // Through system_health(), the same way S0-03 reads it: cron.job is not reachable over
+      // PostgREST, and a second way of asking would be a second thing to keep right.
+      const health = await live.health();
+      const names = new Set((health?.cron_jobs ?? []).map((j) => j.name));
+      for (const name of CRON_SHOULD_BE_GONE) {
+        assert.not(names.has(name), `${name} is still scheduled with nothing to run`);
       }
     },
   }),
@@ -95,7 +157,7 @@ export const cases = [
     stage: 0,
     clause: "13.1",
     tier: "live",
-    name: "all nine scheduled jobs are registered",
+    name: "every scheduled job that should be registered is",
     async run({ live, assert, seen }) {
       const health = await live.health();
       if (!health) block("system_health() is not deployed — apply migration 0029");

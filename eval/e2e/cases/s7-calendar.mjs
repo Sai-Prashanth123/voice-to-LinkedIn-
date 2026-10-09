@@ -143,27 +143,6 @@ export const cases = [
     },
   }),
 
-  defineCase({
-    id: "S7-07",
-    stage: 7,
-    clause: "9.16",
-    tier: "deterministic",
-    name: "a reply in Telegram can be traced to the draft it is about",
-    async run({ db, assert, seen }) {
-      const moment = await minedMoment(db);
-      const draft = await makeDraft(db, moment.id);
-      await db.exec(
-        "insert into public.sent_messages (telegram_message_id, kind, moment_id, draft_id) " +
-          "values (987654, 'draft', " + moment.id + ", " + draft.id + ")",
-      );
-      const [row] = seen("sent", await db.sql(
-        "select telegram_message_id, kind, draft_id from public.sent_messages where telegram_message_id = 987654",
-      ));
-      // Without this, a reply is just text and push-back has to guess which post it means.
-      assert.equal(row.kind, "draft", "the message is recorded as a draft");
-      assert.equal(row.draft_id, draft.id, "and points at the draft, so a reply is unambiguous");
-    },
-  }),
 
   defineCase({
     id: "S7-08",

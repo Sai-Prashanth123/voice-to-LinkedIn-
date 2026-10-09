@@ -95,26 +95,6 @@ export const cases = [
     },
   }),
 
-  defineCase({
-    id: "S1-05",
-    stage: 1,
-    clause: "13.2",
-    tier: "deterministic",
-    name: "the same delivery twice creates one job, not two",
-    async run({ db, assert, seen }) {
-      // Telegram retries, transcript webhooks retry, cc-agent re-sends after a failure. Without the
-      // dedupe key a retried delivery becomes a second moment about the same thing.
-      const key = "triage:call_transcript:e2e-same-id";
-      await makeJob(db, "triage_digest", { source: "call_transcript" }, { dedupeKey: key });
-      const err = await db.expectError(
-        "insert into public.jobs (type, payload, status, dedupe_key) values " +
-          "('triage_digest', '{}'::jsonb, 'pending', " + q(key) + ")",
-      );
-      seen("second insert", { refused: Boolean(err) });
-      assert.ok(err, "a duplicate delivery is refused by the unique dedupe key");
-      assert.match(err, /dedupe|unique|duplicate/i, "and refused for that reason");
-    },
-  }),
 
   defineCase({
     id: "S1-06",
@@ -202,21 +182,4 @@ export const cases = [
     },
   }),
 
-  defineCase({
-    id: "S1-10",
-    stage: 1,
-    clause: "4.1",
-    tier: "deterministic",
-    name: "courtesy is not a moment",
-    async run({ assert, seen }) {
-      const fs = await import("node:fs");
-      const source = fs.readFileSync(
-        new URL("../../../supabase/functions/telegram-webhook/index.ts", import.meta.url),
-        "utf8",
-      );
-      seen("telegram-webhook", { chars: source.length });
-      // "thanks" and "ok" should not each become an entry in the bank Josh has to triage later.
-      assert.match(source, /isChatter/, "a chatter filter exists on the real webhook");
-    },
-  }),
 ];

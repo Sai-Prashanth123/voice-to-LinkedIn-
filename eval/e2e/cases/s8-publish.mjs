@@ -120,45 +120,6 @@ export const cases = [
     },
   }),
 
-  defineCase({
-    id: "S8-06",
-    stage: 8,
-    clause: "11.2",
-    tier: "deterministic",
-    name: "every callback the weekly pass sends fits Telegram's 64-byte limit",
-    async run({ assert, seen }) {
-      // weeklypass.ts pulls in the Supabase client through an `npm:` specifier, which Node's loader
-      // will not resolve, so the callback templates are read from the source and measured. That is
-      // the property that matters: Telegram silently TRUNCATES callback_data over 64 bytes, and a
-      // truncated action routes to the wrong handler or to none — the button looks live and does
-      // nothing, which is the failure mode this whole harness exists to catch.
-      const fs = await import("node:fs");
-      const source = fs.readFileSync(
-        new URL("../../../supabase/functions/_shared/weeklypass.ts", import.meta.url),
-        "utf8",
-      );
-
-      // Every `data: "..."` on a button, with interpolations replaced by a wildly generous id.
-      const templates = [...source.matchAll(/data:\s*[`"']([^`"']*)[`"']/g)].map((m) => m[1]);
-      const worst = templates.map((t) => ({
-        template: t,
-        bytes: Buffer.byteLength(t.replace(/\$\{[^}]+\}/g, "999999999"), "utf8"),
-      }));
-      seen("callbacks", worst);
-
-      assert.ok(templates.length > 0, "the weekly pass builds callback data");
-      const overLimit = worst.filter((w) => w.bytes > 64);
-      assert.same(overLimit, [], "no callback can exceed 64 bytes, even with a nine-digit post id");
-
-      // And every prefix the buttons emit must be one parseAction knows, or the tap does nothing.
-      const prefixes = [...new Set(templates.map((t) => t.split(":")[0]).filter(Boolean))];
-      seen("prefixes", prefixes);
-      for (const prefix of prefixes) {
-        if (prefix.includes("${")) continue;
-        assert.match(source, new RegExp('["\'`]' + prefix + '\\b'), prefix + " is handled by parseAction");
-      }
-    },
-  }),
 
   defineCase({
     id: "S8-07",
@@ -258,12 +219,18 @@ export const cases = [
        * exactly one approval path, so it is the only file that has to be checked.
        */
       const fs = await import("node:fs");
-      const weeklypass = fs.readFileSync(
-        new URL("../../../supabase/functions/_shared/weeklypass.ts", import.meta.url),
+      /*
+       * The approval path moved twice and this case followed it both times. It read the web app's
+       * actions.ts until that was deleted, then `weeklypass.ts` until that went with Telegram. There
+       * is now exactly one writer of `marked_ready_at` — `_shared/approve.ts` — which makes the
+       * check sharper: one file to read rather than two to keep in step.
+       */
+      const approve = fs.readFileSync(
+        new URL("../../../supabase/functions/_shared/approve.ts", import.meta.url),
         "utf8",
       );
 
-      const writesReady = /status:\s*["']ready["']/.test(weeklypass);
+      const writesReady = /status:\s*["']ready["']/.test(approve);
       note("ready_is_written_by_code", writesReady);
 
       const moment = await makeMoment(db);

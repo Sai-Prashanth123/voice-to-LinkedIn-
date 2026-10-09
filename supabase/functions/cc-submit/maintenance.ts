@@ -241,14 +241,66 @@ export async function refreshSentinels(db: SupabaseClient, _body: Body): Promise
     block +
     current.slice(current.indexOf(END) + END.length);
 
-  const { data: proposal, error } = await db.from("library_proposals").insert({
-    section_key: "reference_posts",
-    claim: `Re-measured ${posts.length} posts by ${report.length} reference writers from the stored ` +
-      `corpus. Shape figures rest on the ${shapedAll.length} that kept their line breaks.`,
-    evidence: { kind: "sentinel_measurement", measured_at: measurement.measured_at, report },
-    proposed_body: proposedBody,
-    status: "open",
-  }).select("id").single();
+  /*
+   * ONE OPEN PROPOSAL PER SECTION, NOT ONE PER ASKING.
+   *
+   * Running this twice while testing left two identical proposals waiting on Josh. That is the exact
+   * failure the refresh script's 25% threshold exists to avoid — stated in its own comment: "a
+   * proposal he does not act on teaches him to stop reading them". A tool he can call on demand makes
+   * stacking them easier, not harder.
+   *
+   * So an existing open proposal for this section is REPLACED. Its body is rebuilt from the section as
+   * it stands right now, which also fixes a worse problem: a proposal composed an hour ago carries
+   * the old section inside it, so approving a stale one silently reverts whatever was approved in
+   * between.
+   */
+  const claim = `Re-measured ${posts.length} posts by ${report.length} reference writers from the ` +
+    `stored corpus. Shape figures rest on the ${shapedAll.length} that kept their line breaks.`;
+  const evidence = { kind: "sentinel_measurement", measured_at: measurement.measured_at, report };
+
+  const { data: alreadyOpen } = await db
+    .from("library_proposals")
+    .select("id")
+    .eq("section_key", "reference_posts")
+    .eq("status", "open")
+    .order("id", { ascending: true });
+
+  // Keep the oldest open one and refresh it; close any extras this tool created before the fix.
+  const [keep, ...extras] = alreadyOpen ?? [];
+
+  let proposal: { id: number } | null = null;
+  let error: { message: string } | null = null;
+
+  if (keep) {
+    const { data, error: updateError } = await db
+      .from("library_proposals")
+      .update({ claim, evidence, proposed_body: proposedBody })
+      .eq("id", keep.id)
+      .select("id")
+      .single();
+    proposal = data;
+    error = updateError;
+
+    for (const extra of extras) {
+      await db.from("library_proposals")
+        .update({
+          status: "rejected",
+          decided_at: new Date().toISOString(),
+          decided_reason: `Superseded by proposal ${keep.id}, re-measured ${measurement.measured_at.slice(0, 10)}.`,
+        })
+        .eq("id", extra.id);
+    }
+  } else {
+    const { data, error: insertError } = await db.from("library_proposals").insert({
+      section_key: "reference_posts",
+      claim,
+      evidence,
+      proposed_body: proposedBody,
+      status: "open",
+    }).select("id").single();
+    proposal = data;
+    error = insertError;
+  }
 
   if (error) return json({ error: `measured, but could not open a proposal: ${error.message}` }, 502);
 
