@@ -128,6 +128,57 @@ export async function clearedNames(db: SupabaseClient, momentId: number): Promis
 }
 
 /**
+ * Clear a name for use, or refuse it — 9.10, per post.
+ *
+ * Lifted out of the Telegram tap handler, where it was the only implementation. It is the one decision
+ * that can stop the whole pipeline: `create_draft` refuses a body containing an uncleared name, twice
+ * over, so before this existed as a tool Claude Code could reach a wall it had no way to clear.
+ *
+ * Three fields, all of them deliberate. `cleared_note` is the record of what he actually said, which
+ * matters because "yes, but not his company" is a different permission from "yes" and the difference
+ * is only in his words. Un-clearing wipes `cleared_at` so the reopened-at rule below cannot read a
+ * stale timestamp as a live permission.
+ *
+ * Matching by name rather than by id on purpose: he says "yes, Ben is fine", not "clear name 41".
+ * Exact, case-insensitive, and only within this moment — 9.10 is per post, so clearing a name here
+ * says nothing about the same name in another idea.
+ */
+export async function setClearance(
+  db: SupabaseClient,
+  momentId: number,
+  names: string[],
+  cleared: boolean,
+  note?: string | null,
+): Promise<{ name: string; id: number }[]> {
+  const wanted = names.map((n) => (n ?? "").trim().toLowerCase()).filter(Boolean);
+  if (wanted.length === 0) return [];
+
+  const { data: rows } = await db
+    .from("moment_names")
+    .select("id, name")
+    .eq("moment_id", momentId)
+    .neq("kind", "not_a_name");
+
+  const hit = (rows ?? []).filter((r) =>
+    wanted.includes(String(r.name ?? "").trim().toLowerCase()) || wanted.includes("all")
+  );
+  if (hit.length === 0) return [];
+
+  const { error } = await db
+    .from("moment_names")
+    .update({
+      cleared,
+      cleared_at: cleared ? new Date().toISOString() : null,
+      cleared_note: (note ?? "").trim() || null,
+    })
+    .in("id", hit.map((h) => h.id));
+
+  if (error) throw new Error(`could not record the name decision: ${error.message}`);
+
+  return hit.map((h) => ({ name: String(h.name), id: Number(h.id) }));
+}
+
+/**
  * The names still needing a decision for what is being written now.
  *
  * Not simply `cleared = false`: a name cleared before the last re-open is back to needing one, and

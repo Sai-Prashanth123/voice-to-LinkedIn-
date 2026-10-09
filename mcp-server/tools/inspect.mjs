@@ -394,7 +394,16 @@ export const inspectTools = [
     },
     async handler(args, { db }) {
       const q = new URLSearchParams({
-        select: "id,moment_id,draft_id,visual_id,status,scheduled_for,marked_ready_at," +
+        /*
+         * `body` was missing, and that mattered more once Telegram went.
+         *
+         * This returned every field about a post except the post. It was enough while the weekly
+         * pass happened in a chat that quoted the text itself — but Claude Code is the only surface
+         * now, and approving a post without having read it back to him is exactly the thing
+         * `mark_ready` must never be used for. Selecting it costs nothing: `posts` is already
+         * readable by this role.
+         */
+        select: "id,moment_id,draft_id,visual_id,status,body,scheduled_for,marked_ready_at," +
           "published_at,linkedin_urn,publish_error,announced_at,created_at",
         order: "id.desc",
         limit: String(args.limit ?? 25),
@@ -491,6 +500,22 @@ export const inspectTools = [
         one("posts?select=id&status=eq.published&body=not.like.FIXTURE*&limit=100"),
       ]);
 
+      /*
+       * WHAT HE MISSED WHILE HE WAS AWAY.
+       *
+       * Everything above is derived from state, so it is always current. What is NOT derivable is a
+       * fact that was true once and nobody was told: an error burst last Tuesday, a provider seen
+       * for the first time, a token expiring in nine days, an idea parked while he was away. Those
+       * used to be Telegram messages. With no push channel left they wait in `notices`, and this is
+       * where they surface — because clause 13 exists so the system cannot break quietly, and a
+       * table nobody reads is quieter than a message nobody sent.
+       */
+      const unread = await rows(
+        db,
+        "notices?select=id,kind,severity,body,moment_id,post_id,acted_on,created_at" +
+          "&read_at=is.null&order=created_at.desc&limit=15",
+      );
+
       const waiting = [];
       if (halfMined > 0) {
         waiting.push(`${halfMined} candidate(s) need Josh interviewed before they can be drafted`);
@@ -498,12 +523,20 @@ export const inspectTools = [
       if (openProposals > 0) waiting.push(`${openProposals} library change(s) need his decision`);
       if (empty.length > 0) waiting.push(`${empty.length} library section(s) still empty: ${empty.join(", ")}`);
 
+      const problems = unread.filter((n) => n.severity !== "info").length;
+
       return {
         library: `${sections.length - empty.length} of ${sections.length} sections filled in`,
         idea_bank: { ready_to_draft: mined, awaiting_interview: halfMined, just_arrived: captured },
         drafts_written: needGate,
         published,
         waiting_on_josh: waiting.length ? waiting : ["nothing"],
+        // Read these to him. They are the half of the system that cannot ask for attention.
+        unread_notices: unread,
+        notices_note: unread.length === 0
+          ? "Nothing has happened that he has not been told."
+          : `${unread.length} thing(s) he has not been told${problems ? `, ${problems} needing a look` : ""}. ` +
+            `Read them out, then call mark_notices_read so they are not repeated.`,
         note: published === 0
           ? "Nothing has published. Until LinkedIn is connected, nothing can."
           : undefined,

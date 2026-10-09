@@ -52,6 +52,73 @@ export async function loadLibrary(db: SupabaseClient, view: LibraryView): Promis
  * Deliberately conservative — it reads markdown headings and list items and ignores prose, so the
  * placeholder text sitting in the section today yields nothing rather than a phantom pillar.
  */
+/**
+ * Add to a library section without replacing it — 8.8's "in under a minute", and 8.1's transcript.
+ *
+ * One implementation for what were two: the `/rule` command appended a bullet, and the voice-guide
+ * capture appended a dated block. Both were inside the Telegram webhook and both are needed from
+ * Claude Code now, so they live here and differ only in `shape`.
+ *
+ * `.eq("immutable", false)` is kept and is not decoration. The sections holding the two rules the
+ * learning loop may never touch are marked immutable, a database trigger refuses them, and this
+ * filter means an append aimed at one changes nothing rather than erroring in a way a caller might
+ * swallow. The return value says whether anything moved, so a refusal is reportable.
+ *
+ * Appending rather than rewriting is the whole point. 8.6 says a library edit reaches the very next
+ * draft, and a tool that could replace a section wholesale would let one careless call erase the
+ * voice guide. There is deliberately no setter here.
+ */
+export async function appendToSection(
+  db: SupabaseClient,
+  key: string,
+  text: string,
+  shape: "rule" | "block",
+  label?: string,
+): Promise<{ ok: boolean; words: number; why?: string }> {
+  const body = (text ?? "").trim();
+  if (!body) return { ok: false, words: 0, why: "There was nothing to add." };
+
+  const { data: section } = await db
+    .from("library_sections")
+    .select("body, immutable, title")
+    .eq("key", key)
+    .maybeSingle();
+
+  if (!section) return { ok: false, words: 0, why: `There is no library section called "${key}".` };
+  if (section.immutable) {
+    return {
+      ok: false,
+      words: 0,
+      why: `"${section.title ?? key}" holds a rule that is not open to adjustment, whatever the ` +
+        `evidence says. That is deliberate (12.1), and the database refuses it too.`,
+    };
+  }
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  const existing = String(section.body ?? "").trimEnd();
+
+  const addition = shape === "rule"
+    // One bullet, as the command produced. The leading dash is stripped if he typed one.
+    ? `\n\n- ${body.replace(/^[-*]\s*/, "")}  _(added ${stamp})_\n`
+    // A dated block, as the voice-guide append produced: the heading is what makes a long transcript
+    // readable later, and what lets 8.1 be filled over several sittings.
+    : `\n\n---\n\n## ${label ? `${label} — ` : ""}Added ${stamp}\n\n${body}\n`;
+
+  const { data, error } = await db
+    .from("library_sections")
+    .update({ body: `${existing}${addition}` })
+    .eq("key", key)
+    .eq("immutable", false)
+    .select("key");
+
+  if (error) return { ok: false, words: 0, why: error.message };
+  if ((data ?? []).length === 0) {
+    return { ok: false, words: 0, why: `"${key}" refused the change.` };
+  }
+
+  return { ok: true, words: body.split(/\s+/).filter(Boolean).length };
+}
+
 export function parsePillars(body: string): string[] {
   const out: string[] = [];
 

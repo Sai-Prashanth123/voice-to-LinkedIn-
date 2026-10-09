@@ -42,6 +42,8 @@ import { appendTurn, loadSession, renderTranscript } from "../_shared/session.ts
 import { autoName, setIdeaName } from "../_shared/idea-names.ts";
 import { verifyExtraction } from "../_shared/extraction.ts";
 import { applyDraft } from "../_shared/handlers/draft.ts";
+import * as decisions from "./decisions.ts";
+import type { Body } from "./decisions.ts";
 import { finishGate } from "../_shared/handlers/gate.ts";
 import type { Claim } from "../_shared/claims.ts";
 import type { Extraction } from "../_shared/schemas.ts";
@@ -78,18 +80,61 @@ Deno.serve(async (req) => {
     return json({ error: "body is not JSON" }, 400);
   }
 
-  if (body.kind === "candidates") return await submitCandidates(db, body);
-  if (body.kind === "capture") return await capture(db, body);
-  if (body.kind === "draft") return await fileDraft(db, body as unknown as DraftBody);
-  if (body.kind === "interview_next") return await interviewNext(db, body);
-  if (body.kind === "interview_answer") return await interviewAnswer(db, body);
-  if (body.kind === "name") return await nameIdea(db, body);
-  if (body.kind === "gate_done") return await closeGate(db, body);
+  /*
+   * ONE TABLE, SO THE ERROR CANNOT GO STALE.
+   *
+   * This was a chain of `if`s with the list of valid kinds written out again in the error message
+   * underneath. The two drifted apart on the first addition, and the message is what a caller gets
+   * when it has guessed wrong — so the list is derived from the routes themselves now.
+   *
+   * `extraction` is deliberately not in here: its route is the body of this function, below.
+   */
+  const ROUTES: Record<string, (db: SupabaseClient, body: Body) => Promise<Response>> = {
+    // Capture and the interview — the way in.
+    capture: (d, b) => capture(d, b),
+    candidates: (d, b) => submitCandidates(d, b),
+    interview_next: (d, b) => interviewNext(d, b),
+    interview_answer: (d, b) => interviewAnswer(d, b),
+    name: (d, b) => nameIdea(d, b),
+    skip_question: decisions.skipQuestion,
+    end_interview: decisions.endInterview,
+
+    // Writing and judging.
+    draft: (d, b) => fileDraft(d, b as unknown as DraftBody),
+    gate_done: (d, b) => closeGate(d, b),
+    pushback: decisions.pushBackRoute,
+
+    // The calendar. `mark_ready` is the only authorisation to publish in this system (11.2).
+    mark_ready: decisions.approvePost,
+    hold: decisions.holdPostRoute,
+    edit_post: decisions.editPost,
+
+    // The idea bank.
+    clear_names: decisions.clearNames,
+    park: decisions.parkIdea,
+    kill: decisions.killIdea,
+    reopen: decisions.reopenIdea,
+    pillar: decisions.setPillar,
+
+    // The library (12.10, 8.8, 8.1).
+    proposal: decisions.decideProposal,
+    library_rule: decisions.addLibraryRule,
+    voice_transcript: decisions.appendVoiceTranscript,
+
+    // What came back.
+    verdict: decisions.recordPostVerdict,
+    conversation: decisions.recordConversationRoute,
+
+    notices_read: decisions.noticesRead,
+  };
+
+  const route = ROUTES[String(body.kind ?? "")];
+  if (route) return await route(db, body as Body);
 
   if (body.kind !== "extraction") {
     return json({
-      error: `unknown kind "${body.kind ?? ""}". Expected "extraction", "candidates", ` +
-        `"capture", "name", "draft", "gate_done", "interview_next" or "interview_answer".`,
+      error: `unknown kind "${body.kind ?? ""}". Expected one of: ` +
+        `${[...Object.keys(ROUTES), "extraction"].sort().join(", ")}.`,
     }, 400);
   }
 

@@ -70,6 +70,29 @@ export async function park(db: SupabaseClient, momentId: number, reason: string)
 }
 
 /**
+ * "No, not this one" — 6.3's only form of removal.
+ *
+ * Nothing is deleted: the row, its material, its interview turns and any drafts written from it all
+ * stay, and `DELETE` is granted to nobody. Killed means excluded from everything that selects, scores
+ * or learns, and that exclusion is what makes the reason compulsory. `killed` already carries two
+ * meanings in this database — a test fixture, and a judgement — and six months from now an unexplained
+ * kill is unreadable. The park path has always had to say why; so does this.
+ *
+ * Parking and killing are different facts and the bank must not blur them: parked is "not yet, and
+ * here is what is missing", killed is "never".
+ */
+export async function kill(db: SupabaseClient, momentId: number, reason: string): Promise<void> {
+  const why = (reason ?? "").trim();
+  if (!why) throw new Error("A kill needs a reason — it excludes the idea from everything that learns.");
+
+  await db.from("moments").update({
+    killed: true,
+    parked_reason: why,
+    updated_at: new Date().toISOString(),
+  }).eq("id", momentId);
+}
+
+/**
  * PostgREST returns a one-to-MANY embed as an array and a one-to-ONE embed as a single object.
  * `outcomes.post_id` and `material.moment_id` are primary keys referencing their parent, so those
  * arrive as objects. Indexing them with [0] yields undefined and fails silently — a post's metrics

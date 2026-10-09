@@ -130,7 +130,9 @@ export const readTools = [
       const [material, names, turns, drafts, raw] = await Promise.all([
         db.select("material", { select: "*", moment_id: `eq.${id}`, limit: 1 }),
         db.select("moment_names", {
-          select: "name,kind,cleared,cleared_note",
+          // `id` so a caller can be precise. clear_names matches on the name as he says it, which is
+          // right for a conversation, but two people called Ben on one idea need the id to separate.
+          select: "id,name,kind,cleared,cleared_note",
           moment_id: `eq.${id}`,
           order: "created_at.asc",
         }),

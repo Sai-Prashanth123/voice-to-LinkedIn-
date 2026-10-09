@@ -36,6 +36,7 @@ import { interviewTools } from "./interview.mjs";
 // Imported last and registered last: it calls the brief tools through the same registry, so it
 // must not be pulled in while that registry is still being assembled.
 import { workTools } from "./work.mjs";
+import { joshTools } from "./josh.mjs";
 
 export const tools = [
   ...health,
@@ -52,6 +53,8 @@ export const tools = [
   ...workTools,
   ...interviewTools,
   ...writeTools,
+  // The decisions only Josh can make. Last, because they are the surface a session ends on.
+  ...joshTools,
 ];
 
 /** Guards against two tools claiming the same name, which registers silently and shadows one. */

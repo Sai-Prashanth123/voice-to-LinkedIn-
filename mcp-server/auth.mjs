@@ -31,6 +31,7 @@ import { timingSafeEqual } from "node:crypto";
 // turning "that token is not recognised" into an opaque 500. Found by probing the live endpoint,
 // which is the only place the difference exists.
 import { Buffer } from "node:buffer";
+import { joshToolNames } from "./tools/josh.mjs";
 
 /** Tool names that change something. Everything else is a read. */
 export const WRITE_TOOLS = new Set([
@@ -47,6 +48,15 @@ export const WRITE_TOOLS = new Set([
   "scan_sessions",
   // Returns a command that installs a scheduled reporter holding this token.
   "setup_session_tracking",
+  /*
+   * THE DECISIONS, FROM tools/josh.mjs.
+   *
+   * Spread from the module rather than typed out again. Seventeen hand-copied names is seventeen
+   * chances to forget one, and a decision tool missing from this list is callable on the READ token —
+   * which means a read-only client could approve a post for publication. The module exports the
+   * names for exactly this.
+   */
+  ...joshToolNames,
 ]);
 
 /**

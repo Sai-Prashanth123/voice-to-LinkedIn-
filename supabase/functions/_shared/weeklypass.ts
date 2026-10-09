@@ -36,7 +36,7 @@ import {
   recordAsked,
 } from "./conversation.ts";
 import { openProposals, summarise } from "./proposals.ts";
-import { recordEditDiff } from "./outcome.ts";
+import { holdPost, markReady } from "./approve.ts";
 import { type Button, replaceMessage, sendMessage } from "./telegram.ts";
 
 /** Callback payloads are capped at 64 bytes, so they stay terse. */
@@ -300,48 +300,30 @@ export function dayButtons(postId: number): Button[][] {
  * 11.2 / R3 — marking ready and setting a date is the whole of Josh's authorisation. Publishing
  * happens later, on that date, and only because this row exists.
  */
+/*
+ * MOVED TO _shared/approve.ts, AND NOT COPIED.
+ *
+ * The body of this function is now `markReady` there, so the button below and the `mark_ready` tool
+ * write `marked_ready_at` through one implementation. Two copies of the only authorisation in the
+ * system is the last thing this file should contain.
+ *
+ * The button's vocabulary is preserved by translating its day count into the same words a person
+ * would type, rather than giving `approve.ts` a second entry point for buttons.
+ */
 export async function schedulePost(
   db: SupabaseClient,
   postId: number,
   days: number | "next-mon",
 ): Promise<string> {
-  const when = new Date();
-  if (days === "next-mon") {
-    const ahead = (8 - when.getDay()) % 7 || 7;
-    when.setDate(when.getDate() + ahead);
-  } else {
-    when.setDate(when.getDate() + days);
-  }
-  when.setHours(9, 0, 0, 0);
-
-  await db.from("posts").update({
-    status: "scheduled",
-    marked_ready_at: new Date().toISOString(),
-    scheduled_for: when.toISOString(),
-    updated_at: new Date().toISOString(),
-  }).eq("id", postId);
-
-  // 12.2 — the difference between what the system wrote and what Josh approved, taken HERE rather
-  // than at publish. It needs no LinkedIn, and 12.3 says the automatic signals must be enough on
-  // their own. Approving from Telegram means the body is untouched, which is itself the measurement:
-  // an unedited approval is the strongest evidence the draft was right.
-  await recordEditDiff(db, postId, "approved");
-
-  return when.toLocaleDateString("en-GB", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
+  const when = days === "next-mon" ? "next monday" : `in ${days} days`;
+  const out = await markReady(db, postId, when);
+  // The button offered a post the system had already vetted, so a refusal here means something has
+  // changed since it was offered. Saying so beats reporting a date that was never set.
+  if (!out.ok) throw new Error(out.why);
+  return out.when;
 }
 
-export async function holdPost(db: SupabaseClient, postId: number): Promise<void> {
-  await db.from("posts").update({
-    status: "draft",
-    scheduled_for: null,
-    marked_ready_at: null,
-    updated_at: new Date().toISOString(),
-  }).eq("id", postId);
-}
+export { holdPost };
 
 export async function recordConversation(
   db: SupabaseClient,
