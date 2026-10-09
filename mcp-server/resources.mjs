@@ -72,7 +72,7 @@ export function resourcesFor(context) {
       config: {
         title: "A reference library section",
         description:
-          "One of the fourteen sections that decide how a post is written. Editing one in the desk " +
+          "One of the fourteen sections that decide how a post is written. Editing one " +
           "reaches the very next draft with no deploy, so what is here is what the drafter is " +
           "using right now.",
         mimeType: "text/markdown",

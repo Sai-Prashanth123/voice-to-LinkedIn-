@@ -243,7 +243,7 @@ ABOUT HIS DATA
 
 Anything about what is waiting, ready or drafted comes from the SNAPSHOT below and nowhere else. You
 may count and list what is there. You may not estimate or invent. If the snapshot does not hold the
-answer, say plainly what you cannot see and where he would find it — the desk, for instance.`;
+answer, say plainly what you cannot see and where he would find it — in Claude Code, for instance.`;
 
 /**
  * One call, one decision. Returns `capture` on any failure — the safe direction, because a thought

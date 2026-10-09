@@ -89,35 +89,60 @@ test("the 17a bar needs five of the last six, and a full window", () => {
 });
 
 /**
- * THE TWO COPIES MUST AGREE.
+ * THERE IS ONE COPY NOW, AND THE THRESHOLDS STILL HAVE TO HOLD.
  *
- * `app/lib/diff.ts` is a copy of this module, because the app is Next and this tree is Deno. The
- * precedent for that (`app/lib/pillars.ts`) is held together by a comment asking whoever edits one
- * to remember the other, which is not a guarantee — it is a hope.
+ * `app/lib/diff.ts` was a hand copy of this module, because the desk was Next and this tree is Deno.
+ * This test pinned the two together mechanically, since the thresholds below ARE the 17a acceptance
+ * measurement: two surfaces classifying the same edit differently would corrupt the number the
+ * engagement is judged on, and the only symptom would be a figure that depended on where Josh
+ * happened to tap Approve.
  *
- * These thresholds ARE the 17a acceptance measurement. Two surfaces classifying the same edit
- * differently would corrupt the number the engagement is judged on, silently, and the only symptom
- * would be an acceptance figure that depends on where Josh happened to tap Approve. So the copies
- * are pinned mechanically instead.
+ * The desk was deleted on 2026-10-09, so the copy is gone and there is nothing left to disagree with.
+ * The cases it compared are kept and asserted against this module directly — the point was never the
+ * comparison, it was that these specific edits land on the right side of the line.
  */
-import { classifyEdit as appClassifyEdit } from "../../../app/lib/diff.ts";
-
-test("the app's copy of the diff classifier agrees with this one", () => {
-  const cases: [string, string][] = [
-    ["Same text.", "Same text."],
-    ["I sat in a room with a CFO.\n\nHe said the number was wrong.", "I sat in a room with a CFO.\n\nHe said the figure was wrong."],
-    ["Three things I learned.\n\nOne. Two. Three.", "A CFO told me the number was wrong.\n\nHere is what happened next.\n\nAnd what it cost.\n\nAnd what I do now."],
-    ["", "Something new entirely."],
-    ["A hook that stays.\n\nBody one.\n\nBody two.", "A hook that stays.\n\nBody one."],
+test("the classifier that decides the acceptance number holds its thresholds", () => {
+  const cases: [string, string, "light" | "rewrite"][] = [
+    // Untouched is the strongest evidence a draft was right, and it cannot read as a rewrite.
+    ["Same text.", "Same text.", "light"],
+    // One word swapped.
+    [
+      "I sat in a room with a CFO.\n\nHe said the number was wrong.",
+      "I sat in a room with a CFO.\n\nHe said the figure was wrong.",
+      "light",
+    ],
+    // A different post entirely.
+    [
+      "Three things I learned.\n\nOne. Two. Three.",
+      "A CFO told me the number was wrong.\n\nHere is what happened next.\n\nAnd what it cost.\n\nAnd what I do now.",
+      "rewrite",
+    ],
+    ["", "Something new entirely.", "rewrite"],
+    /*
+     * The boundary case, and it measures `light` — recorded here because I expected `rewrite` when
+     * writing this and the classifier was right. A third of the body is cut and the hook survives
+     * untouched, which is what Josh trimming a post for length looks like; a rewrite is him throwing
+     * out what it was about. The thresholds live in `classifyEdit` and ARE the 17a number, so this
+     * asserts what they do rather than what I assumed, and moving them is a decision about the
+     * acceptance figure, not a test fix.
+     */
+    [
+      "A hook that stays.\n\nBody one.\n\nBody two.",
+      "A hook that stays.\n\nBody one.",
+      "light",
+    ],
   ];
 
-  for (const [draft, published] of cases) {
-    const mine = classifyEdit(draft, published);
-    const theirs = appClassifyEdit(draft, published);
-    assert.deepEqual(
-      theirs,
-      mine,
-      `the two copies disagree on:\n---\n${draft}\n---\n${published}\n---`,
+  for (const [draft, published, expected] of cases) {
+    assert.equal(
+      classifyEdit(draft, published).editClass,
+      expected,
+      `wrong side of the line:
+---
+${draft}
+---
+${published}
+---`,
     );
   }
 });

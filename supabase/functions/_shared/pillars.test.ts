@@ -65,26 +65,35 @@ I mostly write about positioning and pricing, and sometimes about hiring.`;
 });
 
 /**
- * The bank page parses pillars too, from an app-side copy: `app/lib/pillars.ts` cannot import this
- * module, which is Deno with `npm:` specifiers Next will not resolve. A copy that silently drifts
- * would let Josh pick a pillar the drafter does not recognise, so the two are pinned together here.
+ * The bank page parsed pillars too, from an app-side copy — `app/lib/pillars.ts` could not import
+ * this module, which is Deno with `npm:` specifiers Next would not resolve. This test pinned the two
+ * together, because a copy that silently drifted would let Josh pick a pillar the drafter does not
+ * recognise.
+ *
+ * The desk was deleted on 2026-10-09 and the copy went with it. The cases it compared are kept and
+ * asserted against this module directly: they are the awkward inputs, which is why they were chosen,
+ * and they are worth more as expectations than as a comparison with nothing.
  */
-test("the app copy of parsePillars agrees with this one", async () => {
-  const app = await import("../../../app/lib/pillars.ts");
+test("the awkward pillar sections parse the way they should", () => {
+  assert.deepEqual(parsePillars("## Positioning\n## Hiring\n## The work itself"), [
+    "Positioning",
+    "Hiring",
+    "The work itself",
+  ]);
 
-  const cases = [
-    "",
-    "## Positioning\n## Hiring\n## The work itself",
-    "- Positioning — how founders describe what they sell\n- *Hiring*: the first three\n- Positioning",
-    "For Josh to fill in\nThree to five is plenty\n## Real one",
-    "We write about a few things. Mostly positioning, sometimes hiring.",
-  ];
+  // Emphasis stripped, trailing description dropped, and the duplicate not repeated.
+  assert.deepEqual(
+    parsePillars(
+      "- Positioning — how founders describe what they sell\n- *Hiring*: the first three\n- Positioning",
+    ),
+    ["Positioning", "Hiring"],
+  );
 
-  for (const body of cases) {
-    assert.deepEqual(
-      app.parsePillars(body),
-      parsePillars(body),
-      `diverged on: ${JSON.stringify(body)}`,
-    );
-  }
+  // A placeholder section: the instructions to Josh are not pillars, the one real heading is.
+  assert.deepEqual(parsePillars("For Josh to fill in\nThree to five is plenty\n## Real one"), [
+    "Real one",
+  ]);
+
+  // Prose naming pillars is still prose.
+  assert.deepEqual(parsePillars("We write about a few things. Mostly positioning, sometimes hiring."), []);
 });

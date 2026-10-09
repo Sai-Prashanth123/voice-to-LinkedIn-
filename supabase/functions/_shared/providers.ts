@@ -49,7 +49,8 @@ export const DECLARED: Record<string, string> = {
   deepgram: "Turning voice notes and recordings into text",
   telegram: "Where moments are captured and questions get asked",
   linkedin: "Publishing, and post analytics once the Community Management review is approved",
-  vercel: "Hosting The desk — the calendar, the bank, the library and the weekly pass",
+  vercel: "No longer used. The desk it hosted was retired on 2026-10-09; everything runs " +
+    "through Claude Code",
   github: "Where the code lives, and what a rebuild is restored from",
 };
 

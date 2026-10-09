@@ -23,7 +23,7 @@ another developer, or to read yourself at nine on a Monday when the calendar loo
 | **Metrics** | Edge Function `worker-metrics`, daily 09:00 | Pulls engagement 7 days after publishing |
 | **Learning** | Edge Function `worker-learn`, Mondays 07:00 | Proposes library changes, with evidence, for you to approve |
 | **Ops** | Edge Function `worker-ops`, daily 08:00 + monthly | Silence alerts, queue warnings, the two monthly reports |
-| **The desk** (web app) | Vercel | Weekly pass, calendar, idea bank, library, proposals |
+| **Claude Code** | Your machine | Where you do everything: capture, interviews, drafting, the gate, approving a post. The desk (the old web view) was retired on 9 October 2026 |
 | **cc-agent** | **Your machine**, scheduled | Reads Claude Code logs locally, sends small digests. Never sends code. |
 
 Everything except `cc-agent` and the web app runs inside your Supabase project.
@@ -309,9 +309,9 @@ Storage only goes up — 6.3 forbids deleting anything, and the audio is kept as
 
 | To change | Do this | Deploy needed? |
 |---|---|---|
-| What it writes about, how it hooks, how it sounds | Edit the section in **The desk → Library** | No — next draft uses it |
-| The questions a session asks | Library → The prompt set | No |
-| What the gate checks beyond the six | Library → Gate rules | No |
+| What it writes about, how it hooks, how it sounds | In Claude Code: "add a rule to the hooks section" | No — next draft uses it |
+| The questions a session asks | The prompt set section, the same way | No |
+| What the gate checks beyond the six | The gate rules section, the same way | No |
 | How many posts to keep queued | `update settings set value = '12' where key = 'queue_target_posts';` | No |
 | Turn Slack on | `update settings set value = 'true' where key = 'slack_enabled';` | No |
 | How long before it chases you about silence | `settings` → `silence_alert_days` | No |

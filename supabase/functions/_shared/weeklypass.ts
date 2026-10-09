@@ -354,13 +354,12 @@ export async function recordConversation(
   await recordAnswer(db, postId, answer as ConversationAnswer);
 }
 
-/** Rewrite hands off to the web app, where a textarea beats a chat box. */
-export function rewriteLink(postId: number): string {
-  // Through secret(), not Deno.env: everything else in this system keeps its configuration in
-  // Vault, and a value stored there was invisible to a direct env read.
-  const base = secret("APP_URL") ?? "";
-  return base ? `${base}/?post=${postId}` : "";
-}
+/*
+ * rewriteLink() lived here and handed out `${APP_URL}/?post=<id>` — "rewrite it in the app, where a
+ * textarea beats a chat box". It had no callers even before the desk was deleted, and the page it
+ * pointed at had already been removed, so for some time the one honest thing it could return was an
+ * empty string. A rewrite is asked for with the decide_draft tool now.
+ */
 
 export { replaceMessage };
 

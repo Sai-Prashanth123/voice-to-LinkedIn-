@@ -225,7 +225,7 @@ export const inspectTools = [
       if (waiting.length > 0) {
         actions.push({
           do: `Review ${waiting.length} post(s) waiting on Josh`,
-          where: "the desk's This week, or /review in Telegram",
+          where: "Claude Code — decide_draft",
           why: "Approval is the only thing that authorises publishing, and it is enforced four " +
             "ways in the database. Nothing downstream of it can happen until he passes.",
         });
@@ -251,7 +251,7 @@ export const inspectTools = [
       if (openProposals.length > 0) {
         actions.push({
           do: `Decide ${openProposals.length} library proposal(s)`,
-          where: "the desk's Proposals",
+          where: "Claude Code — decide_proposal",
           why: "The system proposes and Josh decides (12.10). Nothing changes until he does.",
         });
       }

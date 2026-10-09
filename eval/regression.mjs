@@ -22,7 +22,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createClient } from "../app/node_modules/@supabase/supabase-js/dist/main/index.js";
+/*
+ * This imported @supabase/supabase-js out of `app/node_modules` — the deleted desk's dependency tree.
+ * It used the client for exactly two reads, so rather than borrow another package's node_modules it
+ * now asks PostgREST directly. One fewer thing that can go missing, and the runbook's instruction to
+ * "run the regression harness before and after any library change" keeps working on a bare checkout.
+ */
 import { DRAFT_USER, DRAFTER_SYSTEM, PROMPT_VERSION } from "../supabase/functions/_shared/prompts.ts";
 import { verifyDraft } from "../supabase/functions/_shared/claims.ts";
 
@@ -43,8 +48,7 @@ async function main() {
     process.exit(1);
   }
 
-  const db = createClient(url, key, { auth: { persistSession: false } });
-  const library = await loadLibrary(db);
+  const library = await loadLibrary({ url: url.replace(/\/+$/, ""), key });
   const golden = loadGolden();
 
   if (golden.length === 0) {
@@ -163,11 +167,17 @@ async function draftOne(apiKey, libraryPrompt, moment) {
   return JSON.parse(text);
 }
 
-async function loadLibrary(db) {
-  const { data } = await db.from("library_sections").select("key, title, body, sort_order")
-    .order("sort_order");
-  const { data: v } = await db.from("library_versions").select("version")
-    .order("version", { ascending: false }).limit(1).maybeSingle();
+async function loadLibrary({ url, key }) {
+  const get = async (path) => {
+    const res = await fetch(`${url}/rest/v1/${path}`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+    });
+    if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`);
+    return await res.json();
+  };
+
+  const data = await get("library_sections?select=key,title,body,sort_order&order=sort_order");
+  const v = (await get("library_versions?select=version&order=version.desc&limit=1"))[0] ?? null;
 
   const wanted = new Set([
     "core_rules", "pillars", "frameworks", "hooks", "closes", "audience",

@@ -122,35 +122,41 @@ export const cases = [
     stage: "X",
     clause: "8.4",
     tier: "deterministic",
-    name: "the app's copies of shared logic still agree with the originals",
+    name: "there is one classifyEdit, and it is the one the finish line uses",
     async run({ assert, seen }) {
-      // app/ cannot import from supabase/functions/_shared, so two modules are copied. A copy that
-      // drifts is invisible: both halves keep working and disagree about the same post.
-      const pairs = [
-        ["diff", "../../../supabase/functions/_shared/diff.ts", "../../../app/lib/diff.ts"],
-        ["pillars", "../../../supabase/functions/_shared/library.ts", "../../../app/lib/pillars.ts"],
-      ];
-      seen("pairs", pairs.map((p) => p[0]));
+      const fs = await import("node:fs");
+      /*
+       * THIS CASE USED TO COMPARE TWO COPIES.
+       *
+       * `app/lib/diff.ts` and `app/lib/pillars.ts` were hand copies of shared modules, because the
+       * Next app could not import from `supabase/functions/_shared`. This case existed to catch the
+       * copies drifting — a drift that would be invisible, since both halves keep working and simply
+       * disagree about the same post.
+       *
+       * The desk was deleted on 2026-10-09, so there are no copies left to disagree. What has to stay
+       * under test is the reason the comparison mattered: `classifyEdit` decides light-edit versus
+       * rewrite, and that IS the clause 17a acceptance number. So this now proves the behaviour
+       * directly, and proves no second copy has reappeared.
+       */
+      const { classifyEdit } = await import("../../../supabase/functions/_shared/diff.ts");
 
-      const diffShared = await import("../../../supabase/functions/_shared/diff.ts");
-      const diffApp = await import("../../../app/lib/diff.ts");
-
-      // classifyEdit IS the 17a number. If the desk and the worker classified the same edit
-      // differently, the finish line would depend on which one happened to run.
       const before = "The CFO stopped me halfway through the deck and asked one question.";
-      const after = "The CFO stopped me halfway through and asked one question.";
-      assert.equal(
-        diffApp.classifyEdit(before, after).editClass,
-        diffShared.classifyEdit(before, after).editClass,
-        "both copies classify the same edit identically",
-      );
-
+      const light = "The CFO stopped me halfway through and asked one question.";
       const rewritten = "Something completely different about a different day entirely.";
-      assert.equal(
-        diffApp.classifyEdit(before, rewritten).editClass,
-        diffShared.classifyEdit(before, rewritten).editClass,
-        "and agree on a rewrite too",
-      );
+
+      const lightClass = classifyEdit(before, light).editClass;
+      const rewriteClass = classifyEdit(before, rewritten).editClass;
+      seen("classes", { light: lightClass, rewrite: rewriteClass });
+
+      assert.equal(lightClass, "light", "a few words out is a light edit");
+      assert.equal(rewriteClass, "rewrite", "a different post is a rewrite");
+      assert.equal(classifyEdit(before, before).editClass, "light", "no change cannot be a rewrite");
+
+      // A second implementation is how the number starts depending on which code path ran.
+      for (const path of ["app/lib/diff.ts", "app/lib/pillars.ts"]) {
+        const exists = fs.existsSync(new URL(`../../../${path}`, import.meta.url));
+        assert.not(exists, `${path} is back — one classifyEdit, or the finish line moves`);
+      }
     },
   }),
 

@@ -34,7 +34,6 @@ supabase/
     worker-ops/              silence alerts, queue warnings, monthly reports
   tests/                     rebuilds the schema and asserts the rules still hold
 
-app/                         the desk: weekly pass, calendar, idea bank, library, proposals
 cc-agent/                    runs on Josh's machine; filters Claude Code logs locally
 eval/                        regression harness, filter calibration, syntax check
 ```

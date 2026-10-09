@@ -251,18 +251,19 @@ export const cases = [
       // posts_ready_requires_josh constraint guards a state nothing can enter. That is not a bug in
       // itself, but an enum value no code writes is a trap for the next person — so it is asserted
       // rather than left ambiguous.
+      /*
+       * This read `app/app/actions.ts` as the second approval path, and that file was deleted some
+       * time ago — so this case has been throwing ENOENT rather than asserting anything. The desk
+       * went entirely on 2026-10-09, which makes the point sharper rather than weaker: there is now
+       * exactly one approval path, so it is the only file that has to be checked.
+       */
       const fs = await import("node:fs");
       const weeklypass = fs.readFileSync(
         new URL("../../../supabase/functions/_shared/weeklypass.ts", import.meta.url),
         "utf8",
       );
-      const actions = fs.readFileSync(
-        new URL("../../../app/app/actions.ts", import.meta.url),
-        "utf8",
-      );
 
-      const writesReady = /status:\s*["']ready["']/.test(weeklypass) ||
-        /status:\s*["']ready["']/.test(actions);
+      const writesReady = /status:\s*["']ready["']/.test(weeklypass);
       note("ready_is_written_by_code", writesReady);
 
       const moment = await makeMoment(db);

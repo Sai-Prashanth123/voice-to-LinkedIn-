@@ -308,11 +308,12 @@ async function callback(req: Request): Promise<Response> {
     : `<p>Post analytics was not granted, which is expected until Community Management review ` +
       `comes back. Publishing works; the numbers will simply be recorded as unavailable.</p>`;
 
-  const home = secret("APP_URL");
+  // The desk is retired, so there is nowhere to send him back TO. This page is the end of the
+  // journey now, and it says what to do next rather than offering a link to nothing.
   return page(
     "LinkedIn connected",
     `<p>Connected as <code>urn:li:person:${profile.sub}</code>.</p>${renewal}${analytics}` +
-      (home ? `<p><a href="${home}">Back to The desk</a></p>` : ""),
+      `<p>Nothing else to do here. Back in Claude Code, ask for the next piece of work.</p>`,
   );
 }
 

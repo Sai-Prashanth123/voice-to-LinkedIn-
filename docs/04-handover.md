@@ -102,8 +102,12 @@ Export from the old project **while signed in**, then import. This is the step w
 behind it, so do it first and check the counts rather than assuming:
 
 ```
-The desk → /export     → idea-bank-<date>.json
+In Claude Code:  "export the idea bank"     → idea-bank-<date>.json
 ```
+
+The desk's `/export` page used to do this and was deleted before the rest of the desk was. The export
+is a clause 14.2 guarantee — no lock-in — so it is being rebuilt as a tool rather than left as a gap.
+Until it lands, the fallback is `pg_dump` against the project, which is in the section below.
 
 `linkedin_auth` is excluded by design — the tokens are re-issued against the new app, not moved.
 After importing, compare row counts table by table before pointing anything at the new project.

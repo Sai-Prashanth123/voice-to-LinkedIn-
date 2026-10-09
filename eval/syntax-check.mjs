@@ -8,7 +8,22 @@
  *
  *   node eval/syntax-check.mjs
  */
-import ts from "../app/node_modules/typescript/lib/typescript.js";
+/*
+ * The TypeScript compiler came out of `app/node_modules` — the deleted desk's dependency tree. This
+ * script is the runbook's "fallback parse check if Deno is absent", so it degrades to saying so
+ * rather than crashing with a module-not-found that reads like the repo is broken.
+ */
+let ts;
+try {
+  ts = (await import("typescript")).default;
+} catch {
+  console.error(
+    "This fallback needs the TypeScript compiler, which is no longer vendored in this repo.\n" +
+      "Use the real check instead:  npx deno check supabase/functions/**/*.ts\n" +
+      "Or install it for this one:  npm i -g typescript   (then re-run)",
+  );
+  process.exit(2);
+}
 import fs from "node:fs";
 import path from "node:path";
 
