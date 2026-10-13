@@ -17,7 +17,13 @@ that conversation.
 
 ## Steps
 
-1. **Pick the moment.** If you were not given one, call `list_moments` with `status: "mined"`.
+1. **Pick the moment.** If you were given one — which in **one_step** mode you always are, by
+   `start_post` and `write_post` — use that one and **never** go looking for another. Reaching into
+   the idea bank for something to write about is the exact thing Josh asked to stop on 13 October,
+   after a morning in which he answered 21 questions about a new idea and the system drafted an old
+   one instead.
+
+   In **interviewed** mode, if you were not given one, call `list_moments` with `status: "mined"`.
    Nothing mined means nothing is ready; say so rather than drafting from a half-mined moment.
 
 2. **Call `get_drafting_brief`** with the moment id. It returns:

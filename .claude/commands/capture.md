@@ -4,7 +4,11 @@ description: Save something that just happened, and start asking about it
 
 Take what Josh just said and call `capture_thought` with **his words**, not a tidied version of them.
 
-Do not ask what to call it. The reply names it from what he said and carries the first question, so:
+In **one_step** mode no question comes back, by design. Say what it was filed as, in passing, and
+offer to write it now — `start_post` does the capture and the writing in one go, so prefer it there.
+
+Do not ask what to call it. In **interviewed** mode the reply names it from what he said and carries
+the first question, so:
 
 1. Say the name in passing — `Filed that as "CFO first line"` — so he can correct it if it is wrong.
    If he does, call `name_idea` with what he says instead.

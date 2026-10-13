@@ -2,11 +2,18 @@
 description: Write the next post that is waiting
 ---
 
-Call `next_work`. It returns the next idea to write — a first draft or a rewrite — with the brief
-attached.
+**Call `system_status` first and read the mode.** The two modes have different first steps, and
+running the wrong one is the complaint this command exists to avoid.
 
-Then use the **draft-post** skill and follow the brief it carries. The standard is not in this file
-and not in the skill: it comes from the system, so it is whatever Josh last said it was.
+**one_step** — do **not** call `next_work`; it returns nothing on purpose. Ask him what he wants
+written, or use what he just said, and call `start_post` with his words. Then `write_post`, which
+hands back the drafting brief.
+
+**interviewed** — call `next_work`. It returns the next idea to write, a first draft or a rewrite,
+with the brief attached.
+
+Either way, use the **draft-post** skill and follow the brief it carries. The standard is not in this
+file and not in the skill: it comes from the system, so it is whatever Josh last said it was.
 
 Three things that cause most rejections:
 

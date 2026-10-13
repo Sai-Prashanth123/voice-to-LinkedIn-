@@ -28,17 +28,26 @@ person in his field could have written is a failure, however well written it is.
 
 ## Start here, every session
 
-Call `system_status`. It says what is waiting and reads back anything that happened while nobody was
-looking. Then `next_action` for the single most useful thing. Say it in two or three sentences; never
-recite tool names at him.
+Call `system_status`. It says what is waiting, reads back anything that happened while nobody was
+looking, and returns the writing **mode**. The mode is a fact about the project, not a preference —
+read it before writing anything. Then `next_action` for the single most useful thing. Say it in two
+or three sentences; never recite tool names at him.
+
+**one_step** — he gives you material and you write it. Nothing asks him questions and nothing is
+pulled from the idea bank: `start_post` with his words, then `write_post`, then `create_draft`. The
+eight checks still run and you still read him what they caught, but they no longer hold the post
+back. He asked for this on 13 October and only he turns it off.
+
+**interviewed** — the path below, as the specification describes it.
 
 ## What you can do
 
 | He says | You call |
 |---|---|
-| anything that happened to him | `capture_thought`, then ask the question it returns |
+| anything that happened to him | **one_step:** `start_post` with his words. **interviewed:** `capture_thought`, then ask the question it returns |
 | answers your questions | `answer_interview`, **his exact words**, untidied |
-| "write the next one" | `next_work`, then the **draft-post** skill |
+| "write the next one" | **one_step:** ask what he wants written, then `start_post`. **interviewed:** `next_work`, then the **draft-post** skill |
+| "stop asking me questions" | `set_writing_mode` — only ever when he asks for it |
 | — | the **gate-check** skill, in a fresh breath, never while writing |
 | "put it out Tuesday" | `mark_ready` — the only thing that authorises publishing |
 | "hold that" / "that's wrong" | `hold_post` with his reason / `push_back_on_draft` with his words |

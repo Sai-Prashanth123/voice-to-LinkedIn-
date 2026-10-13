@@ -82,5 +82,26 @@ placeholder, so there was nothing to compare a draft to and everything looked co
 - **All passed** — the draft is filed in the calendar, where `list_calendar` shows it with its text.
   It is NOT published: only Josh can do that, with `mark_ready`, and that is the one thing in this
   system which authorises a post to go out.
-- **Any failed** — use the `draft-post` skill to re-draft. The new brief will carry these
+- **Any failed** — what happens next depends on the mode, and the judging does not.
+
+  In **interviewed** mode, use the `draft-post` skill to re-draft. The new brief carries these
   rejections, so fix them specifically rather than starting again.
+
+  In **one_step** mode the verdicts are advisory: the post goes to Josh's calendar flagged, and he
+  decides. Read him the post in full first, then each failed check in one line — what it caught, not
+  a defence of it. Do not talk him into it and do not talk him out of it.
+
+## Judge exactly as hard in either mode
+
+This is the line that decides whether advisory means anything.
+
+**A check you would fail is still a fail.** Advisory changes who acts on a verdict. It does not
+change the verdict, and it is not permission to wave something through because a rejection would be
+inconvenient for a person who is waiting. `gate_passed` stays false on a failing draft in both modes,
+every clause 17 number is computed from it, and a verdict softened to make a post reachable destroys
+the only evidence this system has ever worked.
+
+The one thing worth saying out loud when you report an advisory `claims_trace` failure: the
+deterministic check already ran before the draft was stored, and every span was verified against his
+own words. Your verdict on that check is about whether the post *reads* as traceable, which is a
+real question and a different one.

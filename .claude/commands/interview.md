@@ -2,9 +2,13 @@
 description: Answer the questions on an idea that is waiting
 ---
 
-Call `list_moments` with status `half_mined`, then `captured`. Those are the ideas with questions
-still open — the ones everything else is waiting on, because nothing can be drafted from an idea
-that has not been interviewed.
+**If the mode is `one_step`, stop and say so.** He asked for interviews to stop, and starting one
+because this command was typed is the complaint arriving by another route. Ask whether he wants to
+interview this particular idea; do not turn the mode back on for him.
+
+Otherwise: call `list_moments` with status `half_mined`, then `captured`. Those are the ideas with
+questions still open — the ones everything else is waiting on, because nothing can be drafted from an
+idea that has not been interviewed.
 
 Pick one (ask him which, if there are several) and call `next_interview_question`.
 

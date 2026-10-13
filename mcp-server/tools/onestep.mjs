@@ -68,12 +68,15 @@ export const oneStepTools = [
       // interview: false explicitly, so this tool behaves the same whether or not the mode is on.
       // He asked for one-step writing; a tool named start_post should not depend on a setting to
       // keep its promise.
-      const res = await fetch(url, {
+      // `${url}/functions/v1/cc-submit`, the way josh.mjs posts. `url` in the context is the
+      // project base, not the write door, and treating it as the door fails with "requested path
+      // is invalid" — which is PostgREST answering, not cc-submit refusing.
+      const res = await fetch(`${url}/functions/v1/cc-submit`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", apikey: key, Authorization: `Bearer ${key}` },
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
         body: JSON.stringify({ kind: "capture", text: args.text, name: args.name, interview: false }),
       });
-      const captured = await res.json();
+      const captured = await res.json().catch(() => ({}));
       if (!res.ok || captured?.error) {
         throw new Error(captured?.error ?? `capture failed: ${res.status}`);
       }

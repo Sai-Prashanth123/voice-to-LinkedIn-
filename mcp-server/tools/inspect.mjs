@@ -34,6 +34,7 @@ import { similarity } from "../../supabase/functions/_shared/diff.ts";
 // less than the first attempt was.
 import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
 import { isSupplied } from "../../supabase/functions/_shared/views.ts";
+import { modeName, oneStepMode } from "../mode.mjs";
 
 /** PostgREST returns rows; a missing table returns a permission error, which is the useful answer. */
 const rows = (db, path) => db.request("/" + path);
@@ -564,7 +565,20 @@ export const inspectTools = [
 
       const problems = unread.filter((n) => n.severity !== "info").length;
 
+      const oneStep = await oneStepMode(db);
+
       return {
+        /*
+         * First, because the instructions tell every session to read it before writing anything,
+         * and a fact the model has to go looking for is a fact it will sometimes not have.
+         */
+        mode: modeName(oneStep),
+        mode_means: oneStep
+          ? "He gives you material and you write it: start_post, write_post, create_draft. Nothing " +
+            "asks him questions and nothing is pulled from the idea bank. The eight checks run and " +
+            "you read him what they caught, but they do not hold the post back — he decides."
+          : "The interviewed path: capture_thought, a few short questions, next_work for what is " +
+            "waiting, and a draft waits for the checks to pass.",
         library: `${sections.length - empty.length} of ${sections.length} sections filled in`,
         idea_bank: { ready_to_draft: mined, awaiting_interview: halfMined, just_arrived: captured },
         drafts_written: needGate,
