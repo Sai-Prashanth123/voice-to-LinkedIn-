@@ -381,10 +381,38 @@ export const referencePostTools = [
 
       const dates = posts.map((p) => p.posted_at).filter(Boolean).sort();
 
+      /*
+       * SAY WHAT THE SHAPE FIGURES REST ON, EVERY TIME.
+       *
+       * `shape_basis` was a bare number next to `posts_read`, and a reader could take
+       * "median_paragraphs: 5" as a fact about the writer when it came from eight posts out of
+       * nineteen. The console strips line breaks from most of what it returns — measured at 70 of
+       * 70 on 9 October, and again on a fresh scrape on the 13th — and paragraphs, above-the-fold
+       * and opening and closing shape are all counted from line breaks. So between a third and a
+       * half of every writer's stored posts can say nothing about structure.
+       *
+       * This matters most for the one writer Josh asked to lean hardest into. A confident shape
+       * read from eight posts, presented as a read of the writer, is the kind of quiet overclaim
+       * this system exists to refuse.
+       */
+      const thin = shaped.length < 12 || shaped.length / posts.length < 0.6;
+
       return {
         handle: args.handle,
         posts_read: posts.length,
-        shape_basis: shaped.length,
+        shape_basis: {
+          posts: shaped.length,
+          of: posts.length,
+          means: "Every figure under getting_in, getting_out and body is measured from these " +
+            `${shaped.length} post(s) only. The rest arrived from the scraper with their line ` +
+            "breaks stripped, and structure is counted from line breaks.",
+          ...(thin && {
+            caution: `Thin. ${shaped.length} of ${posts.length} is not enough to call this the ` +
+              "writer's habit. Treat these as indicative, say so if you quote them to Josh, and " +
+              "read the posts themselves with get_reference_posts rather than relying on the " +
+              "numbers.",
+          }),
+        },
         window: dates.length ? { from: dates[0].slice(0, 10), to: dates.at(-1).slice(0, 10) } : null,
         length: { median_words: med(posts.map((p) => p.words)) },
         rhythm: { median_sentence_sd: med(posts.map((p) => Number(p.sentence_words_sd))) },
