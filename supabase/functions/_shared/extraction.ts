@@ -67,10 +67,38 @@ export interface ExtractionVerdict {
 }
 
 /**
+ * What Josh himself said: what he sent, then his answers. The interviewer's questions are left out,
+ * because a number the interviewer used is not one he gave.
+ */
+export function joshSaid(seed: string, turns: { role: string; body: string }[]): string {
+  return [seed, ...turns.filter((t) => t.role === "answer").map((t) => t.body)].join("\n\n");
+}
+
+/**
+ * Numbers he gave that appear in no field of the entry.
+ *
+ * The other half of rule 2. "Do not add numbers" was checked; dropping them was not, and the entry
+ * is the only thing a draft may cite. On 13 Oct 2026 two extractions of the same interview each
+ * lost "10 years", "six months", "30%" and "$16", so the post that interview existed to produce
+ * could not state a single one of them.
+ */
+export function missingNumbers(extracted: ExtractionLike, said: string): string[] {
+  const carried = new Set(
+    PROSE_FIELDS.flatMap((f) => (typeof extracted[f] === "string" ? extractNumbers(extracted[f] as string) : [])),
+  );
+  return extractNumbers(said ?? "").filter((n) => !carried.has(n));
+}
+
+/**
  * @param extracted what the model produced
  * @param source    everything it was shown: what Josh sent, plus the interview transcript
+ * @param said      Josh's words alone (joshSaid). When given, every number in it must be carried.
  */
-export function verifyExtraction(extracted: ExtractionLike, source: string): ExtractionVerdict {
+export function verifyExtraction(
+  extracted: ExtractionLike,
+  source: string,
+  said?: string,
+): ExtractionVerdict {
   const failures: string[] = [];
   const haystack = normalise(source ?? "");
 
@@ -127,6 +155,15 @@ export function verifyExtraction(extracted: ExtractionLike, source: string): Ext
     );
   }
 
+  // ── 4. Numbers he gave, which must not be dropped ──────────────────────────────────────────
+  const dropped = said === undefined ? [] : missingNumbers(extracted, said);
+  if (dropped.length > 0) {
+    failures.push(
+      `Josh gave ${dropped.map((n) => `"${n}"`).join(", ")}, which no field of the extraction ` +
+        `carries. A number left out of the entry can never reach a post (5.9).`,
+    );
+  }
+
   return {
     ok: failures.length === 0,
     failures,
@@ -134,6 +171,7 @@ export function verifyExtraction(extracted: ExtractionLike, source: string): Ext
       "their_actual_words appears verbatim in the source",
       "every number appears in the source",
       "every recorded name appears in the source",
+      ...(said === undefined ? [] : ["every number Josh gave is carried into the entry"]),
     ],
     // Said out loud, because a verdict that implies more than it proved is the failure mode this
     // whole file exists to fix.

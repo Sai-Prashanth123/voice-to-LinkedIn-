@@ -303,6 +303,10 @@ export const writeTools = [
       inputSchema: {
         moment_id: z.number().int().describe("The moment whose interview this records"),
         extracted: EXTRACTION,
+        redo: z.boolean().optional().describe(
+          "Only when Josh asked for an idea already written up to be written up again. The " +
+            "entry it replaces is kept on the record.",
+        ),
       },
     },
 
@@ -321,6 +325,7 @@ export const writeTools = [
           kind: "extraction",
           moment_id: args.moment_id,
           extracted: args.extracted,
+          redo: args.redo === true,
         }),
       });
 

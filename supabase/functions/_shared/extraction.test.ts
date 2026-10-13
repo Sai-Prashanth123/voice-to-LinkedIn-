@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { verifyExtraction } from "./extraction.ts";
+import { joshSaid, missingNumbers, verifyExtraction } from "./extraction.ts";
 
 /** What Josh actually said. Everything below is judged against this and nothing else. */
 const SOURCE = `
@@ -116,4 +116,64 @@ test("an empty extraction is not a failure", () => {
   // to do about it; this is not the place to refuse it.
   const r = verifyExtraction(base, SOURCE);
   assert.equal(r.ok, true, r.failures.join(" "));
+});
+
+/* ── Dropped numbers ─────────────────────────────────────────────────────── */
+
+const TURNS = [
+  { role: "question", body: "How many years, and how many builds in the last 3 months?" },
+  {
+    role: "answer",
+    body: "the better part of 10 years, all of which have fallen woefully short. Take 30% off. under $16",
+  },
+  { role: "answer", body: "This probably works best for SMB" },
+];
+const SAID = joshSaid("I've only just started building TAMs like this in the last six months", TURNS);
+
+test("joshSaid keeps his words and leaves the interviewer's out", () => {
+  assert.match(SAID, /six months/);
+  assert.match(SAID, /under \$16/);
+  assert.doesNotMatch(SAID, /3 months/);
+});
+
+test("a number he gave that no field carries is refused", () => {
+  // 13 Oct 2026: two extractions of one interview each dropped "10 years", "six months", "30%" and
+  // "$16", and the post the interview existed to produce could state none of them.
+  const r = verifyExtraction(
+    { ...base, the_moment: "TAMs built this way for the last six months, after 10 years of falling short." },
+    SAID,
+    SAID,
+  );
+  assert.equal(r.ok, false);
+  assert.match(r.failures.join(" "), /"30".*"16"|"16".*"30"/);
+  assert.deepEqual(missingNumbers({ ...base, the_moment: "six months, 10 years" }, SAID).sort(), ["16", "30"]);
+});
+
+test("every number carried, in any field and in any form, passes", () => {
+  const r = verifyExtraction(
+    {
+      ...base,
+      the_moment: "Building TAMs like this for the last 6 months, after ten years of falling short.",
+      the_detail: "Take 30% off the average cost, under $16.",
+    },
+    SAID,
+    SAID,
+  );
+  assert.equal(r.ok, true, r.failures.join(" "));
+  assert.match(r.checked.join(" "), /carried/);
+});
+
+test("a number only the interviewer used is not required", () => {
+  assert.deepEqual(
+    missingNumbers({ ...base, the_moment: "six months, 10 years, 30%, $16" }, SAID),
+    [],
+  );
+});
+
+test("without his words, the dropped-number check does not run", () => {
+  // Callers that only hold the combined source cannot tell his numbers from the interviewer's, so
+  // they get the three original checks and the verdict does not claim the fourth.
+  const r = verifyExtraction(base, SAID);
+  assert.equal(r.ok, true, r.failures.join(" "));
+  assert.doesNotMatch(r.checked.join(" "), /carried/);
 });
