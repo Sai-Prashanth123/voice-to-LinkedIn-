@@ -587,7 +587,7 @@ async function fileDraft(db: SupabaseClient, body: DraftBody) {
   if (!Array.isArray(body.claims)) return json({ error: "claims must be an array (it may be empty)" }, 400);
 
   const { data: moment } = await db
-    .from("moments").select("id, ref, title, status, killed").eq("id", momentId).maybeSingle();
+    .from("moments").select("id, ref, title, status, killed, parked_reason").eq("id", momentId).maybeSingle();
   if (!moment) return json({ error: `no moment with id ${momentId}` }, 404);
   if (moment.killed) return json({ error: `moment ${momentId} has been killed` }, 409);
 
@@ -606,9 +606,17 @@ async function fileDraft(db: SupabaseClient, body: DraftBody) {
   if (!["mined", "queued", "drafted", "gated"].includes(moment.status)) {
     return json({
       error: `"${moment.title}" is ${moment.status}, so it cannot be drafted yet.`,
+      // Each state gets the sentence that is true of it. "It has already moved past drafting" is
+      // the string from his 5 October bug report, and every status that was not captured or
+      // half_mined fell through to it — including parked, where it is both wrong and the exact
+      // words that would tell him a fixed bug had come back.
       next: moment.status === "captured" || moment.status === "half_mined"
         ? "It has not been interviewed. Run the interview first with next_interview_question."
-        : "It has already moved past drafting.",
+        : moment.status === "parked"
+        ? `It parked rather than being drafted again${
+          moment.parked_reason ? `: ${moment.parked_reason}` : "."
+        } Nothing is lost — reopen_idea brings it back with its material intact.`
+        : "It has already been published or scheduled, so it is not drafted again.",
     }, 409);
   }
 

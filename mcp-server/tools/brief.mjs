@@ -37,6 +37,7 @@ import { parsePillars } from "../../supabase/functions/_shared/library.ts";
 import { renderTranscript } from "../../supabase/functions/_shared/session.ts";
 import {
   CHECK_NEEDS_SECTION,
+  gateInputsFor,
   notJudged,
   renderLibrary,
   unjudgeableChecks,
@@ -295,16 +296,27 @@ export const briefTools = [
         not_judgeable: [...unjudgeable],
         checks_remaining: remaining.length,
         system: GATE_SYSTEM(library.text),
-        checks: remaining.map((check) => ({
-          check_key: check.key,
-          user: GATE_USER({
-            check,
-            body: draft.body,
-            entry: Object.keys(entry).length > 0 ? entry : undefined,
-            audience: moment?.audience ?? null,
-            clearedNames: cleared,
-          }),
-        })),
+        // Each check is shown the post, and nothing else unless its rubric cannot be answered
+        // without it. This filter is the whole point of gateInputsFor: it was applied on the
+        // server path and NOT here, and this is the path that actually runs, so five of the eight
+        // checks were reading his private notes. That is his "it fails drafts for things that
+        // aren't in them", and it had survived one fix because that fix was prompt wording.
+        checks: remaining.map((check) => {
+          const sees = gateInputsFor(check.key);
+          return {
+            check_key: check.key,
+            // Said out loud so a reader of the brief can see what the judge was given, rather than
+            // having to trust that something upstream filtered correctly.
+            sees: Object.entries(sees).filter(([, v]) => v).map(([k]) => k),
+            user: GATE_USER({
+              check,
+              body: draft.body,
+              entry: sees.source && Object.keys(entry).length > 0 ? entry : undefined,
+              audience: sees.audience ? (moment?.audience ?? null) : undefined,
+              clearedNames: sees.clearedNames ? cleared : undefined,
+            }),
+          };
+        }),
         note: unjudgeable.size > 0
           ? [...unjudgeable].join(", ") + " is not in this list: the library section it judges " +
             "against is empty, so it is recorded as NOT JUDGED rather than passed on no evidence."

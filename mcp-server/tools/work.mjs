@@ -221,10 +221,20 @@ export const workTools = [
 
       // Nothing queued. Said with the reason, because "nothing to do" and "everything is waiting on
       // a person" are different facts and only one of them is good news.
-      const [halfMined, captured, drafted] = await Promise.all([
+      const [halfMined, captured, drafted, parked] = await Promise.all([
         db.select("moments", { select: "id", status: "eq.half_mined", killed: "is.false" }),
         db.select("moments", { select: "id", status: "eq.captured", killed: "is.false" }),
         db.select("moments", { select: "id", status: "eq.drafted", killed: "is.false" }),
+        // Parked ideas are skipped silently in both loops above, which is right — Josh has not asked
+        // for them. But "nothing to write" and "three ideas went quiet after three failures each"
+        // read identically from here, and only one of them is a reason to look at the gate.
+        db.select("moments", {
+          select: "id,title,parked_reason",
+          status: "eq.parked",
+          killed: "is.false",
+          order: "id.desc",
+          limit: 5,
+        }),
       ]);
 
       return {
@@ -238,6 +248,15 @@ export const workTools = [
           ideas_needing_answers: halfMined.length + captured.length,
           drafts_with_the_gate_or_for_review: drafted.length,
         },
+        ...(parked.length > 0 && {
+          parked: {
+            count: parked.length,
+            ideas: parked.map((m) => ({ moment_id: m.id, name: m.title ?? null, why: m.parked_reason })),
+            means: "These are not offered as work and are not gone. An idea parks after three " +
+              "rejected drafts (9.8) or when the material would not carry a post. reopen_idea " +
+              "brings one back with its material intact, ready to draft.",
+          },
+        }),
       };
     },
   },

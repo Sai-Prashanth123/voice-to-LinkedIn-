@@ -24,7 +24,7 @@ import { getMaterial, getMoment, getNames, logEvent, sourceEntry } from "../db.t
 import { clearedNames, unclearedNames } from "../names.ts";
 import { enqueue } from "../jobs.ts";
 import { loadLibrary } from "../library.ts";
-import { CHECK_NEEDS_SECTION, notJudged, unjudgeableChecks } from "../views.ts";
+import { gateInputsFor, CHECK_NEEDS_SECTION, notJudged, unjudgeableChecks } from "../views.ts";
 import { notice } from "../notices.ts";
 import { oneStepMode } from "../mode.ts";
 // Re-exported because gate-basis.test.ts imports them from here, and because this is where a
@@ -35,8 +35,8 @@ import { GateVerdictSchema } from "../schemas.ts";
 import type { Job } from "../types.ts";
 import { retryOrPark } from "./draft.ts";
 
-/** Checks that need the source material in front of them. */
-const NEEDS_SOURCE = new Set(["claims_trace", "anyone_else", "identifiable"]);
+// What each check may be shown lives in views.ts, because get_gate_brief needs the same answer
+// and, while this was declared here, it had no way to ask. See the note there.
 
 /**
  * Run `fn` over `items` with at most `limit` in flight.
@@ -169,9 +169,9 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
           content: GATE_USER({
             check,
             body: draft.body,
-            entry: NEEDS_SOURCE.has(check.key) ? entry : undefined,
-            audience: check.key === "aimed_at_someone" ? moment.audience : undefined,
-            clearedNames: check.key === "names_cleared" ? cleared : undefined,
+            entry: gateInputsFor(check.key).source ? entry : undefined,
+            audience: gateInputsFor(check.key).audience ? moment.audience : undefined,
+            clearedNames: gateInputsFor(check.key).clearedNames ? cleared : undefined,
           }),
         }],
         effort: "high",

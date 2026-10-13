@@ -165,6 +165,63 @@ export const CHECK_NEEDS_SECTION: Record<string, string> = {
   banned_phrases: "banned_phrases",
 };
 
+/* ── What each check may be shown besides the post ───────────────────────── */
+/**
+ * THE COMPLAINT THIS EXISTS TO ANSWER
+ *
+ * "I think the gate is also failing drafts for things that aren't in them." He was right, and
+ * gate-source.test.ts has carried his words and the evidence since 5 October: on draft 56
+ * `identifiable` failed on "17 campuses" and `names_cleared` failed on "Ben", and neither phrase
+ * was in the post. Both were in his private notes, which the judge had been handed.
+ *
+ * The response then was to add "JUDGE THE POST" to the rubrics. The notes still arrived; only an
+ * instruction stood between them and the next wrong rejection. And a wrong rejection is expensive
+ * in a way few things here are: gate_runs has no UPDATE by design, so it is permanent, and it
+ * burns one of the moment's three attempts (9.8).
+ *
+ * THE RULE
+ *
+ * A check is shown the post, and nothing else unless its rubric cannot be answered without it.
+ * Three of the eight compare the post against something outside itself, and they are named here.
+ * The other five — hook_opens_loop, voice_guide, banned_phrases, aimed_at_someone, and anything
+ * added later — judge the text in front of them.
+ *
+ * WHY IT IS IN THIS FILE
+ *
+ * It was declared inside handlers/gate.ts, where only the edge function could reach it, and
+ * get_gate_brief had no equivalent — so the server path narrowed the inputs and the Claude path,
+ * which is the one that actually runs (gate_runs_in_claude defaults true), handed every check
+ * everything. The same shape as the two copies of isSupplied, and the same cost. One definition,
+ * both readers, and a test that fails if either forgets.
+ */
+export const CHECK_SEES_SOURCE = new Set([
+  // 9.4 — the ledger's own check. The material is the comparison set; it cannot run without it.
+  "claims_trace",
+  // "Could anyone else have written this?" is answered by what he was actually in the room for.
+  "anyone_else",
+  // Shown who is being protected — explicitly not as grounds to fail. See the rubric's guard.
+  "identifiable",
+]);
+
+/** Only the check that asks who the post is for. */
+export const CHECK_SEES_AUDIENCE = new Set(["aimed_at_someone"]);
+
+/** Only the check that compares the post against what Josh has cleared. */
+export const CHECK_SEES_CLEARED_NAMES = new Set(["names_cleared"]);
+
+/** What one check may be shown. Both gate paths ask this, and neither decides for itself. */
+export function gateInputsFor(key: string): {
+  source: boolean;
+  audience: boolean;
+  clearedNames: boolean;
+} {
+  return {
+    source: CHECK_SEES_SOURCE.has(key),
+    audience: CHECK_SEES_AUDIENCE.has(key),
+    clearedNames: CHECK_SEES_CLEARED_NAMES.has(key),
+  };
+}
+
 /**
  * Which of these checks cannot be judged, because the section they read is empty.
  *

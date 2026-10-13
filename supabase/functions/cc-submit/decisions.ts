@@ -362,15 +362,39 @@ export async function reopenIdea(db: SupabaseClient, body: Body): Promise<Respon
     return json({ error: "That one was killed rather than parked. Capture it again if it is back." }, 409);
   }
 
+  /*
+   * BACK TO WHAT THE MATERIAL JUSTIFIES, NOT ALWAYS TO THE BEGINNING.
+   *
+   * This set "captured" unconditionally, and "captured" is refused by the draft guard below with
+   * "It has not been interviewed" — so an idea parked by the three-strike rule (9.8), which by
+   * definition has full material and up to three drafts behind it, could not be drafted again. The
+   * park notice offers reopen_idea as the way back; the way back led somewhere that refuses. In
+   * one_step mode there is no interview to run either, so the idea was stuck for good.
+   *
+   * Nothing is deleted and no new route is added: this is the status catching up with what is
+   * already on the record. An idea with material is mined. One without never got that far.
+   */
+  const { data: material } = await db
+    .from("material").select("moment_id").eq("moment_id", momentId).maybeSingle();
+  const hasMaterial = Boolean(material);
+
   await db.from("moments").update({
-    status: "captured",
+    status: hasMaterial ? "mined" : "captured",
     parked_reason: null,
     // A new session on an old moment: 5.3 and 5.8 count from here, not from the first capture.
     reopened_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }).eq("id", momentId);
 
-  const step = await chooseNextQuestion(db, momentId);
+  // Nothing to ask about an idea that has already been written up. Asking anyway is the 13 October
+  // complaint arriving through the back door of a reopen.
+  const step = hasMaterial
+    ? {
+      question: null,
+      progress: null,
+      note: "It already has its material, so it is ready to be written as it stands.",
+    }
+    : await chooseNextQuestion(db, momentId);
 
   return json({
     ok: true,
@@ -378,6 +402,7 @@ export async function reopenIdea(db: SupabaseClient, body: Body): Promise<Respon
     name: moment.title ?? null,
     question: step.question ?? null,
     progress: step.progress ?? null,
+    status: hasMaterial ? "mined" : "captured",
     next: step.question
       ? "Reopened. Answer the question and it carries on where it left off."
       : `Reopened. ${step.note ?? "Nothing more to ask — it can be written as it stands."}`,

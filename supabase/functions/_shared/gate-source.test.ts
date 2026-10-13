@@ -18,6 +18,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { GATE_CHECKS, GATE_SYSTEM, GATE_USER } from "./prompts.ts";
+import { CHECK_SEES_SOURCE, gateInputsFor } from "./views.ts";
 
 /** Draft 56, as filed on 5 October. */
 const DRAFT_56 = `A cold email landed in my inbox addressed to Ben.
@@ -99,5 +100,86 @@ test("every check still receives the post itself", () => {
     const user = GATE_USER({ check: spec, body: DRAFT_56 });
     assert.match(user, /THE POST:/);
     assert.ok(user.includes("My name isn't Ben."), `${spec.key} was not given the post`);
+  }
+});
+
+/*
+ * ── The instruction was not enough, so now the notes do not arrive at all ───────────────────────
+ *
+ * Everything above asserts WORDING: that the rubrics tell the judge to quote the post. That was the
+ * whole of the 5 October fix, and it left the notes sitting in front of five checks that have no
+ * use for them, with an instruction as the only thing standing between. Worse, the narrowing that
+ * did exist lived inside handlers/gate.ts, so get_gate_brief — the path that actually runs, since
+ * gate_runs_in_claude defaults true — applied none of it.
+ *
+ * These assert the INPUT instead. A check that cannot see his notes cannot fail a post for them,
+ * whatever the model does on the day.
+ */
+
+const NOTE_ONLY = ["17 campuses", "Attack Surface Visibility", "North Carolina"];
+
+test("only the three checks that compare against the material are shown it", () => {
+  assert.deepEqual([...CHECK_SEES_SOURCE].sort(), ["anyone_else", "claims_trace", "identifiable"]);
+
+  for (const spec of GATE_CHECKS) {
+    const sees = gateInputsFor(spec.key);
+    const user = GATE_USER({
+      check: spec,
+      body: DRAFT_56,
+      entry: sees.source ? SOURCE : undefined,
+      audience: sees.audience ? "VPs of Sales" : undefined,
+      clearedNames: sees.clearedNames ? ["Ben"] : undefined,
+    });
+
+    if (sees.source) continue;
+
+    for (const phrase of NOTE_ONLY) {
+      assert.ok(
+        !user.includes(phrase),
+        `${spec.key} was handed "${phrase}", which is in his notes and not in the post`,
+      );
+    }
+  }
+});
+
+test("the five that judge the text alone get the post and nothing else", () => {
+  for (const key of ["hook_opens_loop", "voice_guide", "banned_phrases", "aimed_at_someone", "names_cleared"]) {
+    const sees = gateInputsFor(key);
+    assert.equal(sees.source, false, `${key} is being shown the source material`);
+  }
+  // And the two that legitimately look outside the post still do.
+  assert.equal(gateInputsFor("aimed_at_someone").audience, true);
+  assert.equal(gateInputsFor("names_cleared").clearedNames, true);
+  // ...but only to the check that asks for it.
+  assert.equal(gateInputsFor("hook_opens_loop").audience, false);
+  assert.equal(gateInputsFor("voice_guide").clearedNames, false);
+});
+
+test("a check added later is shown the post alone until someone says otherwise", () => {
+  // The safe default, stated as a test so it is a decision rather than an accident.
+  assert.deepEqual(gateInputsFor("some_check_added_in_future"), {
+    source: false,
+    audience: false,
+    clearedNames: false,
+  });
+});
+
+test("both gate paths ask the same question about what a check may see", async () => {
+  // The fault this whole file now guards was two readers disagreeing, so it is checked by source:
+  // neither path may decide for itself which checks get the material.
+  const paths = ["./handlers/gate.ts", "../../../mcp-server/tools/brief.mjs"];
+  for (const f of paths) {
+    const source = await Deno.readTextFile(new URL(f, import.meta.url));
+    assert.match(source, /gateInputsFor/, `${f} does not use the shared rule`);
+    assert.doesNotMatch(
+      source,
+      /(const|let)\s+NEEDS_SOURCE\s*=/,
+      `${f} has gone back to its own copy of the rule`,
+    );
+    assert.doesNotMatch(
+      source,
+      /check\.key === "aimed_at_someone"/,
+      `${f} is deciding for itself which check sees the audience`,
+    );
   }
 });
