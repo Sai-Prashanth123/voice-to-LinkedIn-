@@ -14,6 +14,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { gateFixtures } from "./acceptance.ts";
 import type { Counts } from "./acceptance.ts";
+import { isSupplied } from "./views.ts";
 
 function weeksSince(dates: (string | null)[]): number {
   const times = dates.filter(Boolean).map((d) => new Date(d as string).getTime());
@@ -74,8 +75,12 @@ export async function gatherCounts(db: SupabaseClient): Promise<Counts> {
   // Moments Josh actually replied to. Anything else is the interview waiting, not failing.
   const engaged = new Set(ofLive(answers.data).map((a) => a.moment_id as number));
 
-  const guide = ((sections.data as { body?: string } | null)?.body ?? "")
-    .replace(/DELIBERATELY EMPTY[\s\S]*/, "").trim();
+  // isSupplied, not a local trim. The old rule here knew only about DELIBERATELY EMPTY, so a
+  // section still carrying its `# …\nFOR JOSH` placeholder counted as a supplied voice guide — and
+  // this figure feeds the acceptance score, which means the contractual report was crediting work
+  // that had not happened.
+  const guideBody = (sections.data as { body?: string } | null)?.body ?? "";
+  const guide = isSupplied(guideBody) ? guideBody.trim() : "";
 
   return {
     voiceNotes: voice.length,

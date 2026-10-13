@@ -74,6 +74,49 @@ export const cases = [
       );
       assert.notEqual(sections.voice_guide, "", "the renderer agrees the section is supplied");
       assert.not(/Not yet supplied/.test(prompt), "so the prompt does not announce a gap");
+
+      /*
+       * AND EVERY OTHER PLACE THAT ANSWERS THIS QUESTION, because the case name says "one answer"
+       * and for six weeks there were four.
+       *
+       * This case asserted isSupplied and renderLibrary agreed with each other, and they always
+       * did — they live in the same file. Meanwhile get_library carried its own rule that knew
+       * only about DELIBERATELY EMPTY, and on 13 October it reported voice_transcript as 1,205
+       * characters of content while the drafting brief rendered the same row as a gap. Josh read a
+       * filled library and the model writing his posts was handed nothing. Two more copies had
+       * drifted the same way, one of them feeding the acceptance score.
+       *
+       * A grep, not a behaviour test, because the failure is a SECOND IMPLEMENTATION rather than a
+       * wrong result. Anything computing this from a regex over the body is the bug, however
+       * correct it looks on the day it is written — inspect.mjs held a hand-copy that was correct
+       * and would have told nobody the day it stopped being correct.
+       */
+      const { readFileSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      const root = join(import.meta.dirname, "..", "..", "..");
+      const mustImport = [
+        "mcp-server/tools/read.mjs",
+        "mcp-server/tools/inspect.mjs",
+        "eval/gather.mjs",
+        "supabase/functions/_shared/acceptance-data.ts",
+      ];
+
+      const rolledTheirOwn = [];
+      for (const rel of mustImport) {
+        const src = readFileSync(join(root, rel), "utf8");
+        const imports = /import\s*\{[^}]*\bisSupplied\b[^}]*\}\s*from\s*["'][^"']*views\.ts["']/.test(src);
+        // The REGEX LITERAL, not the words. These files are allowed to explain the old rule in a
+        // comment — several of them now do, at length — and a test that cannot tell prose from code
+        // would push the next person into writing a vaguer comment to keep it quiet.
+        const reimplements = /\/DELIBERATELY EMPTY/.test(src);
+        if (!imports || reimplements) rolledTheirOwn.push(rel);
+      }
+      seen("checked_for_a_second_answer", mustImport);
+      assert.equal(
+        rolledTheirOwn,
+        [],
+        "every reader of 'is this section filled in' imports isSupplied rather than deciding for itself",
+      );
     },
   }),
 

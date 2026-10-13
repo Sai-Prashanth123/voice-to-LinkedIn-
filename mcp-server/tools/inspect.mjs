@@ -33,6 +33,7 @@ import { similarity } from "../../supabase/functions/_shared/diff.ts";
 // 9.1 — the exact set of fields a drafter may see. Reused so a rewrite is shown neither more nor
 // less than the first attempt was.
 import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
+import { isSupplied } from "../../supabase/functions/_shared/views.ts";
 
 /** PostgREST returns rows; a missing table returns a permission error, which is the useful answer. */
 const rows = (db, path) => db.request("/" + path);
@@ -524,14 +525,10 @@ export const inspectTools = [
       };
 
       const sections = await rows(db, "library_sections?select=key,body");
-      const empty = sections.filter((s) => {
-        const t = (s.body ?? "").trim();
-        if (!t) return true;
-        const placeheld = /DELIBERATELY EMPTY/.test(t) || /^#[^\n]*\n+\s*FOR JOSH\b/.test(t);
-        if (!placeheld) return false;
-        const [, ...rest] = t.split(/(?:^|\n)---(?:\n|$)/);
-        return !rest.some((c) => c.trim());
-      }).map((s) => s.key);
+      // Imported rather than reimplemented. This block was a correct hand-copy of isSupplied, which
+      // is the more dangerous kind: it agreed with views.ts the day it was written, and nothing
+      // would have told anyone the day it stopped. Two other copies had already drifted.
+      const empty = sections.filter((s) => !isSupplied(s.body)).map((s) => s.key);
 
       const [mined, halfMined, captured, needGate, openProposals, published] = await Promise.all([
         one("moments?select=id&status=eq.mined&killed=is.false&limit=200"),

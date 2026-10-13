@@ -20,6 +20,7 @@ import { z } from "zod";
 import { gatherAll } from "../../eval/gather.mjs";
 import { score, overall, summarise } from "../../supabase/functions/_shared/acceptance.ts";
 import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
+import { isSupplied } from "../../supabase/functions/_shared/views.ts";
 
 const MOMENT_FIELDS =
   "id,title,source,status,depth_reached,pillar,audience,strength,pinned,killed," +
@@ -203,9 +204,27 @@ export const readTools = [
       });
       if (args.key && sections.length === 0) throw new Error(`No library section "${args.key}".`);
 
-      // A section whose body is only the placeholder is not content, and a drafter treating it as
-      // content would be writing to an instruction that was never meant for it.
-      const isEmpty = (s) => !(s.body ?? "").replace(/DELIBERATELY EMPTY[\s\S]*/, "").trim();
+      /*
+       * isSupplied, imported — not a local rule that agrees with it on most days.
+       *
+       * This used to carry its own test: strip the "deliberately empty" marker and whatever follows
+       * it, then trim. That knows one of the three placeholder forms. It does not know the
+       * `# …` heading followed by a line addressed to Josh, which is the head
+       * that fourteen sections actually ship with, and it does not know that real content gets
+       * appended BELOW a `---` divider while the placeholder stays at the top.
+       *
+       * So this tool and the drafting brief gave two different answers about the same row. On
+       * 13 October, live: get_library reported `voice_transcript` as 1,205 characters of content
+       * and left it out of awaiting_josh, while the drafting brief rendered that same section as
+       * "(Not yet supplied by Josh. Do not invent one — work without it.)". Josh read a filled
+       * library and the model writing his posts was handed a hole where his voice evidence goes —
+       * then he was told the system was not referencing the library correctly, and he was right.
+       *
+       * views.ts is the single answer. X-02 is named "there is one answer to whether a library
+       * section is filled in" and asserts it; it never reached this file because this file had its
+       * own copy.
+       */
+      const isEmpty = (s) => !isSupplied(s.body);
 
       const kept = args.include_empty ? sections : sections.filter((s) => !isEmpty(s));
       const awaiting = sections.filter(isEmpty).map((s) => s.key);

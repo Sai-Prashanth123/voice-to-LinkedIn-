@@ -436,7 +436,24 @@ export const briefTools = [
       });
       const pillarsBody = (rows.find((r) => r.key === "pillars") ?? {}).body ?? "";
 
-      const { prompt: library } = renderLibrary(rows, VIEWS.interview);
+      /*
+       * The VIEW NAME, not VIEWS.interview.
+       *
+       * renderLibrary does `new Set(VIEWS[view])` itself, so passing the array gave it
+       * VIEWS[["core_rules","pillars",…]] — an undefined lookup, an empty wanted-set, and every
+       * section silently filtered out. No error, no gap notice, just an empty library string
+       * interpolated into the extractor's system prompt.
+       *
+       * This is the same mistake voice.mjs:92 made and fixed in September, with a comment
+       * describing it exactly; the fix was never carried across to here. It is the one call site of
+       * nine that passed an array — every other one passes a string literal.
+       *
+       * It matters more here than anywhere: extraction is what turns Josh's answers into the
+       * material every later claim is verified against. He answered 21 interview questions on
+       * 13 October and the extractor read none of his pillars, audience or prompt set while doing
+       * it.
+       */
+      const { prompt: library } = renderLibrary(rows, "interview");
 
       // renderTranscript imported rather than reproduced: the model must read the conversation in
       // the same shape the validator rebuilds it from, and two renderings of one transcript is

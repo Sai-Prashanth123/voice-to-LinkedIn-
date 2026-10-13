@@ -15,6 +15,7 @@
  * correct - and worker-ops, which does not run this file, never did. It is folded in here now.
  */
 import { gateFixtures } from "../supabase/functions/_shared/acceptance.ts";
+import { isSupplied } from "../supabase/functions/_shared/views.ts";
 
 /** Rows, with killed moments excluded wherever a moment is involved. */
 export async function gather(q) {
@@ -92,8 +93,10 @@ export async function gather(q) {
       .filter((o) => o.edit_class)
       .sort((a, b) => new Date(b.edit_measured_at ?? 0) - new Date(a.edit_measured_at ?? 0))
       .map((o) => o.edit_class),
-    voiceGuideSupplied: !!(sections.find((s) => s.key === "voice_guide")?.body ?? "")
-      .replace(/DELIBERATELY EMPTY[\s\S]*/, "").trim(),
+    // isSupplied, not a local trim — see views.ts. The rule that was here knew about one of the
+    // three placeholder forms, so a voice guide still holding its FOR JOSH preamble reported as
+    // supplied.
+    voiceGuideSupplied: isSupplied(sections.find((s) => s.key === "voice_guide")?.body),
   };
 }
 
