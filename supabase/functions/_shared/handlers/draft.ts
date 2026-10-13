@@ -16,6 +16,8 @@ import { callStructured, MODELS, modelName } from "../llm.ts";
 import { verifyDraft, type Claim } from "../claims.ts";
 import { getMaterial, getMoment, getNames, getSetting, logEvent, park, sourceEntry } from "../db.ts";
 import { clearedNames, unclearedNames } from "../names.ts";
+import { type ExtraSources, HIS_WORDS_TABLE, RECEIPTS_SECTION } from "../entry.ts";
+import { isSupplied } from "../views.ts";
 import { enqueue } from "../jobs.ts";
 import { notice } from "../notices.ts";
 import { loadLibrary } from "../library.ts";
@@ -37,7 +39,20 @@ export async function handleDraft(db: SupabaseClient, job: Job): Promise<void> {
   if (moment.killed || moment.status === "parked") return;
 
   const material = await getMaterial(db, momentId);
-  const entry = sourceEntry(material);
+
+  /*
+   * THE WIDER SOURCE, REBUILT HERE AND NEVER TAKEN FROM THE CALLER.
+   *
+   * Same rule as before and the reason the comment above says it twice: a caller that could supply
+   * its own source could verify any claim it liked. These two are loaded from the database on the
+   * server, exactly like the ten fields.
+   *
+   * his_words is what he typed, before any model rewrote it into a summary. receipts is what he has
+   * told us about his own career, method and numbers. Both are his, and both are still checked word
+   * for word by verifyDraft — this widens where a fact may come from, not whether it is checked.
+   */
+  const extra = await writingSources(db, momentId);
+  const entry = sourceEntry(material, extra);
   if (Object.keys(entry).length === 0) {
     await park(db, momentId, "There is no mined material to write from.");
     return;
@@ -134,6 +149,40 @@ export interface FiledDraft {
  * calls it when Claude posts a draft. The source is rebuilt from the database here, never taken from
  * the caller — a caller that could supply its own source could verify any claim it liked.
  */
+/**
+ * The two sources outside the ten fields. Empty strings when absent, which sourceEntry drops.
+ */
+export async function writingSources(
+  db: SupabaseClient,
+  momentId: number,
+): Promise<ExtraSources> {
+  const { data: raw } = await db
+    .from(HIS_WORDS_TABLE)
+    .select("transcript, text_body")
+    .eq("moment_id", momentId)
+    .order("id");
+
+  const hisWords = (raw ?? [])
+    .map((r: { transcript?: string | null; text_body?: string | null }) =>
+      r.transcript ?? r.text_body ?? ""
+    )
+    .filter((s: string) => s.trim().length > 0)
+    .join("\n\n");
+
+  const { data: receipts } = await db
+    .from("library_sections")
+    .select("body")
+    .eq("key", RECEIPTS_SECTION)
+    .maybeSingle();
+
+  return {
+    his_words: hisWords,
+    // isSupplied is not applied here on purpose: a placeholder in receipts is text he did not write,
+    // so it must not become a span a claim can rest on. An unfilled section yields nothing.
+    receipts: isSupplied(receipts?.body) ? (receipts?.body ?? "") : "",
+  };
+}
+
 export async function applyDraft(db: SupabaseClient, d: DraftToFile): Promise<FiledDraft> {
   const { momentId, attempt, nearMiss } = d;
 

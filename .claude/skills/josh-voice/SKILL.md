@@ -22,6 +22,13 @@ it too without failing on it.
 **For anything the gate will judge, the library wins.** It is the contractual source (clause 8) and
 it is what `get_gate_brief` returns.
 
+**One exception to "allowed to disagree", added 14 October 2026: `receipts.md`.** Since a claim may
+now cite `receipts` as a source, that text is quoted word for word by the claim check, and two copies
+of it would mean a post could assert something the library does not hold. The file is where it is
+EDITED; the `receipts` library section is what a claim CITES, and `scripts/load-receipts.mjs` is the
+one-way trip between them. If they differ, the file has not been loaded — do not resolve it by
+hand, and do not quote the file in a draft.
+
 ## The one rule above all others
 
 > Could anyone else have written this? If yes, it fails.

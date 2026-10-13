@@ -26,6 +26,7 @@ import { type Extraction, ExtractionSchema, NextQuestionSchema } from "../schema
 import { appendTurn, deepest, loadSession, renderTranscript } from "../session.ts";
 import { notice } from "../notices.ts";
 import { joshSaid, verifyExtraction } from "../extraction.ts";
+import { writingSources } from "./draft.ts";
 import { isRealName, unclearedNames } from "../names.ts";
 import type { InterviewDepth, Job } from "../types.ts";
 
@@ -447,14 +448,37 @@ export async function applyExtraction(
   const hasSubstance = [extracted.the_moment, extracted.the_detail, extracted.the_realisation]
     .some((v) => v && v.trim().length > 0);
 
+  /*
+   * THIN IS NOT THE SAME AS EMPTY, ONCE THERE ARE RECEIPTS.
+   *
+   * This parked anything the extractor could not split into a moment, a detail or a realisation —
+   * correct when one message was the only thing a claim could ever rest on. It is wrong now. Since
+   * 14 Oct a claim may also cite his_words (what he actually typed) and receipts (what he has told
+   * us about his career, method and numbers), so "write about why tool-built TAMs miss SMB" has two
+   * real sources behind it even though it contains no scene.
+   *
+   * Still parks when there is genuinely nothing: no substance, nothing typed, and no receipts on
+   * file. Clause 1 is untouched — fewer posts is still the right answer when the material is not
+   * there. What changed is that we now look in all three places before saying it is not there.
+   */
   if (!hasSubstance) {
-    const why = "The interview did not surface a specific moment, detail or realisation.";
-    await park(db, momentId, why);
-    await logEvent(db, "moment_parked", "info", { moment_id: momentId, reason: "no substance" });
-    if (!opts.quiet) {
-      await notice(db, "parked", why, { momentId, actedOn: ["reopen_idea"] });
+    const wider = await writingSources(db, momentId);
+    const haveWider = Boolean(wider.his_words?.trim()) && Boolean(wider.receipts?.trim());
+
+    if (haveWider) {
+      await logEvent(db, "extraction_thin_but_sourced", "info", {
+        moment_id: momentId,
+        reason: "no moment, detail or realisation, but his own words and receipts are on file",
+      });
+    } else {
+      const why = "The interview did not surface a specific moment, detail or realisation.";
+      await park(db, momentId, why);
+      await logEvent(db, "moment_parked", "info", { moment_id: momentId, reason: "no substance" });
+      if (!opts.quiet) {
+        await notice(db, "parked", why, { momentId, actedOn: ["reopen_idea"] });
+      }
+      return parkedResult(momentId, why);
     }
-    return parkedResult(momentId, why);
   }
 
   // A scene with nothing learned from it is not a post.

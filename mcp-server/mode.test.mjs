@@ -196,3 +196,44 @@ test("every tool next_action sends the caller to actually exists", () => {
     }
   }
 });
+
+test("no tool tells the caller the server will judge a draft for them", () => {
+  /*
+   * create_draft's description said "Once filed, the server runs the eight quality checks by
+   * itself; do not run them yourself" long after that stopped being true. gate_runs_in_claude
+   * defaults to true, so the server files the draft and judges nothing. A caller that obeyed the
+   * description filed a draft and walked away, and 10 of the first 59 drafts carry no verdict at
+   * all — Josh found that pile before we did.
+   *
+   * The skill said the right thing. The one-step tools said the right thing. The tool description
+   * said the opposite, and a tool description is what a model reads first.
+   */
+  const create = tools.find((t) => t.name === "create_draft");
+  const text = `${create.config.description} ${create.config.title}`;
+
+  assert.doesNotMatch(
+    text,
+    /do not run (them|the (eight )?checks) yourself/i,
+    "create_draft still tells the caller not to run the checks",
+  );
+  assert.doesNotMatch(
+    text,
+    /the server runs the eight/i,
+    "create_draft still claims the server runs the gate",
+  );
+  assert.match(text, /gate-check skill/, "create_draft does not say who runs the gate");
+  assert.match(text, /fresh context/i, "create_draft does not say to judge in a separate context");
+});
+
+test("the gate's two instruction surfaces agree on who judges", () => {
+  // The skill, the one-step path and the draft tool are read by the same model in one session.
+  const skill = readFileSync(
+    new URL("../.claude/skills/draft-post/SKILL.md", import.meta.url),
+    "utf8",
+  );
+  assert.match(skill, /gate-check/, "the draft-post skill no longer names the gate-check skill");
+
+  // write_post says it in what it hands back, not in its schema, so this is checked by source.
+  const onestep = readFileSync(new URL("./tools/onestep.mjs", import.meta.url), "utf8");
+  assert.match(onestep, /gate-check skill/, "write_post no longer points at the gate-check skill");
+});
