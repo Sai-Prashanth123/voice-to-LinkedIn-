@@ -574,3 +574,51 @@ export async function noticesRead(db: SupabaseClient, body: Body): Promise<Respo
   const marked = await markNoticesRead(db, ids);
   return json({ ok: true, marked, next: "Those will not be offered again." });
 }
+
+/**
+ * Which way the project writes. One enum, not a general setting-writer.
+ *
+ * Josh asked on 13 October for the interview and the idea bank to stop. This is that, as a row he
+ * can turn back over rather than as code somebody deleted — and it is the only setting any tool can
+ * change. A generic set_setting would hand a model the dedupe thresholds, the daily candidate cap
+ * and interview_max_questions, which are the knobs that exist to protect him from exactly that.
+ *
+ * Only on his say-so. The tool description says so and this records who asked, because a mode that
+ * turns itself on is indistinguishable, from his side, from the system ignoring him again.
+ */
+export async function setWritingMode(db: SupabaseClient, body: Body): Promise<Response> {
+  const mode = str(body.mode);
+  if (mode !== "one_step" && mode !== "interviewed") {
+    return json({ error: `mode must be "one_step" or "interviewed", not "${mode}"` }, 400);
+  }
+
+  const oneStep = mode === "one_step";
+  const reason = str(body.reason);
+
+  const { error } = await db.from("settings").update({
+    value: oneStep,
+    note: `Set to ${mode} on ${new Date().toISOString().slice(0, 10)}` +
+      (reason ? ` — ${reason}` : ""),
+    updated_at: new Date().toISOString(),
+  }).eq("key", "one_step_mode");
+  if (error) return json({ error: `could not change the mode: ${error.message}` }, 500);
+
+  await logEvent(db, "writing_mode_changed", "info", { mode, reason: reason || null });
+
+  // A notice, so the change is findable later. A mode that silently differs from what he last
+  // remembers setting is the shape of the complaint this whole change answers.
+  await notice(db, "writing_mode_changed", `Writing mode is now ${mode}.`, {
+    actedOn: ["set_writing_mode"],
+  });
+
+  return json({
+    ok: true,
+    mode,
+    next: oneStep
+      ? "Nothing will ask him questions and nothing will be pulled from the idea bank. He gives " +
+        "you material, you call start_post. The eight checks still run and are read to him, but " +
+        "they no longer hold a post back."
+      : "Back to the interviewed path: capture_thought asks a question, selection fills the queue " +
+        "again, next_work offers what is waiting, and the checks hold a post until they pass.",
+  });
+}

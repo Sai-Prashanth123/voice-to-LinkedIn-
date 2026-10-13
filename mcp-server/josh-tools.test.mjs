@@ -112,6 +112,7 @@ test("the tools a person would reach for by name all exist", () => {
     "end_interview", // "that is enough, write it"
     "decide_proposal", // "yes, apply that"
     "add_library_rule", // "never open with a question"
+    "set_writing_mode", // "stop asking me questions, I want to scrap all that for now"
     "append_voice_transcript", // "here is a transcript of me talking"
     "record_post_verdict", // "that one landed"
     "record_conversation", // "it got me a call"

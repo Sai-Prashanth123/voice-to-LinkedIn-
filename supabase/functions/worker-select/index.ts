@@ -26,6 +26,7 @@ import { canSeeImages } from "../_shared/llm.ts";
 import { recordEditDiff } from "../_shared/outcome.ts";
 import { notice } from "../_shared/notices.ts";
 import { enqueue, json } from "../_shared/jobs.ts";
+import { oneStepMode } from "../_shared/mode.ts";
 import {
   applyRecencySpacing,
   ineligible,
@@ -42,6 +43,33 @@ const SHORTLIST = 20;
 Deno.serve(async () => {
   const db = admin();
   await loadSecrets(db);
+
+  /*
+   * THIS IS WHAT HANDED HIM THE WRONG IDEA.
+   *
+   * `select-tick` runs every four hours and enqueues `draft` jobs for whatever is mined. On
+   * 13 October Josh captured moment 89 at 04:27, and at 05:02 a draft was written from moment 68 —
+   * an older idea this worker had queued earlier. He had just spent 21 answers on the new one.
+   * "And referencing the idea bank."
+   *
+   * So in one-step mode nothing is selected. The whole body is skipped, not just the enqueue: the
+   * age-outs, the decay expiries and the stalled-interview reminders all exist to move ideas
+   * through a pipeline he has asked to stop using, and a reminder about an interview he does not
+   * want is the same complaint arriving by another route.
+   *
+   * Guarded here rather than unscheduled in cron, deliberately. A cron change is invisible from a
+   * session, and this way the log says every four hours exactly why nothing happened — which is
+   * also what turns the mode off safely: the schedule never stopped, so there is nothing to
+   * remember to put back.
+   */
+  if (await oneStepMode(db)) {
+    await logEvent(db, "selection_skipped", "info", {
+      reason: "one_step_mode",
+      means: "Josh asked for the idea bank to stop offering him work. Nothing was selected, aged " +
+        "out, expired or reminded about. Turn the setting off to resume.",
+    });
+    return json({ ok: true, skipped: "one_step_mode", selected: 0 });
+  }
 
   const target = await getSetting(db, "queue_target_posts", 10);
   const maxUnreviewed = await getSetting(db, "max_unreviewed_drafts", 6);

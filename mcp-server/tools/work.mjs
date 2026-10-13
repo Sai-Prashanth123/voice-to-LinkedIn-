@@ -31,6 +31,7 @@
 import { z } from "zod";
 
 import { tools } from "./index.mjs";
+import { oneStepMode } from "../mode.mjs";
 
 /** Run another registered tool's handler. Keeps one implementation of every brief. */
 async function viaTool(name, args, context) {
@@ -55,6 +56,31 @@ export const workTools = [
 
     async handler(_args, context) {
       const { db } = context;
+
+      /*
+       * IN ONE-STEP MODE THERE IS NO QUEUE TO READ.
+       *
+       * This is the tool `/write` calls, and in one-step mode it must offer nothing rather than
+       * offer something old. `worker-select` has already stopped filling the queue, so what is left
+       * in it is whatever was pending when the mode went on — exactly the rows that produced a
+       * draft about moment 68 while the idea he had just captured sat untouched.
+       *
+       * Before any read, so nothing is claimed, consumed or marked in passing. A pending job stays
+       * pending and is waiting unchanged when the mode goes back off.
+       *
+       * The ungated-draft branch goes with it: in one-step mode the gate is driven straight from
+       * the reply `create_draft` just returned, on that draft, rather than discovered later by
+       * asking the queue what is outstanding.
+       */
+      if (await oneStepMode(db)) {
+        return {
+          work: "none",
+          mode: "one_step",
+          why: "One-step mode is on, so nothing is pulled from the idea bank. Ask him what he " +
+            "wants written, or use what he just said, and call start_post with his words.",
+          to_change_it: "set_writing_mode, and only if he asks for it.",
+        };
+      }
 
       /*
        * JUDGING COMES BEFORE WRITING.

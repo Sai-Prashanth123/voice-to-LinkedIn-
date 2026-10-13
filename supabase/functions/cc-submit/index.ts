@@ -51,6 +51,7 @@ import type { Extraction } from "../_shared/schemas.ts";
 import { applyCandidates, type Candidate, candidateRoom } from "../_shared/triage.ts";
 import type { MomentSource } from "../_shared/types.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { oneStepMode } from "../_shared/mode.ts";
 
 /** The three sources 4.3 and 4.4 define. A caller may not invent a fourth. */
 const ALLOWED_SOURCES = new Set(["claude_code", "call_transcript", "slack"]);
@@ -120,6 +121,7 @@ Deno.serve(async (req) => {
     // The library (12.10, 8.8, 8.1).
     proposal: decisions.decideProposal,
     library_rule: decisions.addLibraryRule,
+    writing_mode: decisions.setWritingMode,
     voice_transcript: decisions.appendVoiceTranscript,
 
     // What came back.
@@ -323,7 +325,10 @@ async function submitCandidates(db: SupabaseClient, body: {
  */
 
 /** 4.1 — a thought, from a surface that is not Telegram. Named from their words, not by asking. */
-async function capture(db: SupabaseClient, body: { text?: string; name?: string }) {
+async function capture(
+  db: SupabaseClient,
+  body: { text?: string; name?: string; interview?: boolean },
+) {
   const text = String(body.text ?? "").trim();
   if (!text) return json({ error: "text is required" }, 400);
   const name = String(body.name ?? "").trim();
@@ -346,6 +351,39 @@ async function capture(db: SupabaseClient, body: { text?: string; name?: string 
   const named = name ? await setIdeaName(db, moment.id, name) : { ok: false as const, reason: "" };
   const title = named.ok ? named.name : await autoName(db, moment.id, text);
 
+  /*
+   * ONE-STEP MODE STOPS HERE, AND THIS IS THE LINE HE WAS COMPLAINING ABOUT.
+   *
+   * On 13 October he captured a thought at 04:27 and answered 21 questions, because there was no
+   * path through capture that did not return one. "It's still asking me interview questions."
+   *
+   * The question is skipped, not made optional somewhere downstream: `chooseNextQuestion` is never
+   * called, so nothing is asked, nothing is logged as asked, and the moment sits at `captured`
+   * holding his words until the extraction fills it from those same words.
+   *
+   * `interview: false` lets a caller ask for this explicitly even when the mode is off, which is
+   * what `start_post` passes. The mode is the default, not the only way in.
+   */
+  const oneStep = body.interview === false || await oneStepMode(db);
+
+  if (oneStep) {
+    await logEvent(db, "captured_via_mcp", "info", {
+      moment_id: moment.id,
+      ref: moment.ref,
+      action: "no_question",
+      mode: "one_step",
+    });
+    return json({
+      ok: true,
+      moment_id: moment.id,
+      name: title,
+      mode: "one_step",
+      action: "no_question",
+      next: "No questions. Fill the ten fields from his own words — every span copied exactly out " +
+        "of what he just said — and call write_post. Say what it was filed as, in passing.",
+    });
+  }
+
   // The interview starts here, synchronously, and the first question goes back to Claude — not to
   // the Telegram queue. Without a first question the moment sits at `captured` with no turns, which
   // is how seven of them ended up. But enqueueing the Telegram step for it (as this did) also sent
@@ -357,6 +395,7 @@ async function capture(db: SupabaseClient, body: { text?: string; name?: string 
     ok: true,
     moment_id: moment.id,
     name: title,
+    mode: "interviewed",
     ...step,
     next: step.action === "asked"
       ? "Ask him this question, then pass his answer to answer_interview."
