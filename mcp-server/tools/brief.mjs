@@ -32,6 +32,7 @@ import {
   TRIAGE_TRANSCRIPT_SYSTEM,
 } from "../../supabase/functions/_shared/prompts.ts";
 import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
+import { writingSources } from "../sources.mjs";
 import { WRITTEN_UP } from "../../supabase/functions/_shared/extraction.ts";
 import { parsePillars } from "../../supabase/functions/_shared/library.ts";
 import { renderTranscript } from "../../supabase/functions/_shared/session.ts";
@@ -122,11 +123,14 @@ export const briefTools = [
       }
 
       const [material] = await db.select("material", { select: "*", moment_id: `eq.${id}`, limit: 1 });
-      const entry = sourceEntry(material);
+      // His own words and his receipts count as sources now, so a moment with no mined material can
+      // still be draftable — a topic he typed with a receipts file behind it is not nothing.
+      const extra = await writingSources(db, id);
+      const entry = sourceEntry(material, extra);
       if (Object.keys(entry).length === 0) {
         throw new Error(
-          `Moment ${id} has no material yet. The interview has not produced anything to write ` +
-          `from, and a draft built on nothing is exactly what the claim ledger exists to stop.`,
+          `Moment ${id} has nothing to write from: no material, nothing he typed against it, and ` +
+          `no receipts on file. A draft built on nothing is what the claim ledger exists to stop.`,
         );
       }
 

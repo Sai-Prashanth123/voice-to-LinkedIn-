@@ -47,7 +47,8 @@
 import { z } from "zod";
 
 import { verifyDraft } from "../../supabase/functions/_shared/claims.ts";
-import { SOURCE_FIELDS, sourceEntry } from "../../supabase/functions/_shared/entry.ts";
+import { CLAIMABLE_FIELDS, sourceEntry } from "../../supabase/functions/_shared/entry.ts";
+import { writingSources } from "../sources.mjs";
 
 /**
  * THE LEDGER SHAPE, WHICH IS NOT NEGOTIABLE AND USED TO BE
@@ -62,17 +63,25 @@ import { SOURCE_FIELDS, sourceEntry } from "../../supabase/functions/_shared/ent
  * entry and pass. With only a free-text `source` there is nothing to pin to, which is why this
  * could not be fixed by renaming: the shape was missing the fact the check is built on.
  *
- * It is an enum rather than a string because these ten fields are the whole of what a drafter is
+ * It is an enum rather than a string because these fields are the whole of what a drafter is
  * allowed to see (9.1). A wrong field name now fails at the schema, with the valid ones listed,
  * rather than at verification with "does not exist in the entry".
+ *
+ * Twelve of them since 14 Oct 2026, not ten: `his_words` is what he actually typed, and
+ * `receipts` is what he has told us about his own career, method and numbers. Both are his, both
+ * are still checked word for word, and adding them is what lets a claim rest on a sentence he
+ * wrote rather than only on a model's summary of it. See entry.ts for why.
  */
 const CLAIM = z.object({
   kind: z.enum(["quote", "number", "name", "event", "detail"])
     .describe("What sort of claim this is"),
   claim: z.string().min(1)
     .describe("The assertion the draft makes, in the draft's own words"),
-  source_field: z.enum([...SOURCE_FIELDS])
-    .describe("Which field of the moment's material the span below is copied from"),
+  source_field: z.enum([...CLAIMABLE_FIELDS])
+    .describe(
+      "Which source the span below is copied from: one of the ten material fields, or his_words " +
+      "for what he actually typed, or receipts for what he has told us about himself.",
+    ),
   source_span: z.string().min(1)
     .describe(
       "The VERBATIM span from that field. Copied exactly, never paraphrased — it is checked as a " +
@@ -151,9 +160,18 @@ export const writeTools = [
         "it names, nothing is written and the failures come back for you to fix. " +
         "Call get_moment first: the material is the only thing a draft may claim from, and any " +
         "uncleared name must not appear. " +
-        "Drafts are written HERE, in Claude — the server no longer writes them, it only judges them. " +
-        "Once filed, the server runs the eight quality checks by itself; do not run them yourself. " +
-        "If the draft is rejected it returns to next_work with the reasons attached. " +
+        "Drafts are written HERE, in Claude, and SO ARE THE EIGHT CHECKS. " +
+        // This line said the opposite until 14 Oct 2026: "the server runs the eight quality checks
+        // by itself; do not run them yourself." That was true when the server held the gate and
+        // stopped being true when `gate_runs_in_claude` was turned on, which is the default. A
+        // caller that obeyed it filed a draft and walked away, and nothing else ever judged it —
+        // 10 of the first 59 drafts carry no verdict at all, and Josh found a pile of them before
+        // we did. The skill and the one-step tools said the right thing; this description did not,
+        // and a tool description is what a model reads first.
+        "When you have filed it, run the gate-check skill on it in a FRESH context — never in the " +
+        "same breath as writing it. A draft nobody has judged is not finished and nothing " +
+        "downstream will pick it up. " +
+        "If it is rejected it comes back through next_work with the reasons attached. " +
         "This creates a draft only — it does not publish, schedule or approve anything.",
       inputSchema: {
         moment_id: z.number().int().describe("The moment this draft is written from"),
@@ -227,7 +245,8 @@ export const writeTools = [
         moment_id: `eq.${args.moment_id}`,
         limit: 1,
       });
-      const entry = sourceEntry(material);
+      const extra = await writingSources(db, args.moment_id);
+      const entry = sourceEntry(material, extra);
       if (Object.keys(entry).length === 0) {
         throw new Error(
           `Moment ${args.moment_id} has no mined material, so there is nothing for a claim to rest ` +
