@@ -18,6 +18,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
 
 // The registry first: onestep.mjs imports it to reuse the other tools' handlers, and it imports
 // onestep.mjs back, so importing onestep on its own hits the cycle mid-evaluation. The registry is
@@ -159,5 +160,39 @@ test("a parked paste stops the chain and comes back as a sentence, not a silence
     assert.match(result.to_continue, /Nothing is lost/);
   } finally {
     globalThis.fetch = realFetch;
+  }
+});
+
+test("every tool next_action sends the caller to actually exists", () => {
+  // `decide_draft` sat in the top-line answer for weeks. It is not a tool, a command or a skill, so
+  // the single most useful action in the system named something that does not exist. Checked by
+  // source rather than by reading, because that is how it survived being read.
+  const source = readFileSync(new URL("./tools/inspect.mjs", import.meta.url), "utf8");
+  const registered = new Set(tools.map((t) => t.name));
+  const commands = new Set(
+    readdirSync(new URL("../.claude/commands/", import.meta.url)).map((f) => f.replace(/\.md$/, "")),
+  );
+
+  // Every `where:` line in next_action, as the caller reads it.
+  const block = source.slice(source.indexOf('name: "next_action"'), source.indexOf('name: "list_proposals"'));
+  const wheres = [...block.matchAll(/where:\s*((?:"[^"]*"\s*\+?\s*)+)/g)]
+    .map((m) => m[1].replace(/"\s*\+\s*"/g, "").replace(/"/g, "").trim());
+  assert.ok(wheres.length >= 3, `only found ${wheres.length} where: lines — did the shape change?`);
+
+  for (const where of wheres) {
+    // Tool-shaped words: snake_case, which is how every tool in this server is named.
+    for (const word of where.match(/\b[a-z][a-z_]*_[a-z_]+\b/g) ?? []) {
+      assert.ok(
+        registered.has(word),
+        `next_action sends the caller to "${word}", which is not a registered tool`,
+      );
+    }
+    // And slash commands, which are files on disk.
+    for (const slash of where.match(/\/([a-z-]+)/g) ?? []) {
+      assert.ok(
+        commands.has(slash.slice(1)),
+        `next_action sends the caller to "${slash}", which is not a command in .claude/commands/`,
+      );
+    }
   }
 });

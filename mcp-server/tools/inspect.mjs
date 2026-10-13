@@ -229,7 +229,11 @@ export const inspectTools = [
       if (waiting.length > 0) {
         actions.push({
           do: `Review ${waiting.length} post(s) waiting on Josh`,
-          where: "Claude Code — decide_draft",
+          // Named `decide_draft` until 13 Oct 2026, which is not a tool, a command or a skill and
+          // never has been — so the single most useful action in the system pointed at nothing.
+          // These four exist: `node mcp-server/index.mjs --tools` lists them.
+          where: "Claude Code — /review, then mark_ready, hold_post, edit_post or " +
+            "push_back_on_draft with his words",
           why: "Approval is the only thing that authorises publishing, and it is enforced four " +
             "ways in the database. Nothing downstream of it can happen until he passes.",
         });
