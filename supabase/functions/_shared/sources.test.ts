@@ -170,3 +170,29 @@ test("the keys are spelled once", () => {
   assert.equal(RECEIPTS_SECTION, "receipts");
   assert.equal(HIS_WORDS_TABLE, "raw_inputs");
 });
+
+test("the function that verifies a draft is the one that gets the wider source", async () => {
+  /*
+   * The first attempt at this change patched handleDraft and not applyDraft, because
+   * String.replace takes the first match and the two build their entry with identical lines.
+   * Everything type-checked, every unit test passed, and the fault only appeared against the live
+   * project: a draft stored with claims_verified false and a deterministic claims_trace failure
+   * reading "source field his_words is empty or does not exist in the entry".
+   *
+   * applyDraft is where a claim is actually checked, so it is the one that must never be left
+   * behind. Asserted by source because the alternative is a database.
+   */
+  const src = await Deno.readTextFile(new URL("./handlers/draft.ts", import.meta.url));
+
+  assert.doesNotMatch(
+    src,
+    /sourceEntry\(material\)/,
+    "draft.ts still builds an entry from the ten fields alone somewhere",
+  );
+  // Both call sites widen: handleDraft writes from it, applyDraft verifies against it.
+  assert.equal(
+    (src.match(/sourceEntry\(material, extra\)/g) ?? []).length,
+    2,
+    "draft.ts should widen the source in both handleDraft and applyDraft",
+  );
+});

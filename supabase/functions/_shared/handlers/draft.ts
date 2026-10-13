@@ -187,7 +187,23 @@ export async function applyDraft(db: SupabaseClient, d: DraftToFile): Promise<Fi
   const { momentId, attempt, nearMiss } = d;
 
   const material = await getMaterial(db, momentId);
-  const entry = sourceEntry(material);
+
+  /*
+   * THE WIDER SOURCE, REBUILT HERE AND NEVER TAKEN FROM THE CALLER.
+   *
+   * This is the function that verifies a draft written in Claude, so this is the entry that
+   * decides. his_words is what Josh typed before any model summarised it; receipts is what he has
+   * told us about his career, method and numbers. Both are still checked word for word by
+   * verifyDraft below — this widens where a fact may come from, not whether it is checked.
+   *
+   * It was missed on the first attempt: the patch landed on handleDraft above, which builds an
+   * entry for the server's own drafter, and this one kept the ten fields. The symptom was a draft
+   * stored with claims_verified false and a deterministic claims_trace failure reading "source
+   * field his_words is empty or does not exist in the entry" — which is the check doing its job on
+   * a source nobody had given it.
+   */
+  const extra = await writingSources(db, momentId);
+  const entry = sourceEntry(material, extra);
 
   const cleared = await clearedNames(db, momentId);
   const clearedSet = new Set(cleared);
