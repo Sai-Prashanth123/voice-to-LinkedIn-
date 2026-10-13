@@ -33,6 +33,33 @@ export function wrap(tool, context, onCall) {
   return async (args) => {
     const started = Date.now();
     try {
+      /*
+       * AN ARGUMENT THIS TOOL DOES NOT HAVE IS A MISTAKE, NOT A SUGGESTION.
+       *
+       * Unknown keys were dropped silently. Ask get_reference_posts for `writer: "mattjbarker1"`
+       * when the parameter is `handle`, and it does not refuse — it ignores the filter and returns
+       * the newest posts across all eight writers. Four other people, no error, no note.
+       *
+       * That is almost certainly how Josh reported in September that testing Matt Barker "returned
+       * nothing": he would have been handed somebody else every time and concluded his were missing.
+       * A filter that silently does not apply is worse than one that fails, because the answer looks
+       * like an answer.
+       *
+       * Checked here rather than in any one tool, because the next tool to grow a filter would have
+       * the same hole and nobody would think to look.
+       */
+      const declared = Object.keys(tool.config?.inputSchema ?? {});
+      const unknown = Object.keys(args ?? {}).filter((k) => !declared.includes(k));
+      if (unknown.length > 0) {
+        throw new Error(
+          `${tool.name} has no argument ${unknown.map((k) => `"${k}"`).join(", ")}. ` +
+          (declared.length > 0
+            ? `It takes: ${declared.join(", ")}. A name it does not know is dropped rather than ` +
+              "applied, so the answer would have looked right and been wrong."
+            : "It takes no arguments."),
+        );
+      }
+
       const value = await tool.handler(args ?? {}, context);
       onCall?.(tool.name, true, Date.now() - started);
       return {

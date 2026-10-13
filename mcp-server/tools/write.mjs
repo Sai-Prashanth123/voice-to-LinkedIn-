@@ -49,6 +49,7 @@ import { z } from "zod";
 import { verifyDraft } from "../../supabase/functions/_shared/claims.ts";
 import { CLAIMABLE_FIELDS, sourceEntry } from "../../supabase/functions/_shared/entry.ts";
 import { writingSources } from "../sources.mjs";
+import { HIGH_CONFIDENCE, scan } from "../aitells.mjs";
 
 /**
  * THE LEDGER SHAPE, WHICH IS NOT NEGOTIABLE AND USED TO BE
@@ -270,6 +271,36 @@ export const writeTools = [
       }
 
       /*
+       * THE MECHANICAL TELLS, BEFORE THE DRAFT IS STORED RATHER THAN AFTER.
+       *
+       * scrub_draft runs these same rules and costs nothing, and a writer can still file straight
+       * past it. That happened on 14 Oct 2026: scrub flagged the filler word "actually", the draft
+       * was filed anyway, and the row is in the database with a word from his own banned list in it.
+       * Reading a warning and not acting on it is a choice a model makes constantly.
+       *
+       * So the findings come back attached to the result, where they cannot be skipped, and the
+       * handful where the construction is simply wrong refuse outright. HIGH_CONFIDENCE is already
+       * defined as exactly that subset — "the construction is simply wrong and the fix is
+       * mechanical" — so this does not invent a new standard, it enforces the one measure_draft
+       * already uses to decide what is worth interrupting a writer for.
+       *
+       * Everything else is reported, not refused. A filler word is a judgement ("delete it and read
+       * the sentence again"), and a check that cannot be overruled on a judgement is a check that
+       * will eventually be wrong with no way back.
+       */
+      const tells = scan(args.body);
+      const blocking = tells.findings.filter((f) => HIGH_CONFIDENCE.has(f.rule));
+      if (blocking.length > 0) {
+        throw new Error(
+          `The draft uses ${blocking.length} construction(s) the library rules out, so nothing was ` +
+          `stored.\n\n` +
+          blocking.map((f) => `  · line ${f.line}: "${f.matched}" — ${f.name}. ${f.fix}`).join("\n") +
+          `\n\nThese are the mechanical ones: the construction is wrong rather than arguable. Fix ` +
+          "them and call create_draft again.",
+        );
+      }
+
+      /*
        * FILED BY THE SERVER, THEN GATED BY THE SERVER.
        *
        * This used to insert the row itself and hand back "run the eight checks and record each with
@@ -411,7 +442,25 @@ export const writeTools = [
       if (!res.ok) {
         throw new Error(`cc-submit ${res.status}: ${JSON.stringify(body).slice(0, 300)}`);
       }
-      return body;
+
+      // Attached to the result rather than left for someone to go and ask for. These are the
+      // arguable ones, so they do not refuse — but they travel with the draft id, which means the
+      // next thing read after "filed" is what is still wrong with it.
+      return tells.findings.length > 0
+        ? {
+          ...body,
+          ai_tells: tells.findings.map((f) => ({
+            line: f.line,
+            matched: f.matched,
+            rule: f.name,
+            fix: f.fix,
+          })),
+          ai_tells_mean: "Mechanical, from the same rules scrub_draft runs. None of them blocked " +
+            "the draft. Fix them with edit_post before Josh reads it, or say why you are keeping " +
+            "one — a filler word is a judgement, and the library says to delete it and read the " +
+            "sentence again.",
+        }
+        : body;
     },
   },
 

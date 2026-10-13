@@ -639,7 +639,37 @@ async function fileDraft(db: SupabaseClient, body: DraftBody) {
     .maybeSingle();
 
   const payload = (job?.payload ?? {}) as Record<string, unknown>;
-  const attempt = Number(payload.attempt ?? 1);
+
+  /*
+   * THE ATTEMPT NUMBER, WHEN NO JOB CARRIES ONE.
+   *
+   * It came off the waiting rewrite job, defaulting to 1, and that was right while every rejection
+   * queued a rewrite. In one_step mode the gate is advisory: finishGate deliberately skips
+   * retryOrPark, so no job is ever queued and `payload.attempt` is never set. Three drafts were
+   * written against moment 101 on 14 Oct and all three recorded `attempt: 1`.
+   *
+   * The consequence is not cosmetic. 9.8 — an idea parks after three failures — counts attempts,
+   * so with the counter frozen the clause cannot fire at all in the mode Josh is actually using,
+   * and nothing anywhere says how many times a moment has been tried.
+   *
+   * So when there is no job, the number is read off the record instead: how many previous drafts of
+   * this moment the gate has already rejected. The interviewed path is untouched, because there a
+   * job exists and it still wins — a caller cannot reset the count by saying "attempt 1", which is
+   * the property the original comment below was protecting.
+   *
+   * This makes the count honest. It does NOT make advisory mode park an idea: finishGate still
+   * skips retryOrPark, because in this mode the decision is his. The number is for the record and
+   * for telling him it is the third go, not for taking the choice away.
+   */
+  const { count: rejectedBefore } = await db
+    .from("drafts")
+    .select("id", { count: "exact", head: true })
+    .eq("moment_id", momentId)
+    .eq("gate_passed", false);
+
+  const attempt = payload.attempt !== undefined
+    ? Number(payload.attempt)
+    : (rejectedBefore ?? 0) + 1;
   const nearMiss = (payload.near_miss as string | null | undefined) ?? null;
 
   const { data: library } = await db
