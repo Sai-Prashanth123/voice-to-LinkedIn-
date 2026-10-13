@@ -139,3 +139,25 @@ test("counting an attempt is not the same as parking the idea", () => {
     "the advisory branch is gone, so a failing draft would be withheld from him again",
   );
 });
+
+test("the refusal happens where the argument still exists", () => {
+  /*
+   * The first version of this guard was in wrap(), and it did nothing. The MCP SDK parses
+   * params.arguments against the tool's zod shape before any handler runs, and a non-strict zod
+   * object strips what it does not recognise — so by the time wrap() sees the arguments the unknown
+   * key is already gone. Deployed, asked again with `writer`, and got four other writers back.
+   *
+   * The raw body is the last place the real request exists.
+   */
+  const http = readFileSync(new URL("./http.mjs", import.meta.url), "utf8");
+
+  assert.match(http, /refuseUnknownArguments/, "the HTTP path no longer checks the arguments");
+  assert.match(http, /request\.clone\(\)/, "it reads the body without leaving it for the transport");
+  // Before the transport, or the SDK has already stripped the key.
+  assert.ok(
+    http.indexOf("refuseUnknownArguments(request") < http.indexOf("transport.handleRequest"),
+    "the check runs after the transport has taken the request",
+  );
+  // One definition of what counts as unknown, shared with wrap().
+  assert.match(http, /unknownArguments/, "http.mjs decides for itself what an unknown argument is");
+});

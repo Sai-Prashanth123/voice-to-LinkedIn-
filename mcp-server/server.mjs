@@ -29,6 +29,30 @@ export const VERSION = "0.1.0";
  *
  * @param onCall optional audit hook, called with (name, ok, ms) after every invocation
  */
+/**
+ * Arguments a tool does not declare.
+ *
+ * Exported because the MCP SDK parses `params.arguments` against the zod shape BEFORE a handler
+ * runs, and a non-strict zod object STRIPS what it does not recognise. So by the time wrap() sees
+ * the arguments the unknown key is already gone — which is exactly why this went unnoticed. The
+ * only place the real request still exists is the raw body, so http.mjs checks there and calls
+ * this, rather than either of them deciding for itself what counts as unknown.
+ */
+export function unknownArguments(tool, args) {
+  const declared = Object.keys(tool?.config?.inputSchema ?? {});
+  return Object.keys(args ?? {}).filter((k) => !declared.includes(k));
+}
+
+/** The refusal, worded once, because two callers raise it. */
+export function unknownArgumentMessage(tool, unknown) {
+  const declared = Object.keys(tool?.config?.inputSchema ?? {});
+  return `${tool.name} has no argument ${unknown.map((k) => `"${k}"`).join(", ")}. ` +
+    (declared.length > 0
+      ? `It takes: ${declared.join(", ")}. A name it does not know is dropped rather than applied, ` +
+        "so the answer would have looked right and been wrong."
+      : "It takes no arguments.");
+}
+
 export function wrap(tool, context, onCall) {
   return async (args) => {
     const started = Date.now();

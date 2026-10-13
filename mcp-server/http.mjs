@@ -32,7 +32,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 
 import { createDb } from "./db.mjs";
 import { tools } from "./tools/index.mjs";
-import { build } from "./server.mjs";
+import { build, unknownArgumentMessage, unknownArguments } from "./server.mjs";
 import { authorise, toolsForScope } from "./auth.mjs";
 import { SCANNER_FILES } from "./generated/scanner-files.mjs";
 
@@ -134,6 +134,23 @@ export async function handleMcpRequest(request, options = {}) {
    * empty answer it gets back is indistinguishable from a genuine quiet result.
    */
   const reachable = toolsForScope(tools, auth.scope).filter((t) => !t.localOnly);
+
+  /*
+   * AN ARGUMENT THE TOOL DOES NOT HAVE, CAUGHT WHILE IT STILL EXISTS.
+   *
+   * The SDK parses params.arguments against the tool zod shape before any handler runs, and a
+   * non-strict zod object STRIPS what it does not recognise. So a wrong parameter name never
+   * reaches the handler and never raises anything: get_reference_posts asked with
+   * `writer: "mattjbarker1"` instead of `handle` quietly dropped the filter and returned the newest
+   * posts across all eight writers. Four other people, no error. That is very likely how Josh
+   * reported in September that testing Matt Barker "returned nothing".
+   *
+   * The raw body is the last place the real request exists, so it is read here, from a clone — the
+   * transport still needs the original. Best effort by design: a body this cannot parse is handed
+   * straight to the transport, which is the thing that properly reports a malformed request.
+   */
+  const refusal = await refuseUnknownArguments(request, reachable);
+  if (refusal) return refusal;
 
   const server = build(context, reachable, audit);
 
@@ -276,4 +293,40 @@ export async function handleSessionRoutes(request, options = {}) {
 
   if (triageError) return rpcError(502, `The digests could not be queued: ${triageError}`);
   return jsonResponse({ ok: true, received: digests.length, queued }, 200);
+}
+
+
+/**
+ * @returns a JSON-RPC error Response when a tools/call names an argument the tool does not declare,
+ *          or null to carry on. Never throws: a request it cannot read is not its business.
+ */
+async function refuseUnknownArguments(request, reachable) {
+  let body;
+  try {
+    body = await request.clone().json();
+  } catch {
+    return null;
+  }
+
+  for (const message of Array.isArray(body) ? body : [body]) {
+    if (message?.method !== "tools/call") continue;
+    const tool = reachable.find((t) => t.name === message?.params?.name);
+    if (!tool) continue;
+
+    const unknown = unknownArguments(tool, message?.params?.arguments);
+    if (unknown.length === 0) continue;
+
+    // Reported as a tool result with isError rather than a protocol error, the same way wrap()
+    // reports a tool that failed: the caller can read it and correct the name.
+    return jsonResponse({
+      jsonrpc: "2.0",
+      id: message?.id ?? null,
+      result: {
+        isError: true,
+        content: [{ type: "text", text: unknownArgumentMessage(tool, unknown) }],
+      },
+    });
+  }
+
+  return null;
 }
