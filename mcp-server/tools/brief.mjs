@@ -398,6 +398,10 @@ export const briefTools = [
         "Finish by calling submit_extraction.",
       inputSchema: {
         moment_id: z.number().int().describe("Which moment's interview to record"),
+        redo: z.boolean().optional().describe(
+          "Only when Josh asked for an idea already written up to be written up again. The " +
+            "entry it replaces is kept on the record.",
+        ),
       },
     },
 
@@ -411,10 +415,11 @@ export const briefTools = [
       });
       if (!moment) throw new Error(`No moment with id ${id}.`);
       if (moment.killed) throw new Error(`Moment ${id} has been killed and must not be recorded.`);
-      if (moment.status === "mined") {
+      if (moment.status === "mined" && !args.redo) {
         throw new Error(
           `Moment ${id} is already mined. Re-extracting would overwrite material a draft may ` +
-          `already have been checked against, so it is refused rather than done quietly.`,
+          `already have been checked against, so it is refused rather than done quietly. If Josh ` +
+          `asked for it to be written up again, call this with redo: true.`,
         );
       }
 
@@ -486,6 +491,9 @@ export const briefTools = [
           "their_actual_words must appear verbatim in what Josh said — a paraphrase must be left empty",
           "every number must appear in what he said, unrounded",
           "every name recorded must be one he actually mentioned",
+        ],
+        will_be_reported_back: [
+          "any number he gave that no field carries — a dropped number can never reach a post",
         ],
         will_not_be_checked: [
           "the prose fields, which are meant to summarise and cannot be matched verbatim — " +

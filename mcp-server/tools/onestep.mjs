@@ -163,6 +163,10 @@ export const oneStepTools = [
         moment_id: args.moment_id,
         mode: modeName(await oneStepMode(context.db)),
         uncleared_names: brief?.must_not_name ?? [],
+        // Numbers he gave that no field carries. A post cannot state them, so say which before
+        // writing around a figure he expected to see.
+        numbers_not_carried: filed?.numbers_not_carried ?? [],
+        ...(filed?.numbers_note && { numbers_note: filed.numbers_note }),
         drafting_brief: brief,
         how: [
           "Read the brief's system text in full. It is the live library — his voice guide, his " +

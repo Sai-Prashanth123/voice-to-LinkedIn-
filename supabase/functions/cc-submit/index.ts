@@ -40,7 +40,7 @@ import {
 } from "../_shared/handlers/interview.ts";
 import { appendTurn, loadSession, renderTranscript } from "../_shared/session.ts";
 import { autoName, setIdeaName } from "../_shared/idea-names.ts";
-import { verifyExtraction } from "../_shared/extraction.ts";
+import { joshSaid, missingNumbers, verifyExtraction } from "../_shared/extraction.ts";
 import { applyDraft } from "../_shared/handlers/draft.ts";
 import * as decisions from "./decisions.ts";
 import * as maintenance from "./maintenance.ts";
@@ -72,6 +72,7 @@ Deno.serve(async (req) => {
     answer?: string;
     moment_id?: number;
     extracted?: Extraction;
+    redo?: boolean;
     source?: string;
     source_ref?: string;
     candidates?: Candidate[];
@@ -162,9 +163,14 @@ Deno.serve(async (req) => {
 
   // A moment already mined must not be silently overwritten by a second submission. Re-extraction
   // is a real operation, but it is one somebody should ask for rather than one that happens because
-  // two runs overlapped.
-  if (moment.status === "mined") {
-    return json({ error: `moment ${momentId} is already mined`, ref: moment.ref }, 409);
+  // two runs overlapped. `redo` is the asking.
+  const redo = body.redo === true;
+  if (moment.status === "mined" && !redo) {
+    return json({
+      error: `moment ${momentId} is already mined. Pass redo: true only if Josh asked for it to be ` +
+        `written up again.`,
+      ref: moment.ref,
+    }, 409);
   }
 
   // THE SOURCE IS REBUILT HERE, NOT ACCEPTED FROM THE CALLER.
@@ -177,6 +183,11 @@ Deno.serve(async (req) => {
   const source = `${seed}\n\n${renderTranscript(session)}`;
 
   const verdict = verifyExtraction(body.extracted, source);
+
+  // Numbers he gave that no field carries. Reported, not refused: start_post makes the seed a whole
+  // pasted transcript, where most numbers are timestamps or somebody else's, and a refusal would
+  // block every honest write-up of one. The worker, where nobody is watching, retries on it instead.
+  const dropped = missingNumbers(body.extracted, joshSaid(seed, session.turns));
 
   if (!verdict.ok) {
     await logEvent(db, "extraction_refused", "warn", {
@@ -192,6 +203,14 @@ Deno.serve(async (req) => {
       next: "Fix the extraction against what Josh actually said, or leave the field empty. " +
         "Leaving a field empty is always allowed and is the correct answer when he did not say it.",
     }, 422);
+  }
+
+  // The entry being replaced goes on the record first. Nothing in the idea bank is deleted, and a
+  // draft may already have been checked against it.
+  if (moment.status === "mined") {
+    const { data: previous } = await db.from("material").select("*").eq("moment_id", momentId)
+      .maybeSingle();
+    await logEvent(db, "extraction_replaced", "info", { moment_id: momentId, ref: moment.ref, previous });
   }
 
   // quiet: a person is waiting in the session, so the facts are reported in the reply below rather
@@ -225,6 +244,12 @@ Deno.serve(async (req) => {
      * cannot be written and does not explain why.
      */
     uncleared_names: filed.uncleared.map((n) => n.name),
+    numbers_not_carried: dropped,
+    ...(dropped.length > 0 && {
+      numbers_note: `He gave ${dropped.map((n) => `"${n}"`).join(", ")}, which no field carries, and ` +
+        `a draft may only state what the entry holds. If any of them belongs in the post, put it ` +
+        `in the field it belongs to and submit again with redo: true.`,
+    }),
     // Parking is a correct outcome and the caller should not read it as a failure.
     note: filed.parked
       ? `Applied, and the moment parked itself: ${filed.parked} It reopens the moment he adds to it.`

@@ -11,7 +11,7 @@
  * instruction rather than guessed at.
  */
 
-export const PROMPT_VERSION = "2026-08-26.1";
+export const PROMPT_VERSION = "2026-10-13.1";
 
 /* ────────────────────────────────────────────────────────────────────────── *
  * THE INTERVIEW (clause 5)
@@ -145,6 +145,8 @@ something better, the draft built on it will assert something that never happene
   - Leave a field empty rather than filling it with something reasonable.
   - "their_actual_words" must be VERBATIM. If he paraphrased what someone said, leave it empty.
   - Do not add numbers he did not give you. Do not round the ones he did.
+  - Carry every number he did give into the field it belongs to, as he said it. A draft may only
+    state what this entry holds, so a number left out here is one no post can ever use.
   - Do not name anyone he did not name.
 
 Also list every person and company mentioned anywhere in the conversation, so their use can be

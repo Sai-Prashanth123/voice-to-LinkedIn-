@@ -25,6 +25,7 @@ import { creditSession, recordAsked, type SetKey, syncQuestions } from "../quest
 import { type Extraction, ExtractionSchema, NextQuestionSchema } from "../schemas.ts";
 import { appendTurn, deepest, loadSession, renderTranscript } from "../session.ts";
 import { notice } from "../notices.ts";
+import { joshSaid, verifyExtraction } from "../extraction.ts";
 import { isRealName, unclearedNames } from "../names.ts";
 import type { InterviewDepth, Job } from "../types.ts";
 
@@ -316,24 +317,61 @@ export async function handleInterviewExtract(db: SupabaseClient, job: Job): Prom
   const session = await loadSession(db, momentId);
   const seed = await seedText(db, momentId);
   const library = await loadLibrary(db, "interview");
+  const source = `${seed}\n\n${renderTranscript(session)}`;
+  const said = joshSaid(seed, session.turns);
 
-  const extracted = await callStructured(ExtractionSchema, {
-    model: MODELS.SONNET,
-    // Only pillars Josh has actually defined. With none, extraction returns empty rather than
-    // inventing a category that would then be counted in the pillar balance (7.1).
-    system: `${EXTRACT_SYSTEM(parsePillars(library.sections.pillars ?? ""))}\n\n${library.prompt}`,
-    messages: [{
-      role: "user",
-      content: `WHAT JOSH SENT:\n${seed}\n\nTHE CONVERSATION:\n${renderTranscript(session)}`,
-    }],
-    effort: "medium",
-    maxTokens: 2500,
-    purpose: "extract",
-    momentId,
-    promptVersion: PROMPT_VERSION,
-  }, { db });
+  const ask = (feedback?: string) =>
+    callStructured(ExtractionSchema, {
+      model: MODELS.SONNET,
+      // Only pillars Josh has actually defined. With none, extraction returns empty rather than
+      // inventing a category that would then be counted in the pillar balance (7.1).
+      system: `${EXTRACT_SYSTEM(parsePillars(library.sections.pillars ?? ""))}\n\n${library.prompt}`,
+      messages: [{
+        role: "user",
+        content: `WHAT JOSH SENT:\n${seed}\n\nTHE CONVERSATION:\n${renderTranscript(session)}` +
+          (feedback ? `\n\nYOUR LAST EXTRACTION WAS REFUSED. Fix exactly this:\n${feedback}` : ""),
+      }],
+      effort: "medium",
+      maxTokens: 2500,
+      purpose: "extract",
+      momentId,
+      promptVersion: PROMPT_VERSION,
+    }, { db });
 
-  await applyExtraction(db, momentId, extracted);
+  /*
+   * The same three checks cc-submit has always run on Claude Code's extractions, plus the dropped
+   * number check. This path ran none of them: the automatic write-up, which is most of them, was
+   * stored on trust.
+   *
+   * One retry, naming what failed. If it still fails the entry is filed anyway, as it always was,
+   * and Josh is told what is wrong with it. Stalling the interview would be the worse outcome.
+   */
+  let extracted = await ask();
+  let verdict = verifyExtraction(extracted, source, said);
+  if (!verdict.ok) {
+    extracted = await ask(verdict.failures.map((f) => `- ${f}`).join("\n"));
+    verdict = verifyExtraction(extracted, source, said);
+  }
+
+  if (!verdict.ok) {
+    // A paraphrase stored as a verbatim quote is the one fault that can be removed safely here.
+    if (verdict.failures.some((f) => f.startsWith("their_actual_words"))) {
+      extracted = { ...extracted, their_actual_words: "" };
+    }
+    await logEvent(db, "extraction_unverified", "warn", { moment_id: momentId, failures: verdict.failures });
+  }
+
+  const filed = await applyExtraction(db, momentId, extracted);
+
+  if (!verdict.ok && !filed.parked) {
+    await notice(
+      db,
+      "extraction_unverified",
+      `The write-up of "${filed.title ?? `moment ${momentId}`}" still fails a check after a retry: ` +
+        verdict.failures.join(" ") + " Redo it in a session before drafting from it.",
+      { severity: "warn", momentId, actedOn: ["get_moment", "get_extraction_brief"] },
+    );
+  }
 }
 
 /**
