@@ -20,6 +20,7 @@
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { recordEditDiff } from "./outcome.ts";
+import { logEvent } from "./db.ts";
 
 /** Nine in the morning, local, which is what the day buttons always meant by a date. */
 const POST_HOUR = 9;
@@ -116,6 +117,8 @@ export interface ApprovalDone {
   when: string;
   postId: number;
   draftId: number | null;
+  /* The checks he approved over, when the gate was advisory. Empty on a draft that passed. */
+  overAdvisory?: string[];
 }
 
 /**
@@ -127,6 +130,8 @@ export async function markReady(
   when: string,
   now = new Date(),
 ): Promise<ApprovalDone | ApprovalRefusal> {
+  let overAdvisory: string[] = [];
+
   const { data: post } = await db
     .from("posts")
     .select("id, draft_id, status, marked_ready_at, body")
@@ -160,18 +165,41 @@ export async function markReady(
   if (post.draft_id) {
     const { data: draft } = await db
       .from("drafts")
-      .select("id, gate_passed, gate_reason")
+      .select("id, gate_passed, gate_reason, gate_advisory")
       .eq("id", post.draft_id)
       .maybeSingle();
 
+    /*
+     * ONE EXCEPTION, AND IT IS A COLUMN RATHER THAN A SETTING.
+     *
+     * In one-step mode a failing draft is handed to him with its flags, and he decides. So he must
+     * be able to approve one — otherwise "advisory" means nothing and he is back to receiving
+     * silence, which is what he complained about.
+     *
+     * Read from `gate_advisory` on the draft, never from the live mode. Two consequences, both
+     * wanted: turning the mode back off cannot strand a post he has already read and approved, and
+     * a draft judged before that column existed can never become approvable over a failure by a
+     * later flip of a flag. The permission is a property of the draft he was shown, not of the
+     * system's state at the moment he says yes.
+     *
+     * `gate_passed === null` is still refused in every mode. Unjudged is not the same as judged and
+     * overridden, and only one of them is his to override.
+     */
     if (draft && draft.gate_passed !== true) {
-      return {
-        ok: false,
-        why: draft.gate_passed === false
-          ? `Draft ${draft.id} was rejected by the checks, so it cannot be approved. ` +
-            `${draft.gate_reason ?? ""} Ask for a rewrite instead.`.trim()
-          : `Draft ${draft.id} has not been judged yet — run the eight checks first.`,
-      };
+      const overridable = draft.gate_passed === false && draft.gate_advisory === true;
+      if (!overridable) {
+        return {
+          ok: false,
+          why: draft.gate_passed === false
+            ? `Draft ${draft.id} was rejected by the checks, so it cannot be approved. ` +
+              `${draft.gate_reason ?? ""} Ask for a rewrite instead.`.trim()
+            : `Draft ${draft.id} has not been judged yet — run the eight checks first.`,
+        };
+      }
+      overAdvisory = String(draft.gate_reason ?? "")
+        .split(" | ")
+        .map((r) => r.split(":")[0].trim())
+        .filter(Boolean);
     }
   }
 
@@ -192,7 +220,21 @@ export async function markReady(
    */
   await recordEditDiff(db, postId, "approved");
 
-  return { ok: true, when: parsed.spoken, postId, draftId: post.draft_id ?? null };
+  if (overAdvisory.length > 0) {
+    await logEvent(db, "post_approved_over_advisory_gate", "info", {
+      post_id: postId,
+      draft_id: post.draft_id ?? null,
+      failed_checks: overAdvisory,
+    });
+  }
+
+  return {
+    ok: true,
+    when: parsed.spoken,
+    postId,
+    draftId: post.draft_id ?? null,
+    ...(overAdvisory.length > 0 ? { overAdvisory } : {}),
+  };
 }
 
 /**

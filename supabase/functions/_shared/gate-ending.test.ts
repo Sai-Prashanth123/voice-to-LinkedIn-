@@ -41,19 +41,27 @@ globalThis.fetch = ((input: string | URL | Request) => {
 function fakeDb(opts: {
   draft: Record<string, unknown>;
   verdicts: { check_key: string; passed: boolean; reason: string | null }[];
+  /** `one_step_mode`. Modelled explicitly because the gate now asks for it. */
+  oneStep?: boolean;
 }) {
   const writes: { table: string; op: string; row: Record<string, unknown> }[] = [];
 
   const from = (table: string) => {
     const rows = table === "gate_runs" ? opts.verdicts : table === "jobs" ? [] : [];
+    // Settings answer with a value, not a draft. Without this every table returned the draft row,
+    // so getSetting read `draft.value`, found undefined and fell through to its default — the mode
+    // was off for the right reason by accident, which is not a thing to leave in a test fake.
+    const single = table === "settings"
+      ? { value: opts.oneStep ?? false }
+      : opts.draft;
     const chain: Record<string, unknown> = {
       select: () => chain,
       eq: () => chain,
       is: () => chain,
       order: () => chain,
       limit: () => chain,
-      maybeSingle: () => Promise.resolve({ data: opts.draft, error: null }),
-      single: () => Promise.resolve({ data: opts.draft, error: null }),
+      maybeSingle: () => Promise.resolve({ data: single, error: null }),
+      single: () => Promise.resolve({ data: single, error: null }),
       update: (row: Record<string, unknown>) => {
         writes.push({ table, op: "update", row });
         return chain;
@@ -198,4 +206,102 @@ test("closing a draft that was already decided changes nothing", async () => {
   // Called twice — by a retried job and by a second record_gate_verdict — it must not queue a second
   // rewrite, which would burn an attempt and park the idea early.
   assert.deepEqual(writes, []);
+});
+
+/*
+ * ADVISORY — the mode Josh asked for on 13 October.
+ *
+ * On that morning a draft of his failed four of the eight checks, and what he received was nothing:
+ * the draft went into a rewrite queue he had just asked to stop using. These tests hold the other
+ * answer in place — the verdict is still false, and the post still reaches him.
+ */
+
+const fourFailing = (): Verdict[] =>
+  GATE_CHECKS.map((c, i) => ({
+    check_key: c.key,
+    passed: i >= 4,
+    reason: i < 4 ? `${c.key} did not hold up` : null,
+  }));
+
+test("advisory: the verdict stays false and is never softened to make the post reachable", async () => {
+  const { db, writes } = fakeDb({
+    draft: draftRow({ id: 70, moment_id: 91 }),
+    verdicts: fourFailing(),
+    oneStep: true,
+  });
+
+  const out = await finishGate(db, 70);
+
+  assert.equal(out.outcome, "advisory");
+  assert.equal(out.judged, 8);
+  assert.equal(out.failed.length, 4);
+
+  const draftWrite = writes.find((w) => w.table === "drafts" && w.op === "update");
+  // The whole point. Every clause 17 number is computed from gate_passed, so a system that flips it
+  // to true in order to hand the post over has destroyed the evidence it was ever working.
+  assert.equal(draftWrite?.row.gate_passed, false, "gate_passed must stay false");
+  assert.equal(draftWrite?.row.gate_advisory, true, "and the handover is recorded separately");
+  assert.match(String(draftWrite?.row.gate_reason ?? ""), /did not hold up/);
+});
+
+test("advisory: no rewrite is queued, because that is the queue he asked to stop using", async () => {
+  const { db, writes } = fakeDb({
+    draft: draftRow({ id: 71, moment_id: 92 }),
+    verdicts: fourFailing(),
+    oneStep: true,
+  });
+
+  await finishGate(db, 71);
+
+  assert.deepEqual(queued(writes), [], "nothing may be enqueued in one-step mode");
+});
+
+test("advisory: the post reaches his calendar, which is the only thing that changes", async () => {
+  const { db, writes } = fakeDb({
+    draft: draftRow({ id: 72, moment_id: 93 }),
+    verdicts: fourFailing(),
+    oneStep: true,
+  });
+
+  await finishGate(db, 72);
+
+  const posts = writes.filter((w) => w.table === "posts");
+  assert.ok(posts.length > 0, "a failing draft in one-step mode still goes into the calendar");
+  // Never past `draft`. Approval is still the only thing that schedules anything, in either mode.
+  for (const p of posts) {
+    assert.notEqual(p.row.status, "scheduled");
+    assert.equal(p.row.marked_ready_at, undefined);
+  }
+});
+
+test("with the mode off, the same four failures still reject and still queue the rewrite", async () => {
+  const { db, writes } = fakeDb({
+    draft: draftRow({ id: 73, moment_id: 94 }),
+    verdicts: fourFailing(),
+    oneStep: false,
+  });
+
+  const out = await finishGate(db, 73);
+
+  // The reversibility test. Nothing about the old path moved; it is reached by a different flag.
+  assert.equal(out.outcome, "rejected");
+  const draftWrite = writes.find((w) => w.table === "drafts" && w.op === "update");
+  assert.equal(draftWrite?.row.gate_advisory, false);
+  assert.deepEqual(writes.filter((w) => w.table === "posts"), [], "and no post is created");
+});
+
+test("advisory: a passing draft is untouched by the mode", async () => {
+  const { db, writes } = fakeDb({
+    draft: draftRow({ id: 74, moment_id: 95 }),
+    verdicts: allPassing(),
+    oneStep: true,
+  });
+
+  const out = await finishGate(db, 74);
+
+  assert.equal(out.outcome, "passed");
+  const draftWrite = writes.find((w) => w.table === "drafts" && w.op === "update");
+  assert.equal(draftWrite?.row.gate_passed, true);
+  // gate_advisory means exactly one thing: handed over DESPITE failing. A pass never sets it.
+  assert.equal(draftWrite?.row.gate_advisory, undefined);
 });

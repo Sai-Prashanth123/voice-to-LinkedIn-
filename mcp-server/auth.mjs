@@ -45,6 +45,9 @@ export const WRITE_TOOLS = new Set([
   "capture_thought",
   "answer_interview",
   "name_idea",
+  // Paste in, post out. start_post captures; write_post files the extraction. Both write.
+  "start_post",
+  "write_post",
   "scan_sessions",
   // Returns a command that installs a scheduled reporter holding this token.
   "setup_session_tracking",

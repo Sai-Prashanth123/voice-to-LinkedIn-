@@ -73,11 +73,26 @@ export const workTools = [
        * asking the queue what is outstanding.
        */
       if (await oneStepMode(db)) {
+        /*
+         * Still says what is waiting on him, because "there is no queue" and "four posts need your
+         * decision" are different facts in this mode too — and the second is the one he would want
+         * to hear. The drafts count is read; nothing in the idea bank is offered or touched.
+         */
+        const awaitingHim = await db.select("posts", {
+          select: "id",
+          status: "eq.draft",
+          limit: 100,
+        });
+
         return {
           work: "none",
           mode: "one_step",
           why: "One-step mode is on, so nothing is pulled from the idea bank. Ask him what he " +
             "wants written, or use what he just said, and call start_post with his words.",
+          waiting_on_josh: {
+            ideas_needing_answers: 0,
+            drafts_with_the_gate_or_for_review: awaitingHim.length,
+          },
           to_change_it: "set_writing_mode, and only if he asks for it.",
         };
       }

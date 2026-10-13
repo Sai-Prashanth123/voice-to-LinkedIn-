@@ -36,6 +36,7 @@ import { interviewTools } from "./interview.mjs";
 // Imported last and registered last: it calls the brief tools through the same registry, so it
 // must not be pulled in while that registry is still being assembled.
 import { workTools } from "./work.mjs";
+import { oneStepTools } from "./onestep.mjs";
 import { joshTools } from "./josh.mjs";
 
 export const tools = [
@@ -53,6 +54,8 @@ export const tools = [
   // The posts themselves, which he asked for and could not reach.
   ...referencePostTools,
   ...workTools,
+  // Paste in, post out. Registered after workTools because it replaces what next_work does.
+  ...oneStepTools,
   ...interviewTools,
   ...writeTools,
   // The decisions only Josh can make. Last, because they are the surface a session ends on.

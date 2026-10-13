@@ -706,6 +706,12 @@ async function closeGate(db: SupabaseClient, body: Record<string, unknown>): Pro
     : result.outcome === "rejected"
     ? `Rejected by ${result.failed.join(", ")}. The rewrite is queued with the reasons attached — ` +
       `call next_work. After three failed attempts the idea parks instead (9.8).`
+    : result.outcome === "advisory"
+    ? `${result.failed.length} of 8 checks flagged it: ${result.failed.join(", ")}. The post is in ` +
+      `his calendar and the decision is his. Read him the post in full first, then say which ` +
+      `checks flagged it and what each one said — in one line each, not a lecture. Do not talk him ` +
+      `into it and do not talk him out of it. If he wants it changed, edit_post or ` +
+      `push_back_on_draft in his words; if he wants it out, mark_ready with the date.`
     : result.outcome === "passed"
     ? "Passed. It is in Josh's calendar and he has been told it is ready."
     : "Already decided. Nothing was changed.";

@@ -26,6 +26,7 @@ import { enqueue } from "../jobs.ts";
 import { loadLibrary } from "../library.ts";
 import { CHECK_NEEDS_SECTION, notJudged, unjudgeableChecks } from "../views.ts";
 import { notice } from "../notices.ts";
+import { oneStepMode } from "../mode.ts";
 // Re-exported because gate-basis.test.ts imports them from here, and because this is where a
 // reader looking for the gate rule will go first.
 export { notJudged, unjudgeableChecks };
@@ -245,7 +246,13 @@ export async function finishGate(
   /* 7.2's warn band, carried into the retry so attempt three does not forget what attempt two was
      warned off. Null is correct and common. */
   nearMiss: string | null = null,
-): Promise<{ outcome: "passed" | "rejected" | "incomplete" | "already"; failed: string[]; judged: number }> {
+): Promise<
+  {
+    outcome: "passed" | "rejected" | "advisory" | "incomplete" | "already";
+    failed: string[];
+    judged: number;
+  }
+> {
   const { data: draft, error } = await db.from("drafts").select("*").eq("id", draftId).single();
   if (error || !draft) throw new Error(`draft ${draftId} not found`);
 
@@ -286,20 +293,63 @@ export async function finishGate(
 
   if (failures.length > 0) {
     const reasons = failures.map((f) => `${f.key}: ${f.reason}`);
+
+    /*
+     * ADVISORY, IN ONE-STEP MODE ONLY.
+     *
+     * gate_passed stays false. It is never set true for a draft that failed: every clause 17 number
+     * and the whole learning loop are computed from it, and a system that lies about its own quality
+     * bar to make a post reachable has destroyed the only evidence it was ever working.
+     *
+     * What changes is what happens next. On 13 October Josh wrote a draft, four of the eight checks
+     * failed, and the result was that he received nothing — the draft went back into a rewrite queue
+     * he had just asked to stop using. Four more failures would have produced four more silences.
+     *
+     * So the verdicts are recorded exactly as they are, the post goes into his calendar as a draft,
+     * and he is told which checks flagged it and why. He decides. The rewrite job is NOT enqueued,
+     * because that job is the thing next_work would later offer him, and the three-strike park does
+     * not fire, because parking the paragraph he just asked to have written is the same insult as
+     * asking him a question about it.
+     */
+    const advisory = await oneStepMode(db);
+
     await db.from("drafts").update({
       gate_passed: false,
       gate_reason: reasons.join(" | "),
+      gate_advisory: advisory,
     }).eq("id", draftId);
 
-    await logEvent(db, "gate_rejected", "info", {
+    await logEvent(db, advisory ? "gate_advisory" : "gate_rejected", "info", {
       moment_id: momentId,
       draft_id: draftId,
       attempt,
       failed_checks: failures.map((f) => f.key),
+      ...(advisory ? { handed_over: true, mode: "one_step" } : {}),
     });
 
-    await retryOrPark(db, momentId, attempt, draft.body, reasons, nearMiss);
-    return { outcome: "rejected", failed: failures.map((f) => f.key), judged: 8 };
+    if (!advisory) {
+      await retryOrPark(db, momentId, attempt, draft.body, reasons, nearMiss);
+      return { outcome: "rejected", failed: failures.map((f) => f.key), judged: 8 };
+    }
+
+    // A fixture never reaches his calendar, in either mode, for the reason given below.
+    if (draft.framework !== "acceptance-fixture") {
+      await pushToCalendar(db, momentId, draftId, draft.body);
+      await db.from("moments").update({
+        status: "drafted",
+        updated_at: new Date().toISOString(),
+      }).eq("id", momentId);
+
+      await notice(
+        db,
+        "draft_ready",
+        `A draft is in your calendar with ${failures.length} of 8 checks flagged: ` +
+          `${failures.map((f) => f.key).join(", ")}. It is yours to judge.`,
+        { momentId, actedOn: ["list_calendar", "mark_ready", "hold_post"] },
+      );
+    }
+
+    return { outcome: "advisory", failed: failures.map((f) => f.key), judged: 8 };
   }
 
   await db.from("drafts").update({ gate_passed: true, gate_reason: null }).eq("id", draftId);
