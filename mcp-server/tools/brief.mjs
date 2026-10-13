@@ -32,6 +32,7 @@ import {
   TRIAGE_TRANSCRIPT_SYSTEM,
 } from "../../supabase/functions/_shared/prompts.ts";
 import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
+import { WRITTEN_UP } from "../../supabase/functions/_shared/extraction.ts";
 import { parsePillars } from "../../supabase/functions/_shared/library.ts";
 import { renderTranscript } from "../../supabase/functions/_shared/session.ts";
 import {
@@ -415,11 +416,15 @@ export const briefTools = [
       });
       if (!moment) throw new Error(`No moment with id ${id}.`);
       if (moment.killed) throw new Error(`Moment ${id} has been killed and must not be recorded.`);
-      if (moment.status === "mined" && !args.redo) {
+      // The same set cc-submit refuses on, and for the same reason: every status past the write-up,
+      // not just `mined`. Two copies of one rule is how the library's isSupplied drifted, so if one
+      // of these changes the other has to.
+      if (WRITTEN_UP.includes(moment.status) && !args.redo) {
         throw new Error(
-          `Moment ${id} is already mined. Re-extracting would overwrite material a draft may ` +
-          `already have been checked against, so it is refused rather than done quietly. If Josh ` +
-          `asked for it to be written up again, call this with redo: true.`,
+          `Moment ${id} has already been written up (${moment.status}). Re-extracting would ` +
+          `overwrite material a draft may already have been checked against, so it is refused ` +
+          `rather than done quietly. If Josh asked for it to be written up again, call this with ` +
+          `redo: true.`,
         );
       }
 

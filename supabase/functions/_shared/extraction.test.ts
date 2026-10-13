@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { joshSaid, missingNumbers, verifyExtraction } from "./extraction.ts";
+import {
+  joshSaid,
+  missingNumbers,
+  PROSE_FIELDS,
+  verifyExtraction,
+  WRITTEN_UP,
+} from "./extraction.ts";
 
 /** What Josh actually said. Everything below is judged against this and nothing else. */
 const SOURCE = `
@@ -176,4 +182,111 @@ test("without his words, the dropped-number check does not run", () => {
   const r = verifyExtraction(base, SAID);
   assert.equal(r.ok, true, r.failures.join(" "));
   assert.doesNotMatch(r.checked.join(" "), /carried/);
+});
+
+/*
+ * ── What the dropped-number check must NOT fire on ─────────────────────────────────────────────
+ *
+ * Measured, not imagined. Run against every real entry in the project on 13 Oct 2026, the first
+ * version of this check reported a dropped number on three of five, and was wrong all three times:
+ * "13" and "2026" from the annotation stamp "[Josh confirmed this is how he works, 13 Oct 2026:]",
+ * "15" from "Email received Tue, Sep 15", and "2" from "the two main ones I used". It caught
+ * nothing real, because the figures that mattered were carried.
+ *
+ * A warn notice that fires on three interviews in five is one he stops reading — the reasoning
+ * 4.4.3 already applies to candidates — so it now asks for a figure rather than a numeral. These
+ * are the exact strings from his transcripts, in both directions.
+ */
+
+const EMPTY_ENTRY = Object.fromEntries(PROSE_FIELDS.map((f) => [f, ""]));
+
+test("a date he never gave as a figure is not a dropped number", () => {
+  assert.deepEqual(
+    missingNumbers(EMPTY_ENTRY, "[Josh confirmed this is how he works, 13 Oct 2026:]"),
+    [],
+  );
+  assert.deepEqual(
+    missingNumbers(EMPTY_ENTRY, "[Email received Tue, Sep 15, from the founder and CEO]"),
+    [],
+  );
+});
+
+test("a numeral used as speech is not a dropped number", () => {
+  assert.deepEqual(
+    missingNumbers(EMPTY_ENTRY, "those are the two main ones I used"),
+    [],
+  );
+  assert.deepEqual(
+    missingNumbers(EMPTY_ENTRY, "to answer the second question you had"),
+    [],
+  );
+});
+
+test("every figure he actually lost is still caught", () => {
+  // His words, verbatim from moments 90 and 94, and an entry that carries none of them.
+  const said = [
+    "I've only just started building TAMs like this in the last six months, but have been " +
+      "building for the better part of 10 years",
+    "I would also take 30% off that number. Take 30% off. under $16",
+    "average 5,481 businesses per vertical and most of them are currently under fifteen dollars " +
+      "to build each",
+    "if we have, like, a 100 prospects, that gets cut down to 10 or 15",
+  ].join("\n\n");
+
+  const dropped = missingNumbers(EMPTY_ENTRY, said);
+
+  // 10 years, six months, 30%, $16, 5,481 businesses, fifteen dollars, 100 prospects.
+  for (const figure of ["10", "6", "30", "16", "5481", "15", "100"]) {
+    assert.ok(dropped.includes(figure), `"${figure}" is no longer caught: ${dropped.join(", ")}`);
+  }
+});
+
+test("a figure carried in any field counts as carried", () => {
+  const said = "most of them are currently under fifteen dollars to build each";
+  assert.deepEqual(missingNumbers(EMPTY_ENTRY, said), ["15"]);
+  assert.deepEqual(
+    missingNumbers({ ...EMPTY_ENTRY, reader_takeaway: "under $15 a build" }, said),
+    [],
+  );
+});
+
+/*
+ * ── One list of the statuses a resubmission must not walk over ──────────────────────────────────
+ *
+ * The guard tested `mined` alone. Every real moment in the project on 13 Oct 2026 was `drafted`,
+ * so a resubmission on any of them went through: it overwrote material a draft's claim ledger had
+ * already been verified against, moved the moment back to `mined`, and recorded nothing. The spans
+ * in that ledger would then point at text that no longer existed.
+ */
+
+test("every status past the write-up is guarded, and the earlier ones are not", () => {
+  for (const past of ["mined", "queued", "drafted", "gated", "scheduled", "published"]) {
+    assert.ok(WRITTEN_UP.includes(past), `${past} is not guarded against a silent resubmission`);
+  }
+  // Before the write-up there is nothing to overwrite, and refusing would block the normal path.
+  for (const before of ["captured", "half_mined", "parked"]) {
+    assert.ok(!WRITTEN_UP.includes(before), `${before} must not need redo: true`);
+  }
+});
+
+test("both callers refuse on the shared list rather than their own copy", async () => {
+  // Two copies of one rule is how isSupplied drifted for five weeks, so this is checked by source.
+  const files = [
+    "../cc-submit/index.ts",
+    "../../../mcp-server/tools/brief.mjs",
+  ];
+  for (const f of files) {
+    const source = await Deno.readTextFile(new URL(f, import.meta.url));
+    assert.match(source, /WRITTEN_UP/, `${f} does not use the shared status list`);
+    assert.doesNotMatch(
+      source,
+      /(const|let)\s+WRITTEN_UP\s*=/,
+      `${f} declares its own copy of the status list`,
+    );
+    assert.doesNotMatch(
+      source,
+      /status === "mined" && !/,
+      `${f} still guards on "mined" alone`,
+    );
+  }
 });

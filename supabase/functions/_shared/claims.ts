@@ -132,6 +132,74 @@ export function extractNumbers(text: string): string[] {
   return [...new Set([...digits, ...words])].filter((n) => n.length > 0);
 }
 
+/**
+ * Units and markers that make a number a FIGURE rather than a passing numeral.
+ *
+ * "$16", "30%", "10 years", "5,481 businesses" are figures. "the two main ones", "the second
+ * question", "13 Oct 2026" are not — they are speech and dates, and they are the overwhelming
+ * majority of the numbers in a transcript of somebody talking.
+ */
+const FIGURE_UNIT = new RegExp(
+  "^(?:%|percent|per cent|years?|yrs?|months?|weeks?|days?|hours?|hrs?|minutes?|mins?" +
+    "|thousands?|millions?|billions?|dollars?|cents?|pounds?|euros?|people|persons?" +
+    "|businesses|business|companies|company|prospects?|clients?|customers?|accounts?" +
+    "|clinicians?|practices?|campuses|leads?|calls?|emails?|posts?|drafts?|words?|times?" +
+    "|(?:k|x|m|bn)(?![a-z]))",
+  "i",
+);
+
+/** Currency symbols, as a set rather than a regex, so no escaping can go wrong silently. */
+const CURRENCY = ["$", "\u00a3", "\u20ac"];
+
+/**
+ * The numbers in a text that read as figures. A strict subset of extractNumbers.
+ *
+ * WHY THIS IS NOT extractNumbers
+ *
+ * extractNumbers answers "did the draft add a number the source does not contain", and for that
+ * question a wide net is right: a false positive costs one sentence of checking, and the thing it
+ * catches is an invented statistic. The opposite question — "did the write-up DROP a number he
+ * gave" — has the opposite base rate. Measured against every real entry in the project on 13 Oct
+ * 2026, extractNumbers reported a dropped number on three of five, and all three were false: "13"
+ * and "2026" from a date stamp, "15" from "Email received Tue, Sep 15", and "2" from "the two main
+ * ones I used". Nothing real was caught, because the figures that mattered were carried.
+ *
+ * A notice that fires on three interviews in five is one he stops reading, which is the same
+ * reasoning 4.4.3 applies to candidates. So the dropping direction asks for a figure: a currency
+ * amount, a percentage, or a number with a unit attached. All of the numbers Josh actually lost —
+ * "the better part of 10 years", "the last six months", "Take 30% off", "under $16", "5,481
+ * businesses per vertical" — are figures by that definition.
+ *
+ * "one" is absent from WORD_NUMBERS for the same kind of reason, one step earlier.
+ */
+export function extractFigures(text: string): string[] {
+  const out = new Set<string>();
+  const source = text ?? "";
+
+  const scan = (re: RegExp, value: (m: string) => string) => {
+    const r = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+    let m: RegExpExecArray | null;
+    while ((m = r.exec(source)) !== null) {
+      const token = m[0];
+      const before = source.slice(Math.max(0, m.index - 2), m.index);
+      const after = source.slice(m.index + token.length, m.index + token.length + 24);
+      // A marker makes it a figure: a currency amount, a percentage, or a unit after it. The
+      // window is trimmed rather than matched with a whitespace class, because this file is
+      // edited by hand and a swallowed backslash in a regex fails silently and completely.
+      const marked = CURRENCY.some((c) => token.includes(c) || before.trimEnd().endsWith(c)) ||
+        token.includes("%") || FIGURE_UNIT.test(after.trimStart().replace(/^-+/, ""));
+      if (!marked) continue;
+      const v = value(token);
+      if (v.length > 0) out.add(v);
+    }
+  };
+
+  scan(NUMBER_RE, canonicaliseNumber);
+  scan(WORD_NUMBER_RE, (w) => WORD_NUMBERS[w.toLowerCase().trim()] ?? "");
+
+  return [...out];
+}
+
 function canonicaliseNumber(token: string): string {
   return token.replace(/[$£€,\s]/g, "").replace(/%$/, "");
 }

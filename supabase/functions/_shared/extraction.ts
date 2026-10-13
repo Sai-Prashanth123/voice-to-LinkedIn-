@@ -34,7 +34,18 @@
  * rules the Edge Function enforces rather than a second copy of them.
  */
 
-import { extractNumbers, normalise } from "./claims.ts";
+import { extractFigures, extractNumbers, normalise } from "./claims.ts";
+
+/**
+ * The statuses that mean an idea has already been written up, so a second write-up would replace
+ * material rather than create it.
+ *
+ * Here rather than in either caller, because both cc-submit and get_extraction_brief refuse on it
+ * and the two copies of `isSupplied` are what this repository keeps paying for. A resubmission on
+ * any of these overwrites material a draft's claim ledger was verified against — it needs `redo`,
+ * which puts the previous entry on the record first.
+ */
+export const WRITTEN_UP = ["mined", "queued", "drafted", "gated", "scheduled", "published"];
 
 /** The text fields of an extraction, as the schema defines them. */
 export const PROSE_FIELDS = [
@@ -81,12 +92,18 @@ export function joshSaid(seed: string, turns: { role: string; body: string }[]):
  * is the only thing a draft may cite. On 13 Oct 2026 two extractions of the same interview each
  * lost "10 years", "six months", "30%" and "$16", so the post that interview existed to produce
  * could not state a single one of them.
+ *
+ * It asks extractFigures of his words and extractNumbers of the entry: a figure going in, anything
+ * numeric coming out. That asymmetry is deliberate and measured — see extractFigures. Checked
+ * against every real entry in the project, the symmetric version reported a drop on three of five
+ * and was wrong all three times, on two dates and the phrase "the two main ones I used". A warning
+ * that fires that often is one he stops reading, and the figures he actually lost are all figures.
  */
 export function missingNumbers(extracted: ExtractionLike, said: string): string[] {
   const carried = new Set(
     PROSE_FIELDS.flatMap((f) => (typeof extracted[f] === "string" ? extractNumbers(extracted[f] as string) : [])),
   );
-  return extractNumbers(said ?? "").filter((n) => !carried.has(n));
+  return extractFigures(said ?? "").filter((n) => !carried.has(n));
 }
 
 /**

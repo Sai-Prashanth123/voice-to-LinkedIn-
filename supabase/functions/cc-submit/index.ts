@@ -40,7 +40,7 @@ import {
 } from "../_shared/handlers/interview.ts";
 import { appendTurn, loadSession, renderTranscript } from "../_shared/session.ts";
 import { autoName, setIdeaName } from "../_shared/idea-names.ts";
-import { joshSaid, missingNumbers, verifyExtraction } from "../_shared/extraction.ts";
+import { joshSaid, missingNumbers, verifyExtraction, WRITTEN_UP } from "../_shared/extraction.ts";
 import { applyDraft } from "../_shared/handlers/draft.ts";
 import * as decisions from "./decisions.ts";
 import * as maintenance from "./maintenance.ts";
@@ -161,14 +161,21 @@ Deno.serve(async (req) => {
   // 6.3 — a killed moment is one Josh has already declined.
   if (moment.killed) return json({ error: `moment ${momentId} has been killed`, ref: moment.ref }, 409);
 
-  // A moment already mined must not be silently overwritten by a second submission. Re-extraction
-  // is a real operation, but it is one somebody should ask for rather than one that happens because
-  // two runs overlapped. `redo` is the asking.
+  // A moment already written up must not be silently overwritten by a second submission.
+  // Re-extraction is a real operation, but it is one somebody should ask for rather than one that
+  // happens because two runs overlapped. `redo` is the asking.
+  //
+  // EVERY STATUS PAST THE WRITE-UP, NOT JUST `mined`. The guard tested `mined` alone, and the five
+  // real moments in the project on 13 Oct 2026 were all `drafted` — so a resubmission on any of
+  // them went straight through, overwrote material a draft's claim ledger had already been verified
+  // against, moved the moment back to `mined`, and recorded nothing. The spans in that ledger would
+  // then point at text that no longer existed, which is the one thing it exists to make impossible.
+  const alreadyWrittenUp = WRITTEN_UP.includes(moment.status);
   const redo = body.redo === true;
-  if (moment.status === "mined" && !redo) {
+  if (alreadyWrittenUp && !redo) {
     return json({
-      error: `moment ${momentId} is already mined. Pass redo: true only if Josh asked for it to be ` +
-        `written up again.`,
+      error: `moment ${momentId} has already been written up (${moment.status}). Pass redo: true ` +
+        `only if Josh asked for it to be written up again.`,
       ref: moment.ref,
     }, 409);
   }
@@ -207,10 +214,15 @@ Deno.serve(async (req) => {
 
   // The entry being replaced goes on the record first. Nothing in the idea bank is deleted, and a
   // draft may already have been checked against it.
-  if (moment.status === "mined") {
+  if (alreadyWrittenUp) {
     const { data: previous } = await db.from("material").select("*").eq("moment_id", momentId)
       .maybeSingle();
-    await logEvent(db, "extraction_replaced", "info", { moment_id: momentId, ref: moment.ref, previous });
+    await logEvent(db, "extraction_replaced", "info", {
+      moment_id: momentId,
+      ref: moment.ref,
+      was: moment.status,
+      previous,
+    });
   }
 
   // quiet: a person is waiting in the session, so the facts are reported in the reply below rather
