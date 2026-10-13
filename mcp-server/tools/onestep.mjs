@@ -119,11 +119,43 @@ export const oneStepTools = [
     },
 
     async handler(args, context) {
-      await viaTool(
+      const filed = await viaTool(
         "submit_extraction",
         { moment_id: args.moment_id, extracted: args.extracted },
         context,
       );
+
+      /*
+       * A PARK HAS TO BE SAID OUT LOUD HERE, OR IT BECOMES THE SILENCE HE COMPLAINED ABOUT.
+       *
+       * applyExtraction parks an idea when nothing substantive came out of it, or when there is a
+       * scene but nothing taken from it and the strength is 2 or less. That is the right call and
+       * clause 1 says so: "if the material is not there in a given week, fewer posts is the
+       * correct outcome."
+       *
+       * What was wrong was ignoring it. get_drafting_brief does not refuse a parked moment — only
+       * a killed one — so a thin paste would have been parked, drafted anyway, pushed to his
+       * calendar, and then withheld from his review by list_calendar, which skips drafts sitting
+       * on parked ideas. Three correct behaviours composing into the exact thing he wrote in to
+       * complain about: he gives it something and nothing comes back.
+       *
+       * So the chain stops here and the reason is handed over in his own terms. He gets a
+       * sentence instead of a post, which is an answer.
+       */
+      if (filed?.status === "parked") {
+        return {
+          moment_id: args.moment_id,
+          mode: modeName(await oneStepMode(context.db)),
+          wrote_nothing: true,
+          why: filed.note,
+          tell_him: "Say in one line that there is not enough in it to write from yet, say which " +
+            "part is missing, and ask for that part. Do not ask him a list of questions and do " +
+            "not write the post anyway — a post built on this would fail the claims check and " +
+            "reach him as a silence rather than as this sentence.",
+          to_continue: "When he adds to it, call start_post again with the new words. Nothing is " +
+            "lost: the idea is kept, parked, and reopens when there is more in it.",
+        };
+      }
 
       const brief = await viaTool("get_drafting_brief", { moment_id: args.moment_id }, context);
 

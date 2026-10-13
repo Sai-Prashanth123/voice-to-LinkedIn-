@@ -208,7 +208,8 @@ export const inspectTools = [
     },
 
     async handler(_args, { db }) {
-      const [mined, halfMined, captured, unjudged, waiting, openProposals] = await Promise.all([
+      const [mined, halfMined, captured, unjudged, waiting, openProposals, oneStep] =
+        await Promise.all([
         rows(db, "moments?select=id&status=eq.mined&killed=is.false"),
         rows(db, "moments?select=id,title&status=eq.half_mined&killed=is.false&order=id.asc"),
         rows(db, "moments?select=id,title&status=eq.captured&killed=is.false&order=id.asc"),
@@ -218,6 +219,7 @@ export const inspectTools = [
         // exactly the wrong thing for a tool whose whole job is "what should I do now".
         rows(db, "posts?select=id,moments!inner(killed)&status=eq.draft&moments.killed=is.false"),
         rows(db, "library_proposals?select=id&status=eq.open"),
+        oneStepMode(db),
       ]);
 
       // Ordered by what unblocks the most. A draft waiting on Josh is worth more than a new draft,
@@ -233,7 +235,14 @@ export const inspectTools = [
         });
       }
 
-      if (mined.length > 0) {
+      // Everything below that reaches into the idea bank is suppressed in one_step mode. Not
+      // cosmetically: this tool is the second call of every session by CLAUDE.md's own
+      // instruction, and on the morning of 13 October it would have answered "answer the
+      // interview on 1 candidate" while Josh was writing "I want to scrap all that for the time
+      // being". The code had stopped asking him questions and the advice had not, which is the
+      // same complaint arriving by a route nobody had closed. The counts below still report every
+      // idea, so nothing is hidden — only the instruction to go and use them is gone.
+      if (mined.length > 0 && !oneStep) {
         actions.push({
           do: `Draft ${mined.length} mined moment(s)`,
           where: "Claude Code — next_work, then the draft-post skill",
@@ -241,7 +250,7 @@ export const inspectTools = [
         });
       }
 
-      if (halfMined.length > 0) {
+      if (halfMined.length > 0 && !oneStep) {
         actions.push({
           do: `Answer the interview on ${halfMined.length} candidate(s) — start with "${halfMined[0].title ?? "an unnamed idea"}"`,
           where: "Claude Code — next_interview_question, then answer_interview",
@@ -258,7 +267,7 @@ export const inspectTools = [
         });
       }
 
-      if (captured.length > 0) {
+      if (captured.length > 0 && !oneStep) {
         actions.push({
           do: `${captured.length} input(s) captured but never mined`,
           where: "Claude Code — next_interview_question, or park_idea if it is not worth it",
@@ -267,7 +276,21 @@ export const inspectTools = [
         });
       }
 
+      // Said once, at the end, and phrased as a fact rather than a thing to do. He needs to know
+      // the material is still there — none of it was deleted — without being pointed back at it.
+      const held = mined.length + halfMined.length + captured.length;
+      if (held > 0 && oneStep) {
+        actions.push({
+          do: `${held} idea(s) are held in the bank and nothing will be drafted from them`,
+          where: "Nothing to do — do not start an interview and do not pull one of these",
+          why: "He asked on 13 October for the interview and the idea bank to stop. They are kept " +
+            "rather than deleted, and only he turns that back on, with set_writing_mode.",
+        });
+      }
+
       return {
+        // First, because it decides whether half of what follows applies at all.
+        mode: modeName(oneStep),
         next: actions[0] ?? {
           do: "Nothing is blocked",
           where: "—",
