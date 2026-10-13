@@ -44,3 +44,8 @@ supabase/.temp/
 # Exported session transcripts. They contain whatever was pasted into the session, which has
 # included API keys more than once.
 20*-this-session-is-being-continued-*.txt
+
+# Personal, per-machine Claude Code settings. settings.json is the shared one.
+# This file was tracked until 14 Oct 2026 and shipped a pre-approved allow-list —
+# execute_sql and a functions deploy against the live project — to anyone who cloned.
+.claude/settings.local.json
