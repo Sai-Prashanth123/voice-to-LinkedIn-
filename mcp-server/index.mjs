@@ -28,7 +28,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { loadEnv, note } from "./env.mjs";
 import { createDb } from "./db.mjs";
 import { tools, assertUniqueNames } from "./tools/index.mjs";
-import { build, NAME, VERSION } from "./server.mjs";
+import { build, guardMessages, NAME, VERSION } from "./server.mjs";
 import { annotationsFor } from "./auth.mjs";
 import { promptsFor } from "./prompts.mjs";
 import { resourcesFor } from "./resources.mjs";
@@ -117,7 +117,12 @@ async function main() {
 
   // Serving: stdout belongs to the transport from here on. Anything printed to it corrupts the
   // protocol, which is why note() writes to stderr and every log in this package uses it.
-  await build(context, tools).connect(new StdioServerTransport());
+  // The unknown-argument guard goes on AFTER connect, never before: the SDK installs its handler by
+  // wrapping whatever it finds, so a guard in place beforehand ends up calling itself. See
+  // guardMessages. It cannot live in the dispatch at all — by then zod has stripped the mistake.
+  const transport = new StdioServerTransport();
+  await build(context, tools).connect(transport);
+  guardMessages(transport, tools);
   return null; // stays alive on the transport
 }
 

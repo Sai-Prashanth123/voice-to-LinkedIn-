@@ -105,6 +105,72 @@ export function wrap(tool, context, onCall) {
  * @param list     which tools to register. The HTTP door passes a scoped subset; stdio passes all.
  * @param onCall   audit hook
  */
+/**
+ * Put the unknown-argument check in front of a transport.
+ *
+ * WHY A TRANSPORT AND NOT THE DISPATCH
+ *
+ * The check cannot live in wrap(): see the comment there. The SDK parses `params.arguments` against
+ * the zod shape before a handler runs and a non-strict object strips what it does not recognise, so
+ * the only place the caller's real request still exists is the message as it arrived. http.mjs has
+ * always read the raw body for this reason. stdio had nothing, and silently dropped the argument —
+ * recorded as a known gap this morning, which is a poor place to leave it, because stdio is the
+ * path anyone running this repo locally uses.
+ *
+ * It cannot be fixed through the schema either. `registerTool` takes a ZodRawShape and builds
+ * `z.object(shape)` itself, so there is nowhere to apply `.strict()`.
+ *
+ * So the message is inspected on the way in, which is the same position and the same wording as the
+ * HTTP check. A `tools/call` naming an argument the tool does not declare is answered here and
+ * never reaches the server; everything else is passed through untouched.
+ *
+ * Reported as a tool result with isError, not a protocol error. A protocol error ends the exchange;
+ * this is a caller who used the wrong name and can read the right one and retry.
+ */
+/*
+ * CALLED AFTER connect(), AND THAT ORDER IS THE WHOLE TRICK.
+ *
+ * The first attempt defined `onmessage` as a getter returning a live closure, so the guard would be
+ * in place whenever the SDK assigned its handler. That produced an infinite loop and the server
+ * answered nothing at all — not even `initialize`.
+ *
+ * The SDK chains rather than assigns: it reads the existing `onmessage`, then installs a handler
+ * that calls what it read. Reading a getter that returns a closure over the variable the setter
+ * writes means the SDK's handler ends up calling itself. The trace was the same message arriving
+ * three times with a live downstream, which is a cycle, not a dropped message.
+ *
+ * So the handler is read ONCE, after the server has finished connecting, and replaced with a plain
+ * function. Nothing is live, nothing is re-entrant.
+ */
+export function guardMessages(transport, list) {
+  const downstream = transport.onmessage;
+
+  transport.onmessage = (message, extra) => {
+    if (message?.method === "tools/call" && message?.id !== undefined) {
+      const tool = list.find((t) => t.name === message?.params?.name);
+      if (tool) {
+        const unknown = unknownArguments(tool, message?.params?.arguments);
+        if (unknown.length > 0) {
+          // A tool result with isError, not a protocol error — the same choice wrap() makes, and
+          // the same wording http.mjs sends. The caller can read the right name and retry.
+          transport.send({
+            jsonrpc: "2.0",
+            id: message.id,
+            result: {
+              isError: true,
+              content: [{ type: "text", text: unknownArgumentMessage(tool, unknown) }],
+            },
+          });
+          return;
+        }
+      }
+    }
+    downstream?.(message, extra);
+  };
+
+  return transport;
+}
+
 export function build(context, list, onCall) {
   // Instructions are read by every Claude client before the first message, which makes them the one
   // place conversational behaviour can live without anyone configuring anything. See instructions.mjs.

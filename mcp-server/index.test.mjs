@@ -95,3 +95,52 @@ test("a tool that throws comes back as a readable error, not a dead connection",
     await close();
   }
 });
+
+/*
+ * THE STDIO PATH, WHICH HAD NO GUARD AT ALL.
+ *
+ * `get_reference_posts` takes `handle`. Asked for `writer`, it used to ignore the filter and return
+ * the newest posts across all eight writers — four other people, no error, no note. http.mjs has
+ * refused that since yesterday by reading the raw body. stdio could not: the SDK strips unknown
+ * keys against the zod shape before any handler runs, so by then the mistake is gone.
+ *
+ * Both halves are asserted over a real spawned server, because this is the second day running that
+ * something passed `node index.mjs --check` and failed across the transport.
+ */
+test("stdio refuses an argument the tool does not declare", async () => {
+  const { client, close } = await connect();
+  try {
+    const bad = await client.callTool({
+      name: "get_reference_posts",
+      arguments: { writer: "mattjbarker1" },
+    });
+
+    assert.equal(bad.isError, true, "stdio accepted an undeclared argument");
+    assert.match(bad.content[0].text, /no argument "writer"/);
+    // It names the right parameter, because that is the next thing the caller needs.
+    assert.match(bad.content[0].text, /handle/);
+
+    // And the correct name still works, so the guard refuses the mistake and nothing else.
+    const good = await client.callTool({
+      name: "get_reference_posts",
+      arguments: { handle: "mattjbarker1", limit: 1 },
+    });
+    assert.ok(!good.isError, `the right argument was refused: ${good.content?.[0]?.text}`);
+  } finally {
+    await close();
+  }
+});
+
+test("stdio still answers a tool that declares no arguments", async () => {
+  // The guard sits in front of the transport precisely so it cannot repeat this morning's failure,
+  // where a check in the dispatch was handed the SDK's own context and refused health outright.
+  const { client, close } = await connect();
+  try {
+    for (const name of ["health", "system_status"]) {
+      const result = await client.callTool({ name, arguments: {} });
+      assert.ok(!result.isError, `${name} refused: ${result.content?.[0]?.text}`);
+    }
+  } finally {
+    await close();
+  }
+});
