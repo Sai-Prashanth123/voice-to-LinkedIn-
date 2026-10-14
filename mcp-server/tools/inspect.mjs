@@ -543,7 +543,8 @@ export const inspectTools = [
         "and more honest than assembling the same picture from six tools.",
       inputSchema: {},
     },
-    async handler(_args, { db }) {
+    // `url` is destructured for reading_from: it is how a session proves which project answered.
+    async handler(_args, { db, url }) {
       // Verification fixtures are excluded everywhere below. A status that counted them would say
       // posts had published on a system with no LinkedIn connection, which is exactly the
       // reassuring nonsense this is meant to replace.
@@ -594,7 +595,43 @@ export const inspectTools = [
 
       const oneStep = await oneStepMode(db);
 
+      /*
+       * WHICH SYSTEM IS ANSWERING, SAID OUT LOUD.
+       *
+       * On 14 October Josh ran a session, asked it to fetch Matt Barker, and watched it call Exa —
+       * a tool this project has never used and which appears nowhere in this repository. It was
+       * running an older content system still sitting on his drive, and it took a screen share and
+       * twenty minutes to work that out. Everything he reported that morning has to be read through
+       * that, because some of it was never our code.
+       *
+       * This repository cannot delete the other one and should not try. What it can do is refuse to
+       * be confused with it: these three facts come from this database, through this connector, and
+       * a session running something else cannot produce them. CLAUDE.md tells a session to stop if
+       * it cannot get them rather than improvise from whatever files are on disk.
+       */
+      const [latestLibrary] = await rows(
+        db,
+        "library_versions?select=version&order=version.desc&limit=1",
+      );
+
       return {
+        reading_from: {
+          // No regex: the project ref is the first label of the host. A hand-written escape in this
+          // file has been silently eaten twice today, and a wrong one here would be cosmetic enough
+          // to ship.
+          project: (() => {
+            try {
+              return new URL(String(url)).hostname.split(".")[0];
+            } catch {
+              return null;
+            }
+          })(),
+          library_version: latestLibrary?.version ?? null,
+          sections: sections.length,
+          means: "These come from Josh's database through this connector. If a session cannot " +
+            "produce them, it is not connected to the content system — do not carry on from files " +
+            "on disk, say so and stop.",
+        },
         /*
          * First, because the instructions tell every session to read it before writing anything,
          * and a fact the model has to go looking for is a fact it will sometimes not have.

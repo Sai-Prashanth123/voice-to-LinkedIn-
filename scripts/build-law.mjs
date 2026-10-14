@@ -407,11 +407,40 @@ if (!APPLY) {
    * Written HERE rather than by a second script so the two cannot drift: the JSON is a product of
    * the same generation as the markdown, not a copy taken of it afterwards.
    */
+  /*
+   * voiceprint.md is carried across rather than dropped.
+   *
+   * It is built by build-voiceprint.mjs, not here, so it is not in `files` — but it IS in the
+   * law.json on disk, and resources.mjs:33 advertises `law://voiceprint` from that bundle. Writing
+   * `files` alone would have quietly removed a resource the server lists, and the failure would
+   * have appeared later as a resource that 404s with nothing in this run to connect it to.
+   *
+   * Read from the existing bundle rather than from the .md, so the two stay the same generation.
+   */
+  let carried = {};
+  try {
+    const existing = JSON.parse(readFileSync(join(OUT, "law.json"), "utf8"));
+    if (existing?.files?.["voiceprint.md"]) {
+      carried = { "voiceprint.md": existing.files["voiceprint.md"] };
+    }
+  } catch {
+    // No bundle yet, or an unreadable one. Nothing to carry; build-voiceprint.mjs will add it.
+  }
+
   writeFileSync(
     join(OUT, "law.json"),
-    JSON.stringify({ generated_at: new Date().toISOString(), files }, null, 2),
+    JSON.stringify(
+      { generated_at: new Date().toISOString(), files: { ...files, ...carried } },
+      null,
+      2,
+    ),
   );
 
   console.log("\n  Written, plus law.json for the MCP resources.");
-  console.log("  voiceprint.{md,json} is built separately by build-voiceprint.mjs.\n");
+  console.log(
+    carried["voiceprint.md"]
+      ? "  voiceprint.md carried across from the previous bundle; it is built by build-voiceprint.mjs."
+      : "  NOTE: no voiceprint.md in law.json. Run build-voiceprint.mjs or law://voiceprint will 404.",
+  );
+  console.log("");
 }

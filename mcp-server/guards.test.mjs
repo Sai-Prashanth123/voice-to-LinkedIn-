@@ -161,3 +161,40 @@ test("the refusal happens where the argument still exists", () => {
   // One definition of what counts as unknown, shared with wrap().
   assert.match(http, /unknownArguments/, "http.mjs decides for itself what an unknown argument is");
 });
+
+/* ── 4. Writing from the disk instead of the library ──────────────────────── */
+
+test("no skill tells a drafter to read the law files", () => {
+  /*
+   * josh-voice step 1 said "Read the law set. All five files are short." On 14 Oct Josh watched a
+   * session do it and report back: "I didn't call the voice brief, I read through the voice files
+   * from this instead", "the voice guide arrived on the voice files on disk", and "the frameworks I
+   * used the three structures from the file on disk rather than the library's own version". He also
+   * watched it skip three of the six files it had just been told to read.
+   *
+   * The same skill states the precedence — for anything the gate will judge, the library wins — so
+   * it was instructing the model to do the thing it then told it not to rely on.
+   */
+  const skill = readFileSync(
+    new URL("../.claude/skills/josh-voice/SKILL.md", import.meta.url),
+    "utf8",
+  );
+
+  assert.doesNotMatch(
+    skill,
+    /\*\*Read the law set\.\*\*/,
+    "the skill still opens by sending the drafter to the files on disk",
+  );
+  assert.match(skill, /get_voice_brief/, "the skill no longer names the tool that replaces it");
+  // The files are still there and still worth reading about him. They are not an input to a draft.
+  assert.match(skill, /Not an input to a draft|not for writing as him/i);
+});
+
+test("the law files stay readable by the code that imports them", () => {
+  // voiceprint.json and law.json are imported by resources.mjs, measure.mjs and voice.mjs. Demoting
+  // the markdown must not have touched those, or measure_draft loses its contrast numbers.
+  for (const f of ["resources.mjs", "tools/measure.mjs", "tools/voice.mjs"]) {
+    const src = readFileSync(new URL(`./${f}`, import.meta.url), "utf8");
+    assert.match(src, /voiceprint\.json/, `${f} no longer reads the measured voiceprint`);
+  }
+});

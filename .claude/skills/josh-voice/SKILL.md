@@ -1,6 +1,6 @@
 ---
 name: josh-voice
-description: Use when writing, editing or judging anything in Josh Fryszer's voice — a LinkedIn post, a rewrite after a gate rejection, a hook that needs sharpening, or a check on whether a draft still sounds like him. Reads his law set and the live reference library rather than writing from general instincts about "professional LinkedIn tone".
+description: Use when writing, editing or judging anything in Josh Fryszer's voice — a LinkedIn post, a rewrite after a gate rejection, a hook that needs sharpening, or a check on whether a draft still sounds like him. Fetches the live voice guide and reference library from the system rather than writing from general instincts about "professional LinkedIn tone", and rather than from the files on disk, which can be older than the library without saying so.
 ---
 
 # Writing as Josh
@@ -10,14 +10,17 @@ section before either.
 
 | Source | Where | What it is |
 |---|---|---|
-| **The law set** | `data/josh/law/*.md` | Voice, receipts, structures, quality bar. Files. Fast to read, fast to edit. |
-| **The library** | The system, via MCP | What the drafter and the gate actually judge against. Fourteen sections in Postgres. |
+| **The library** | The system, via `get_voice_brief` and `get_drafting_brief` | What the drafter and the gate actually judge against. Fifteen sections in Postgres. **Write from this.** |
+| **The law set** | `data/josh/law/*.md` | Background for a person reading about how Josh writes. Not an input to a draft. |
 
-**They are allowed to disagree.** That was a deliberate choice, not an oversight. The law set is
-for a human or an agent thinking about how Josh writes; the library is what the gate enforces. If
-you find them contradicting each other on something that matters, **say so rather than picking
-one** — that divergence is the most interesting thing you could report, and the e2e harness reports
-it too without failing on it.
+**They are allowed to disagree, and that is why only one of them is an input.** The split was a
+deliberate choice. What was not deliberate was a drafter reading the files: on 14 October Josh
+watched a session take its frameworks and its voice guide off the disk while the library held newer
+versions of both, and the only thing that had told it to was step 1 of this skill.
+
+So the law set is for reading about him, not for writing as him. If you notice the two contradicting
+each other on something that matters, **say so rather than picking one** — that divergence is worth
+reporting, and the e2e harness reports it too without failing on it.
 
 **For anything the gate will judge, the library wins.** It is the contractual source (clause 8) and
 it is what `get_gate_brief` returns.
@@ -37,9 +40,33 @@ Run it on the hook and on the central claim. Everything below is downstream of i
 
 ## Before writing
 
-1. **Read the law set.** All five files are short. `data/josh/law/`:
-   `identity.md` · `voice.md` · `receipts.md` · `content-plan.md` · `quality-bar.md`,
-   plus `voiceprint.md` for the measured half.
+1. **Get his voice from the system, not from the disk.** `get_voice_brief`. It assembles the voice
+   guide, the measured voiceprint and the banned list as they stand right now.
+
+   **Do not read `data/josh/law/` to write from.** This step used to say "read the law set, all five
+   files are short", and on 14 October Josh watched a session do exactly that and report back: *"I
+   didn't call the voice brief, I read through the voice files from this instead"*, *"the voice guide
+   arrived on the voice files on disk"*, and *"the frameworks I used the three structures from the
+   file on disk rather than the library's own version."* He also watched it skip three of the six
+   files it had just been told to read.
+
+   Both failures came from the same instruction. Six files is six chances to skip one, and a file on
+   disk is a file that can be older than the library without saying so — which is why the precedence
+   note above exists, and why an instruction that sends you to the disk first makes that note
+   unenforceable.
+
+   **Two things, and only two, are not in the library yet.** Audited file by file on 14 October:
+   everything else the old step fetched is a thinner or older copy of something the briefs already
+   hand over. These are the exceptions.
+
+   - **His biography and his vantage** — Slingshot GTM, the years consulting, what he does not do.
+     No library section holds it. Read `law://identity` when a post needs to be grounded in his
+     career, and only then.
+   - **His receipts** — the seventeen facts with the call dates they came from. The `receipts`
+     library section exists and is still the placeholder, so until
+     `scripts/load-receipts.mjs --apply` has been run, `law://receipts` is the only copy. After it
+     has been run, the section is the copy a claim can actually cite and the file is not.
+
 2. **Get the real brief.** `get_drafting_brief` with the moment id. It assembles the live library
    for the drafting view. **The drafting standard is not in this file** — it is there, and it
    changes without any deploy when Josh edits a section.

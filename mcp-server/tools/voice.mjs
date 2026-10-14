@@ -115,7 +115,12 @@ export const voiceTools = [
             "voiceprint says outright that its rhythm is a baseline for his thinking, not a " +
             "target for his posts. Using his spoken sd as a target is the easiest mistake here.",
           use_instead: {
-            source: "${MEASURED} measured posts by the ${WRITERS} writers he chose",
+            // Backticks. This was a double-quoted string, so every caller of get_voice_brief was
+            // handed the literal text "${MEASURED} measured posts by the ${WRITERS} writers he
+            // chose" — the one field whose whole job was to carry the current numbers, emitting
+            // neither. The comment above these constants exists specifically to stop them going
+            // stale, and the field it was protecting had never once interpolated.
+            source: `${MEASURED} measured posts by the ${WRITERS} writers he chose`,
             scene_writers_sd: Object.fromEntries(sceneRows.map((r) => [r.handle, r.sd_median])),
             range: sds.length ? `${sds[0]}–${sds[sds.length - 1]}` : null,
           },
