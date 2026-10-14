@@ -275,11 +275,7 @@ export const briefTools = [
         limit: "500",
       });
       const targets = writerShapeTargets(writerRows);
-      const shapeLines = shapeAgainst(
-        measureShape(draft.body),
-        String(draft.body ?? "").trim().split(/s+/).filter(Boolean).length,
-        targets,
-      );
+      const shapeLines = shapeAgainst(measureShape(draft.body), targets);
 
       // The same rule the edge function applies, from the same function.
       //

@@ -92,7 +92,6 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
     .limit(500);
   const shapeLines = shapeAgainst(
     measureShape(draft.body),
-    String(draft.body ?? "").trim().split(/s+/).filter(Boolean).length,
     writerShapeTargets(writerRows ?? []),
   );
   // 9.10 — cleared FOR THIS POST, not for whatever this moment produced last time.

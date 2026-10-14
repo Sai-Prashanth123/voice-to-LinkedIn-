@@ -37,6 +37,15 @@ function words(s: string): number {
 }
 
 export interface Shape {
+  /**
+   * Counted here so no caller writes the split itself.
+   *
+   * Both callers did, through a code generator that ate the backslash, and `/\s+/` became `/s+/` —
+   * splitting on the letter s. The gate was handed "54 words above the fold, 31 words in total",
+   * which is impossible, and it shipped because nobody reads a number that is merely wrong rather
+   * than absent. One place counts words now.
+   */
+  words: number;
   /** Blocks separated by a blank line. One block is a wall of text however long it is. */
   paragraphs: number;
   /** Non-empty lines. A post can have many lines and one paragraph — that is a list. */
@@ -62,6 +71,7 @@ export function measureShape(text: string | null | undefined): Shape {
   const bullets = lines.filter((l) => /^[-*•]\s+/.test(l) || /^\d+[.)]\s+/.test(l));
 
   return {
+    words: words(body),
     paragraphs: paras.length,
     lines: lines.length,
     above_fold_words: words(lines.slice(0, 3).join(" ")),
@@ -82,7 +92,6 @@ export function measureShape(text: string | null | undefined): Shape {
  */
 export function shapeAgainst(
   shape: Shape,
-  wordCount: number,
   targets: { paragraphs: number[]; aboveFold: number[] },
 ): string[] {
   const notes: string[] = [];
@@ -93,7 +102,7 @@ export function shapeAgainst(
     `This post: ${shape.paragraphs} paragraph(s), ${shape.lines} line(s), ` +
       `${shape.above_fold_words} word(s) above the fold, ` +
       `${shape.uses_list ? `a list of ${shape.bullet_lines} items` : "no list"}, ` +
-      `${shape.colon_lines} line(s) ending on a colon, ${wordCount} words in total.`,
+      `${shape.colon_lines} line(s) ending on a colon, ${shape.words} words in total.`,
   );
   notes.push(
     `The writers he chose: ${range(targets.paragraphs)} paragraphs, ` +
