@@ -95,6 +95,26 @@ export const measureTools = [
       const sceneBand = band(SCENE_WRITERS);
       const allBand = band(new Set((sentinels.report ?? []).map((r) => r.handle)));
 
+      /*
+       * The writers' shape, from the same stored measurements as every other band here.
+       *
+       * The gate reads these from the database because it must judge against what is current. This
+       * tool is the free look beforehand and already works from the stored report, so it reads the
+       * same place it reads sentence variation and length from — one source per tool rather than a
+       * second connection for one number.
+       *
+       * A writer with no measurable posts contributes nothing rather than a zero. Most of what the
+       * console returns is one unbroken line, and a zero would drag the range down to meet it.
+       */
+      const shapeTargets = {
+        paragraphs: (sentinels.report ?? [])
+          .map((r) => r.paragraphs_median)
+          .filter((n) => typeof n === "number" && n > 0),
+        aboveFold: (sentinels.report ?? [])
+          .map((r) => r.above_fold_words_median)
+          .filter((n) => typeof n === "number" && n > 0),
+      };
+
       // Surface habits DO transfer from speech to writing — the voiceprint says the lexicon
       // travels between registers even though sentence length does not.
       const emDashes = (body.match(/[—–]/g) ?? []).length;
@@ -150,6 +170,25 @@ export const measureTools = [
        * Every one of these is a construction that is simply wrong rather than merely worth noticing,
        * and the fix is mechanical. "It's not X, it's Y" has no version that survives review.
        */
+      /*
+       * One block of prose, flagged. Not "too few paragraphs" — there is no such number, and one of
+       * his writers runs a median of four. What has no example anywhere in the corpus is a post of
+       * any length that was never broken at all.
+       */
+      if (m.paragraphs <= 1 && m.words >= 60) {
+        flags.push(
+          `One paragraph, ${m.words} words, nothing broken out. Every reference writer measured ` +
+          `breaks their posts up; the lowest median is 4 paragraphs. This is the shape Josh asked ` +
+          `about on 14 October, and the ninth gate check judges it.`,
+        );
+      }
+      if (m.above_fold_words >= 90) {
+        flags.push(
+          `${m.above_fold_words} words above the fold. The writers run to 74.5 at the most, and a ` +
+          `reader decides whether to tap on what sits above it.`,
+        );
+      }
+
       const tells = scan(body);
       const loud = tells.findings.filter((f) => HIGH_CONFIDENCE.has(f.rule));
       for (const f of loud) {
@@ -186,6 +225,35 @@ export const measureTools = [
           uses_list: m.uses_list,
           colon_lines: m.colon_lines,
           you_address_per_1k: youDensity,
+        },
+
+        /*
+         * How it sits on a phone, which this tool computed and then dropped.
+         *
+         * `above_fold_words` — the three lines LinkedIn shows before "see more" — has been in
+         * measurePost since it was written and never appeared here. It is the single most
+         * shape-relevant number there is, and the writer who needed it was the one person who never
+         * saw it. Josh, on 14 October: "it's quite text-heavy... rather than just a wall of text."
+         *
+         * The ninth gate check judges this properly, against the writers' measured range. This is
+         * the free look beforehand, so a wall of text is caught before a gate run is spent on it.
+         */
+        shape: {
+          paragraphs: m.paragraphs,
+          lines: m.lines,
+          above_fold_words: m.above_fold_words,
+          bullet_lines: m.bullet_lines,
+          against_the_writers: {
+            paragraphs: shapeTargets.paragraphs.length
+              ? `they run ${Math.min(...shapeTargets.paragraphs)} to ${Math.max(...shapeTargets.paragraphs)}`
+              : "not measured",
+            above_fold_words: shapeTargets.aboveFold.length
+              ? `they run ${Math.min(...shapeTargets.aboveFold)} to ${Math.max(...shapeTargets.aboveFold)}`
+              : "not measured",
+          },
+          note: "Measured only from the reference posts that kept their line breaks. The scraping " +
+            "console returns most posts as one unbroken line, and counting those would report the " +
+            "scraper as a habit of the writer.",
         },
 
         lexicon: {

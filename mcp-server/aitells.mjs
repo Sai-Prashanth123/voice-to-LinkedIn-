@@ -493,6 +493,28 @@ export const RULES = [
     fix: "Vary them. A one-line paragraph next to a six-line one is what real writing looks like.",
     detect: (body) => {
       const paras = paragraphs(body);
+
+      /*
+       * A WALL OF TEXT WAS STRUCTURALLY EXEMPT FROM THE ONE RULE ABOUT PARAGRAPHS.
+       *
+       * `if (paras.length < 3) return []` meant a post written as a single block could not trip
+       * this, ever. The rule was built to catch three or more paragraphs cut to the same size — a
+       * layout rather than writing — and the worse case sailed under it: a post that was never
+       * broken at all is not uniform, it is unbroken.
+       *
+       * Josh described exactly that on 14 October and the system had nothing to say about it.
+       * Caught here now, before the gate run, and the ninth check judges it afterwards.
+       *
+       * 60 words, because two or three sentences as one block is a deliberate short post and this
+       * rule has no business having an opinion about it.
+       */
+      if (paras.length === 1 && wordCount(body) >= 60) {
+        return [{
+          matched: `one paragraph, ${wordCount(body)} words, nothing broken out`,
+          line: 1,
+        }];
+      }
+
       if (paras.length < 3) return [];
       const len = paras.map(wordCount);
       const avg = len.reduce((a, b) => a + b, 0) / len.length;

@@ -198,3 +198,50 @@ test("the law files stay readable by the code that imports them", () => {
     assert.match(src, /voiceprint\.json/, `${f} no longer reads the measured voiceprint`);
   }
 });
+
+/* ── 5. The shape warning that comes before the gate run ──────────────────── */
+
+test("a wall of text is flagged before a gate run is spent on it", async () => {
+  /*
+   * The ninth gate check judges shape properly, against the writers' measured range. This is the
+   * free look first — measure_draft costs nothing and a writer who sees it has already fixed the
+   * post before any model is paid to read it.
+   *
+   * Two things were missing. `above_fold_words` — the three lines LinkedIn shows before "see more",
+   * the single most shape-relevant number there is — was computed in measurePost and never
+   * returned here. And rule 2C-16, the one rule about paragraphs, returned nothing when there were
+   * fewer than three: a post written as one block was structurally exempt from the rule about
+   * blocks.
+   */
+  const measure = tools.find((t) => t.name === "measure_draft");
+  const wall = "Every tool I run is on trial, including the ones I would defend. ".repeat(6);
+
+  const r = await measure.handler({ body: wall }, {});
+
+  assert.equal(r.shape.paragraphs, 1);
+  assert.ok(r.shape.above_fold_words > 0, "above_fold_words is still not returned");
+  assert.match(r.shape.against_the_writers.paragraphs, /they run \d/);
+  assert.ok(
+    r.flags.some((f) => /One paragraph/.test(f)),
+    "a wall of text produced no flag",
+  );
+});
+
+test("a short deliberate post is not flagged for being short", async () => {
+  // One of his writers runs a median of four paragraphs and seventeen words above the fold. The
+  // rule has no opinion about a two-sentence post, and must not grow one.
+  const measure = tools.find((t) => t.name === "measure_draft");
+  const r = await measure.handler({ body: "Two sentences. That is all." }, {});
+
+  assert.ok(!r.flags.some((f) => /One paragraph/.test(f)), "a short post was flagged as a wall");
+  assert.equal(scan("Two sentences. That is all.").findings.filter((f) => f.rule === "2C-16").length, 0);
+});
+
+test("the wall-of-text rule reports and does not block", () => {
+  // Reportable, not in HIGH_CONFIDENCE. Shape is a judgement the ninth check makes with the
+  // writers' numbers in front of it; create_draft refusing on it would be this tool having an
+  // opinion it has no basis for.
+  assert.equal(HIGH_CONFIDENCE.has("2C-16"), false);
+  const wall = "Every tool I run is on trial, including the ones I would defend. ".repeat(6);
+  assert.ok(scan(wall).findings.some((f) => f.rule === "2C-16"), "the rule no longer fires at all");
+});
