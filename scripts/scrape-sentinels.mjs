@@ -211,9 +211,31 @@ async function fetchFromApify(profileHandles) {
   const started = await apify(`acts/${APIFY_ACTOR}/runs?token=${token}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    /*
+     * `targetUrls`, not `profileUrls`.
+     *
+     * This path had never run — APIFY_TOKEN was never bought — and it sent `profileUrls`, which the
+     * actor does not have. Apify ignores an unknown input key rather than refusing it, so the first
+     * real run would have started with no URLs at all and come back empty, which reads exactly like
+     * "LinkedIn blocked us" and would have been debugged as that.
+     *
+     * Read from the actor's own schema on 14 October 2026:
+     *   https://api.apify.com/v2/acts/harvestapi~linkedin-profile-posts/builds/default
+     * targetUrls, maxPosts, postedLimit, postedLimitDate, includeQuotePosts, includeReposts,
+     * scrapeReactions, maxReactions, postNestedReactions, scrapeComments, maxComments,
+     * commentsPostedLimit, postNestedComments, contextCountry.
+     *
+     * The three flags below are set explicitly rather than left to default. A repost is not their
+     * writing — clause 8.3 is about how these eight build a post — and counting one would repeat the
+     * console's worst habit of handing us somebody else's text under the subject's handle.
+     * Reactions and comments are somebody else's words and cost money to fetch.
+     */
     body: JSON.stringify({
-      profileUrls: profileHandles.map((h) => `https://www.linkedin.com/in/${h}/`),
+      targetUrls: profileHandles.map((h) => `https://www.linkedin.com/in/${h}/`),
       maxPosts: POSTS_PER_PROFILE,
+      includeReposts: false,
+      scrapeReactions: false,
+      scrapeComments: false,
     }),
   });
   const runId = started.data?.id;
@@ -304,9 +326,35 @@ const first = (row, ...names) => {
 };
 
 const handleOf = (row) => {
-  const direct = first(row, "author_handle", "authorHandle", "username");
+  const direct = first(
+    row,
+    "author_handle",
+    "authorHandle",
+    "username",
+    // Apify's shape. The console flattens the author onto the row; harvestapi nests it, so these
+    // were never reached and every row would have fallen through to the URL match below.
+    "author.publicIdentifier",
+    "author.username",
+  );
   if (direct && direct in SENTINELS) return direct;
-  const url = String(first(row, "authorUrl", "author.url", "profileUrl", "inputUrl") ?? "");
+
+  /*
+   * AUTHOR URLS ONLY. `inputUrl` IS NOT ONE.
+   *
+   * It was in this list, and it is the profile we ASKED for — the subject page, not whoever wrote
+   * the post. The comment twenty lines below warns about precisely this ("reading the second as the
+   * author would file six strangers' posts under Matt's name") and the fallback did it anyway: any
+   * row without an author field was attributed to the page it came from.
+   *
+   * Nothing had been filed wrongly, because the console flattens `author_handle` onto every row and
+   * the fallback never ran. It would have run on the first Apify harvest, where the author is
+   * nested — so a path that had never executed was one run away from doing the one thing this
+   * script exists to prevent.
+   */
+  const url = String(
+    first(row, "authorUrl", "author.url", "author.linkedinUrl", "authorProfileUrl", "profileUrl") ??
+      "",
+  );
   const slug = url.match(/linkedin\.com\/in\/([^/?#]+)/)?.[1];
   return slug && slug in SENTINELS ? slug : null;
 };

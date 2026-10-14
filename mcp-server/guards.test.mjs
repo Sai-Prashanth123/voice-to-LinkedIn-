@@ -10,6 +10,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+/** Repo-relative, because two of these assert about files outside mcp-server. */
+const readFile = async (rel) =>
+  readFileSync(new URL(`../${rel}`, import.meta.url), "utf8");
+
 import { wrap } from "./server.mjs";
 import { tools } from "./tools/index.mjs";
 import { HIGH_CONFIDENCE, scan } from "./aitells.mjs";
@@ -275,4 +279,48 @@ test("a proposal is shaped the way the table will accept", () => {
     "utf8",
   );
   assert.match(migration, /jsonb_typeof\(evidence\) = 'object'/);
+});
+
+/* ── 7. The Apify path, which had never run ───────────────────────────────── */
+
+test("the Apify run sends the input key the actor actually has", async () => {
+  /*
+   * It sent `profileUrls`. The actor's property is `targetUrls` — read from its own schema at
+   * api.apify.com/v2/acts/harvestapi~linkedin-profile-posts/builds/default on 14 Oct 2026. Apify
+   * ignores an unknown input key rather than refusing it, so the first paid run would have started
+   * with no URLs, returned nothing, and read exactly like "LinkedIn blocked us".
+   *
+   * The path had never executed because APIFY_TOKEN was never bought, which is how a never-run
+   * branch stays wrong indefinitely.
+   */
+  const src = await readFile("scripts/scrape-sentinels.mjs");
+
+  assert.match(src, /targetUrls:/, "the Apify run no longer sends targetUrls");
+  assert.doesNotMatch(src, /profileUrls:/, "it still sends profileUrls, which the actor ignores");
+
+  // Set explicitly rather than left to default: a repost is somebody else's writing, and reactions
+  // and comments are somebody else's words that cost money to fetch.
+  assert.match(src, /includeReposts: false/);
+  assert.match(src, /scrapeComments: false/);
+});
+
+test("a post is attributed to its author, never to the page it was found on", async () => {
+  /*
+   * handleOf fell back to `inputUrl` — the profile we ASKED for. The comment twenty lines below it
+   * warns about exactly this: "author_handle wrote it, subject_handle is whose page it came from.
+   * Reading the second as the author would file six strangers' posts under Matt's name."
+   *
+   * Nothing had been misfiled, because the console flattens author_handle onto every row and the
+   * fallback never ran. It would have run on the first Apify harvest, where the author is nested.
+   */
+  const src = await readFile("scripts/scrape-sentinels.mjs");
+  const block = src.slice(src.indexOf("const handleOf"), src.indexOf("const unmapped"));
+
+  assert.doesNotMatch(
+    block,
+    /"inputUrl"/,
+    "the author can still be resolved from the page the post was found on",
+  );
+  assert.match(block, /author\.publicIdentifier/, "Apify's nested author shape is not read");
+  assert.match(block, /in SENTINELS/, "a row from outside the eight is no longer dropped");
 });
