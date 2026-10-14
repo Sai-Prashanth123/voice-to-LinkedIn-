@@ -3,6 +3,7 @@
   "specifiers": {
     "npm:@anthropic-ai/sdk@0": "0.120.0_zod@4.4.3",
     "npm:@modelcontextprotocol/sdk@1.30.0": "1.30.0_zod@4.4.3",
+    "npm:@resvg/resvg-wasm@2": "2.6.2",
     "npm:@supabase/supabase-js@2": "2.112.4",
     "npm:zod@4": "4.4.3"
   },
@@ -49,6 +50,9 @@
         "zod",
         "zod-to-json-schema"
       ]
+    },
+    "@resvg/resvg-wasm@2.6.2": {
+      "integrity": "sha512-FqALmHI8D4o6lk/LRWDnhw95z5eO+eAa6ORjVg09YRR7BkcM6oPHU9uyC0gtQG5vpFLvgpeU4+zEAz2H8APHNw=="
     },
     "@stablelib/base64@1.0.1": {
       "integrity": "sha512-1bnPQqSxSuc3Ii6MhBysoWCg58j97aUjuCSZrGSmDxNqtytIi0k8utUenAwTZN4V5mXXYGsVUI9zeBqy+jBOSQ=="

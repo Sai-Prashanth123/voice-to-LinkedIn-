@@ -17,6 +17,10 @@
  * enforces that with an explicit guard, because clause 8.3 depends on it.
  */
 
+// The shape half lives in _shared, because the ninth gate check needs the same numbers in Deno and
+// this file cannot be imported there. Import-free and type-stripped, exactly like entry.ts.
+import { measureShape } from "../../supabase/functions/_shared/shape.ts";
+
 /* ── Counting ─────────────────────────────────────────────────────────────── */
 
 export const words = (s) => (s ?? "").trim().split(/\s+/).filter(Boolean).length;
@@ -84,25 +88,24 @@ export function closeShape(last) {
 
 export function measurePost(text) {
   const body = (text ?? "").replace(/\r/g, "");
-  const paras = body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
   const lines = body.split("\n").map((l) => l.trim()).filter(Boolean);
-  const bullets = lines.filter((l) => /^[-*•]\s+/.test(l) || /^\d+[.)]\s+/.test(l));
   const lengths = sentences(body).map(words).filter((n) => n > 0);
+
+  /*
+   * The shape half comes from _shared/shape.ts rather than being counted again here.
+   *
+   * It was counted here, and in diff.ts, and in aitells.mjs — three implementations of "split into
+   * paragraphs" in a file whose own header warns that two readers of one thing will disagree. The
+   * ninth gate check needs the same numbers in Deno, which would have made a fourth. One
+   * definition, every reader, and this file is the reader it was written for.
+   */
+  const shape = measureShape(body);
 
   return {
     words: words(body),
-    paragraphs: paras.length,
-    lines: lines.length,
-    // The three lines LinkedIn shows before "see more". Where the cut falls is a real craft
-    // decision, and it is measurable without keeping the words.
-    above_fold_words: words(lines.slice(0, 3).join(" ")),
-    opening_words: words(lines[0] ?? ""),
+    ...shape,
     opening_shape: openingShape(lines[0] ?? ""),
     close_shape: closeShape(lines[lines.length - 1] ?? ""),
-    bullet_lines: bullets.length,
-    uses_list: bullets.length >= 2,
-    // Colons as a device, which Josh's formatting section calls the most underused tool available.
-    colon_lines: lines.filter((l) => /:\s*$/.test(l)).length,
     has_link: /https?:\/\/|lnkd\.in/.test(body),
     sentence_words_mean: mean(lengths),
     // Variation matters more than the average. Josh's guide says everything the same length is

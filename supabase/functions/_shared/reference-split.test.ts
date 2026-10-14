@@ -63,26 +63,54 @@ test("no library section holds reference-writer prose", () => {
   }
 });
 
-test("the brief builder never reads the reference_writer_posts table", () => {
+test("the drafting path never reads the reference writers' words", () => {
   /*
-   * A grep, deliberately. The drafting brief is assembled in `_shared/library.ts` and the briefs in
-   * `mcp-server/tools/brief.mjs`; neither has any business touching the posts table. This is the
-   * check that would have caught the mistake at the point someone made it, rather than three weeks
-   * later in a draft that reads like Matt Barker.
+   * A grep, deliberately — the check that catches the mistake where someone makes it, rather than
+   * three weeks later in a draft that reads like Matt Barker.
+   *
+   * THE RULE IS "MEASUREMENTS ONLY", AND THAT IS NOW WHAT IS ASSERTED.
+   *
+   * This used to ban the `reference_writer_posts` table outright from all five files, which was the
+   * cheap proxy for the real rule in its own comment: the drafting path must see measurements only.
+   * On 14 October the ninth gate check needed the writers' paragraph and above-fold medians, which
+   * are measurements and are stored on that table beside the text.
+   *
+   * So the two paths that legitimately need numbers may read the table and may not read a word of
+   * it, and the three that have no business there at all are still banned outright. Narrowing a
+   * guard is worth doing carefully: the danger was never the table, it was the `text` column.
    */
-  const files = [
+  const nowhereNear = [
     "supabase/functions/_shared/library.ts",
     "supabase/functions/_shared/handlers/draft.ts",
-    "supabase/functions/_shared/handlers/gate.ts",
     "supabase/functions/_shared/prompts.ts",
-    "mcp-server/tools/brief.mjs",
   ];
-
-  for (const path of files) {
+  for (const path of nowhereNear) {
     const source = readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
     assert.ok(
       !/reference_writer_posts/.test(source),
-      `${path} reaches the reference_writer_posts table — the drafting path must see measurements only`,
+      `${path} reaches the reference_writer_posts table and has no measurement to read from it`,
+    );
+  }
+
+  // The two that judge or assemble shape. Numbers yes, words never.
+  const measurementsOnly = [
+    "supabase/functions/_shared/handlers/gate.ts",
+    "mcp-server/tools/brief.mjs",
+  ];
+  for (const path of measurementsOnly) {
+    const source = readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
+    for (const select of source.match(/select([^)]*)|select:s*"[^"]*"/g) ?? []) {
+      if (!/handle|paragraphs|above_fold/.test(select)) continue;
+      assert.ok(
+        !/text|body|headline/.test(select),
+        `${path} selects their words alongside the measurements: ${select}`,
+      );
+    }
+    // And the shape numbers must come from the one definition, not be recounted here.
+    assert.match(
+      source,
+      /writerShapeTargets/,
+      `${path} computes the writers' medians itself instead of using shape.ts`,
     );
   }
 });

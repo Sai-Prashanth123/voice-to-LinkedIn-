@@ -152,12 +152,19 @@ test("all eight passing puts it in the calendar and tells Josh", async () => {
 });
 
 test("a rejection records the reason and queues the rewrite", async () => {
-  const verdicts = allPassing();
-  verdicts[verdicts.length - 1] = {
-    check_key: "banned_phrases",
-    passed: false,
-    reason: 'The sentence "None of it was inside a filter." rejects a frame to assert another.',
-  };
+  // By key, not by position. This indexed the last entry and assumed it was banned_phrases, which
+  // stopped being true the moment a ninth check was appended — and the symptom was a fixture with
+  // two banned_phrases verdicts and no shape one, which is not a shape the real table can hold.
+  const verdicts = allPassing().map((v) =>
+    v.check_key === "banned_phrases"
+      ? {
+        check_key: "banned_phrases",
+        passed: false,
+        reason:
+          'The sentence "None of it was inside a filter." rejects a frame to assert another.',
+      }
+      : v
+  );
 
   const { db, writes } = fakeDb({ draft: draftRow(), verdicts });
 

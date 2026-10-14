@@ -161,6 +161,8 @@ test("a check added later is shown the post alone until someone says otherwise",
     source: false,
     audience: false,
     clearedNames: false,
+    // shape joined the list on 14 Oct and defaults the same way: a new check sees the post alone.
+    shape: false,
   });
 });
 

@@ -433,6 +433,28 @@ export const GATE_CHECKS: GateCheckSpec[] = [
       `post against a list that does not exist would stop anything ever reaching Josh — which looks ` +
       `like a broken system rather than a missing input.`,
   },
+  {
+    key: "shape",
+    question:
+      `DOES IT READ AS A POST, OR AS A WALL OF TEXT?\n\n` +
+      `You are given this post's measurements and the same measurements for the eight writers Josh ` +
+      `chose. Judge the SHAPE on a phone: where the eye stops, whether anything is held apart, ` +
+      `whether the three lines above the fold earn the tap.\n\n` +
+      `It FAILS when the post is one undifferentiated block, or when a list, a step sequence or a ` +
+      `set of parallel items has been run together as prose, or when so much sits above the fold ` +
+      `that nothing is left to open. Josh asked for this directly on 14 October: line breaks, a ` +
+      `list where there is genuinely a list, a short label above a group rather than a wall.\n\n` +
+      `YOU MUST QUOTE A NUMBER WHEN YOU FAIL IT. Say which measurement is out and against what — ` +
+      `"one paragraph, where his writers run 4 to 14" is a reason; "it could be better formatted" ` +
+      `is not, and is the kind of verdict this gate refuses everywhere else.\n\n` +
+      `BEING OUTSIDE THE RANGE IS NOT AUTOMATICALLY A FAILURE. One of his writers runs a median of ` +
+      `four paragraphs and seventeen words above the fold, and that works. A short post that lands ` +
+      `in two deliberate blocks passes. What fails is text that was never broken at all, or broken ` +
+      `so evenly it reads as a layout rather than as writing.\n\n` +
+      `DO NOT fail it for anything that is not shape. Whether the words are good, whether the claim ` +
+      `is his, whether the hook opens a loop — eight other checks own those, and a reason that ` +
+      `mentions them is a reason belonging to a different check.`,
+  },
 ];
 
 export const GATE_USER = (opts: {
@@ -441,6 +463,8 @@ export const GATE_USER = (opts: {
   entry?: Record<string, string>;
   audience?: string | null;
   clearedNames?: string[];
+  /** Lines from `shapeAgainst` — this post's shape, and the writers' measured range. */
+  shape?: string[];
 }) => {
   const parts: string[] = [];
   parts.push(`THE CHECK:\n\n${opts.check.question}`);
@@ -474,6 +498,12 @@ export const GATE_USER = (opts: {
         opts.clearedNames.length > 0 ? opts.clearedNames.join(", ") : "(none)"
       }`,
     );
+  }
+  if (opts.shape) {
+    // Counted, not judged. The check is handed the numbers and the writers' numbers and decides;
+    // nothing upstream of it has an opinion, which is the only way a shape verdict can be argued
+    // with afterwards.
+    parts.push(`\n---\n\nMEASURED:\n\n${opts.shape.join("\n")}`);
   }
   return parts.join("\n");
 };

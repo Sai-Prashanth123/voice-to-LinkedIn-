@@ -163,6 +163,10 @@ export function renderLibrary(rows: SectionRow[], view: LibraryViewName): {
 export const CHECK_NEEDS_SECTION: Record<string, string> = {
   voice_guide: "voice_guide",
   banned_phrases: "banned_phrases",
+  // Added 14 Oct 2026 with the ninth check. An empty formatting section records NOT JUDGED rather
+  // than failing every post against a rule nobody has written — the same treatment the other two
+  // get, for the same reason.
+  shape: "formatting",
 };
 
 /* ── What each check may be shown besides the post ───────────────────────── */
@@ -209,16 +213,28 @@ export const CHECK_SEES_AUDIENCE = new Set(["aimed_at_someone"]);
 /** Only the check that compares the post against what Josh has cleared. */
 export const CHECK_SEES_CLEARED_NAMES = new Set(["names_cleared"]);
 
+/**
+ * Only the check that judges how the post sits on a phone.
+ *
+ * Measurements, not an opinion: this post's paragraph and above-fold counts beside the same numbers
+ * for the eight writers Josh chose. Handed to one check because a judge given numbers will use
+ * them — hook_opens_loop shown a paragraph count would start failing posts for their shape, under
+ * a rubric that says to read only the first line.
+ */
+export const CHECK_SEES_SHAPE = new Set(["shape"]);
+
 /** What one check may be shown. Both gate paths ask this, and neither decides for itself. */
 export function gateInputsFor(key: string): {
   source: boolean;
   audience: boolean;
   clearedNames: boolean;
+  shape: boolean;
 } {
   return {
     source: CHECK_SEES_SOURCE.has(key),
     audience: CHECK_SEES_AUDIENCE.has(key),
     clearedNames: CHECK_SEES_CLEARED_NAMES.has(key),
+    shape: CHECK_SEES_SHAPE.has(key),
   };
 }
 

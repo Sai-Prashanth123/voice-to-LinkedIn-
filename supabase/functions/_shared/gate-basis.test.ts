@@ -27,6 +27,10 @@ const FULL: Record<string, string> = {
   voice_guide: "how Josh sounds",
   banned_phrases: "no em dashes",
   gate_rules: "extra rules",
+  // The ninth check, added 14 Oct 2026, judges shape against the formatting section. Without it
+  // here "a filled library" would not be filled, and every assertion below would be measuring a
+  // gap in the fixture rather than the rule.
+  formatting: "one idea per paragraph",
 };
 
 test("a filled library leaves every check judgeable", () => {

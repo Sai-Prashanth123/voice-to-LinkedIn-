@@ -44,6 +44,7 @@
  * and an unverifiable draft is worse than none.
  */
 
+import { GATE_CHECKS } from "../../supabase/functions/_shared/prompts.ts";
 import { z } from "zod";
 
 import { verifyDraft } from "../../supabase/functions/_shared/claims.ts";
@@ -545,7 +546,9 @@ export const writeTools = [
       const done = byCheck.size;
       const failed = [...byCheck.values()].filter((r) => !r.passed).map((r) => r.check_key);
 
-      if (done < 8) {
+      // GATE_CHECKS.length, not 8 — see the note in work.mjs. Closing a draft out at eight would
+      // have left the ninth verdict unrecorded and the draft permanently one short.
+      if (done < GATE_CHECKS.length) {
         return {
           gate_run_id: row.id,
           checks_recorded: done,

@@ -36,6 +36,7 @@ import { writingSources } from "../sources.mjs";
 import { WRITTEN_UP } from "../../supabase/functions/_shared/extraction.ts";
 import { parsePillars } from "../../supabase/functions/_shared/library.ts";
 import { renderTranscript } from "../../supabase/functions/_shared/session.ts";
+import { measureShape, shapeAgainst, writerShapeTargets } from "../../supabase/functions/_shared/shape.ts";
 import {
   CHECK_NEEDS_SECTION,
   gateInputsFor,
@@ -260,6 +261,26 @@ export const briefTools = [
       );
       const library = await libraryText(db, "gating");
 
+      /*
+       * The shape numbers, for the one check that judges shape.
+       *
+       * Only posts that kept their line breaks are counted — most of what the console returns is
+       * one unbroken line, and averaging those in would report the scraper as a habit of the
+       * writer. If nothing measurable is stored the targets come back empty and the check says so
+       * rather than inventing a range.
+       */
+      const writerRows = await db.select("reference_writer_posts", {
+        select: "handle,paragraphs,above_fold_words",
+        has_line_breaks: "is.true",
+        limit: "500",
+      });
+      const targets = writerShapeTargets(writerRows);
+      const shapeLines = shapeAgainst(
+        measureShape(draft.body),
+        String(draft.body ?? "").trim().split(/s+/).filter(Boolean).length,
+        targets,
+      );
+
       // The same rule the edge function applies, from the same function.
       //
       // Without it the two gate paths disagreed on live data: handlers/gate.ts recorded voice_guide
@@ -318,6 +339,7 @@ export const briefTools = [
               entry: sees.source && Object.keys(entry).length > 0 ? entry : undefined,
               audience: sees.audience ? (moment?.audience ?? null) : undefined,
               clearedNames: sees.clearedNames ? cleared : undefined,
+              shape: sees.shape ? shapeLines : undefined,
             }),
           };
         }),

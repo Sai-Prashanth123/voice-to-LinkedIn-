@@ -25,6 +25,7 @@ import { clearedNames, unclearedNames } from "../names.ts";
 import { enqueue } from "../jobs.ts";
 import { loadLibrary } from "../library.ts";
 import { gateInputsFor, CHECK_NEEDS_SECTION, notJudged, unjudgeableChecks } from "../views.ts";
+import { measureShape, shapeAgainst, writerShapeTargets } from "../shape.ts";
 import { notice } from "../notices.ts";
 import { oneStepMode } from "../mode.ts";
 // Re-exported because gate-basis.test.ts imports them from here, and because this is where a
@@ -78,6 +79,22 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
   const moment = await getMoment(db, momentId);
   const material = await getMaterial(db, momentId);
   const entry = sourceEntry(material);
+
+  /*
+   * The shape numbers, for the one check that judges shape. Only posts that kept their line breaks
+   * count — most of what the console returns is one unbroken line, and averaging those in would
+   * report the scraper as a habit of the writer.
+   */
+  const { data: writerRows } = await db
+    .from("reference_writer_posts")
+    .select("handle,paragraphs,above_fold_words")
+    .eq("has_line_breaks", true)
+    .limit(500);
+  const shapeLines = shapeAgainst(
+    measureShape(draft.body),
+    String(draft.body ?? "").trim().split(/s+/).filter(Boolean).length,
+    writerShapeTargets(writerRows ?? []),
+  );
   // 9.10 — cleared FOR THIS POST, not for whatever this moment produced last time.
   const cleared = await clearedNames(db, momentId);
 
@@ -172,6 +189,7 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
             entry: gateInputsFor(check.key).source ? entry : undefined,
             audience: gateInputsFor(check.key).audience ? moment.audience : undefined,
             clearedNames: gateInputsFor(check.key).clearedNames ? cleared : undefined,
+            shape: gateInputsFor(check.key).shape ? shapeLines : undefined,
           }),
         }],
         effort: "high",

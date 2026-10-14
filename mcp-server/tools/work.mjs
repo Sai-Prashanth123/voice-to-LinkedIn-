@@ -28,6 +28,7 @@
  * in Claude saying "do the next piece of work".
  */
 
+import { GATE_CHECKS } from "../../supabase/functions/_shared/prompts.ts";
 import { z } from "zod";
 
 import { tools } from "./index.mjs";
@@ -127,7 +128,9 @@ export const workTools = [
           draft_id: `eq.${draft.id}`,
         });
         const judged = new Set(verdicts.map((v) => v.check_key));
-        if (judged.size >= 8) continue;
+        // GATE_CHECKS.length, not 8. A ninth check was added on 14 Oct and a draft counted as
+        // fully judged at eight would have been skipped here with shape never run on it.
+        if (judged.size >= GATE_CHECKS.length) continue;
 
         const brief = await viaTool("get_gate_brief", { draft_id: draft.id }, context);
         return {
