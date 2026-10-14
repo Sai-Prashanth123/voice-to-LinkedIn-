@@ -245,3 +245,34 @@ test("the wall-of-text rule reports and does not block", () => {
   const wall = "Every tool I run is on trial, including the ones I would defend. ".repeat(6);
   assert.ok(scan(wall).findings.some((f) => f.rule === "2C-16"), "the rule no longer fires at all");
 });
+
+/* ── 6. The one entry point into the learning loop ────────────────────────── */
+
+test("a proposal is shaped the way the table will accept", () => {
+  /*
+   * propose_library_change sent `evidence` as an array. The table's constraint
+   * `proposals_evidence_not_empty` checks `jsonb_typeof(evidence) = 'object'`, so every call this
+   * tool ever made was refused by the database — and nobody knew, because nothing had used it. All
+   * nine proposals on file were written by the sentinel refresh script, which happens to build an
+   * object.
+   *
+   * So clause 12.10 — the system proposes and Josh decides — had one entry point for a model and it
+   * could not insert a row.
+   */
+  const src = readFileSync(new URL("./tools/write.mjs", import.meta.url), "utf8");
+  const block = src.slice(src.indexOf('name: "propose_library_change"'));
+
+  assert.doesNotMatch(
+    block.slice(0, block.indexOf("return {")),
+    /evidence: args\.evidence,/,
+    "the evidence array is still passed straight to a column that requires an object",
+  );
+  assert.match(block, /evidence: \{ kind:/, "the evidence is no longer wrapped in an object");
+
+  // The constraint itself, quoted from the migration, so this test fails if the table changes.
+  const migration = readFileSync(
+    new URL("../supabase/migrations/0004_reference_library.sql", import.meta.url),
+    "utf8",
+  );
+  assert.match(migration, /jsonb_typeof\(evidence\) = 'object'/);
+});

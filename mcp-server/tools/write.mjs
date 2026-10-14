@@ -651,10 +651,26 @@ export const writeTools = [
         );
       }
 
+      /*
+       * THE EVIDENCE IS WRAPPED, BECAUSE THE TABLE REQUIRES AN OBJECT AND THIS SENT AN ARRAY.
+       *
+       * `proposals_evidence_not_empty` (0004_reference_library.sql:149) checks
+       * `jsonb_typeof(evidence) = 'object'`. This tool's schema is `z.array(z.string())`, so every
+       * call it has ever made was refused by the database with a constraint name and nothing else.
+       *
+       * It had never been noticed because nothing had ever used it. All nine proposals on file were
+       * written by the sentinel refresh script, which builds its own `{kind: "sentinel_measurement",
+       * report: [...]}` object and so satisfies the constraint by accident of shape. The one entry
+       * point a model has into clause 12.10 — the system proposes, Josh decides — has been broken
+       * since it was written.
+       *
+       * `kind` names who proposed it, matching the script's convention, so a reader of the table can
+       * tell a measured refresh from a judgement made in a session.
+       */
       const [row] = await db.insert("library_proposals", {
         section_key: args.section_key,
         claim: args.claim,
-        evidence: args.evidence,
+        evidence: { kind: "claude_code", points: args.evidence },
         proposed_body: args.proposed_body,
         status: "open",
       });
