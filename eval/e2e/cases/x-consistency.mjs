@@ -112,7 +112,17 @@ export const cases = [
         if (!imports || reimplements) rolledTheirOwn.push(rel);
       }
       seen("checked_for_a_second_answer", mustImport);
-      assert.equal(
+      /*
+       * `same`, not `equal`. The harness's `equal` is Object.is, so comparing two arrays compares
+       * identity and `[]` is never the same `[]` — this assertion could not pass, whatever the
+       * four files contained, and it reported "expected [], observed []" to say so.
+       *
+       * It went unnoticed because the deterministic tier needs a local database and had not run on
+       * this machine in weeks. The case was written to catch a second implementation of
+       * `isSupplied`, after four had drifted apart; for its whole life it would have reported a
+       * fifth as a failure and a clean repo as a failure too, identically.
+       */
+      assert.same(
         rolledTheirOwn,
         [],
         "every reader of 'is this section filled in' imports isSupplied rather than deciding for itself",

@@ -1,5 +1,5 @@
 /**
- * Stage 6 — the eight checks.
+ * Stage 6 — the gate checks.
  *
  * WHAT CAN AND CANNOT BE PROVEN WITHOUT A MODEL
  *
@@ -8,7 +8,7 @@
  * must be rejected.
  *
  * What is provable here, and was not being proven, is everything around the judgement: that all
- * eight rubrics exist and say the thing that makes them adversarial, that the list matches the
+ * every rubric exists and say the thing that makes them adversarial, that the list matches the
  * database constraint, that one failure fails the draft, that an interrupted run resumes, that a
  * check with no basis is recorded as unjudged rather than passed, and that a check which could not
  * run is never treated as a pass.
@@ -21,9 +21,23 @@
 import { defineCase } from "../harness.mjs";
 import { makeDraft, makeMoment, minedMoment, q } from "../fixtures.mjs";
 
-const EIGHT = [
+/*
+ * THE CHECKS, AND WHY THIS LIST IS STILL WRITTEN OUT BY HAND.
+ *
+ * It would be shorter to read GATE_CHECKS and compare it with itself, and that would assert
+ * nothing: the point of S6-01 is that the list in code and the list the database accepts agree, so
+ * one of the two sides has to be stated independently. A migration adding a key without the code,
+ * or code adding one without the migration, is exactly the failure this catches — the ninth check
+ * needed migration 0049 for precisely that reason, because `gate_runs_known_check` would have
+ * refused every insert.
+ *
+ * So when a check is added, this list is edited by hand, on purpose. `shape` was added on
+ * 14 October and this is that edit.
+ */
+const CHECKS = [
   "anyone_else", "claims_trace", "hook_opens_loop", "aimed_at_someone",
   "voice_guide", "names_cleared", "identifiable", "banned_phrases",
+  "shape",
 ];
 
 export const cases = [
@@ -32,29 +46,53 @@ export const cases = [
     stage: 6,
     clause: "9b",
     tier: "deterministic",
-    name: "the eight checks in code are exactly the eight the database accepts",
+    name: "the checks in code are exactly the ones the database accepts",
     async run({ db, assert, seen }) {
       const { GATE_CHECKS } = await import("../../../supabase/functions/_shared/prompts.ts");
       const inCode = GATE_CHECKS.map((c) => c.key).sort();
 
+      /*
+       * `contype = 'c'`, BECAUSE MATCHING ON THE DEFINITION TEXT WAS TOO LOOSE.
+       *
+       * This asked for any constraint on gate_runs whose rendered definition mentions `check_key`,
+       * and took the first row. On Postgres 17 that is the CHECK constraint and nothing else. On
+       * Postgres 18 — which is what PGlite ships — NOT NULL constraints are catalogued in
+       * pg_constraint too, so the query returned two rows and the first was `NOT NULL check_key`.
+       * No keys parsed out of it, the case reported the database accepts none of the nine, and the
+       * schema was fine.
+       *
+       * Asking for the constraint TYPE instead is right on both, and was always what this meant.
+       */
       const [{ def }] = await db.sql(
         "select pg_get_constraintdef(c.oid) as def from pg_constraint c " +
           "join pg_class t on t.oid = c.conrelid " +
-          "where t.relname = 'gate_runs' and pg_get_constraintdef(c.oid) like '%check_key%'",
+          "where t.relname = 'gate_runs' and c.contype = 'c' " +
+          "and pg_get_constraintdef(c.oid) like '%check_key%'",
       );
       const inDb = [...def.matchAll(/'([a-z_]+)'::text/g)].map((m) => m[1]).sort();
       seen("constraint", { def: def.slice(0, 200) });
 
       // Two lists that must agree. Adding a ninth check in code without the migration would fail
       // every draft at insert; removing one from code would leave a rubric nothing ever runs.
-      assert.same(inCode, EIGHT.slice().sort(), "code has the eight expected checks");
+      assert.same(inCode, CHECKS.slice().sort(), "code has exactly the expected checks");
       assert.same(inDb, inCode, "the database constraint matches the code exactly");
     },
   }),
 
-  ...EIGHT.map((key, i) =>
+  /*
+   * ONE CASE PER RUBRIC, NUMBERED FROM 20 AND NOT FROM 2.
+   *
+   * These used to run S6-02 upward, which worked while there were exactly eight checks and
+   * collided with the hand-written S6-10 the moment there were nine. Adding the ninth check
+   * stopped the whole suite from loading — `two cases share the id "S6-10"` — which is a generated
+   * range growing into a fixed one.
+   *
+   * From 20 there is room for eleven more checks before it reaches anything hand-written, and the
+   * gap in the numbering is the signal that this block is generated.
+   */
+  ...CHECKS.map((key, i) =>
     defineCase({
-      id: "S6-" + String(i + 2).padStart(2, "0"),
+      id: "S6-" + String(i + 20),
       stage: 6,
       clause: "9b",
       tier: "deterministic",
@@ -93,7 +131,7 @@ export const cases = [
       const draft = await makeDraft(db, moment.id);
 
       // Seven passes and one failure. If anything anywhere averaged, this would be a pass.
-      for (const key of EIGHT) {
+      for (const key of CHECKS) {
         const passed = key !== "anyone_else";
         await db.exec(
           "insert into public.gate_runs (draft_id, check_key, passed, reason, model) values (" +
@@ -107,7 +145,9 @@ export const cases = [
       ));
       const failed = runs.filter((r) => !r.passed);
 
-      assert.equal(runs.length, 8, "all eight were recorded");
+      // CHECKS.length, not 8: one failure fails the draft however many checks there are, and the
+      // literal turned adding the ninth into a failure of a case about scoring.
+      assert.equal(runs.length, CHECKS.length, "every check was recorded");
       assert.equal(failed.length, 1, "exactly one failed");
       // 9.7 — no weighting, no pass-with-a-note. The draft's own verdict must be false.
       await db.exec(
@@ -155,7 +195,7 @@ export const cases = [
       const moment = await minedMoment(db);
       const draft = await makeDraft(db, moment.id);
 
-      for (const key of EIGHT.slice(0, 6)) {
+      for (const key of CHECKS.slice(0, 6)) {
         await db.exec(
           "insert into public.gate_runs (draft_id, check_key, passed, model) values (" +
             draft.id + ", " + q(key) + ", true, 'e2e')",
@@ -171,9 +211,11 @@ export const cases = [
 
       // This is what makes a rate limit survivable: six completed judgements are not discarded
       // because the seventh could not run.
-      assert.equal(remaining.length, 2, "only the unjudged checks remain");
-      const expected = GATE_CHECKS.map((c) => c.key).filter((k) => !EIGHT.slice(0, 6).includes(k));
-      assert.same(remaining.sort(), expected.sort(), "and they are the two that were never judged");
+      // Derived from how many were seeded, not a literal: the case seeds six and the rest must
+      // remain, which is CHECKS.length - 6 and was 2 only while there were eight checks.
+      const expected = GATE_CHECKS.map((c) => c.key).filter((k) => !CHECKS.slice(0, 6).includes(k));
+      assert.equal(remaining.length, expected.length, "only the unjudged checks remain");
+      assert.same(remaining.sort(), expected.sort(), "and they are exactly the ones never judged");
     },
   }),
 
@@ -189,7 +231,19 @@ export const cases = [
       );
       const { GATE_CHECKS } = await import("../../../supabase/functions/_shared/prompts.ts");
 
-      const filled = { voice_guide: "He writes short sentences.", banned_phrases: "no em dashes" };
+      /*
+       * EVERY SECTION A CHECK NEEDS, WHICH IS WHY `formatting` IS HERE.
+       *
+       * "A filled library judges everything" means filled for the checks that exist, so this
+       * fixture grows when a check does. The ninth check reads `formatting`, and without it here
+       * the case failed claiming a filled library left `shape` NOT JUDGED — which was true of the
+       * fixture and not of the code.
+       */
+      const filled = {
+        voice_guide: "He writes short sentences.",
+        banned_phrases: "no em dashes",
+        formatting: "One idea per paragraph. When the idea shifts, break.",
+      };
       assert.same(unjudgeableChecks(GATE_CHECKS, filled).map((c) => c.key), [], "a filled library judges everything");
 
       const empty = { ...filled, voice_guide: "" };

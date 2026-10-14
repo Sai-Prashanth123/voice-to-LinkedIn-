@@ -185,10 +185,28 @@ export const cases = [
     name: "the rewrite link is read from the vault, not from the process environment",
     async run({ assert, seen }) {
       const fs = await import("node:fs");
-      const source = fs.readFileSync(
-        new URL("../../../supabase/functions/_shared/weeklypass.ts", import.meta.url),
-        "utf8",
-      );
+      const path = new URL("../../../supabase/functions/_shared/weeklypass.ts", import.meta.url);
+
+      /*
+       * SKIPPED FOR THE SAME REASON AS S1-06, WITH ONE DIFFERENCE WORTH READING.
+       *
+       * weeklypass.ts went with Telegram on 9 October. What it did that still matters — writing
+       * `marked_ready_at`, the only authorisation to publish — moved to _shared/approve.ts
+       * unchanged, and S8-01 covers it on the live schema.
+       *
+       * What this case tested does NOT survive: `rewriteLink` was the Telegram button's URL, and
+       * there is no button. So this is not a renamed file to re-point at; it is a subject that no
+       * longer exists in the tree while its function is still deployed.
+       */
+      if (!fs.existsSync(path)) {
+        skip(
+          "weeklypass.ts went with Telegram on 9 October; its authorisation moved to " +
+            "_shared/approve.ts (covered by S8-01) and rewriteLink has no replacement. Delete this " +
+            "case when the deployed Telegram functions are torn down — docs/closeout.md.",
+        );
+      }
+
+      const source = fs.readFileSync(path, "utf8");
       seen("weeklypass.ts", { chars: source.length });
 
       // This exact line was wrong once: rewriteLink read Deno.env while everything else used the

@@ -7,6 +7,7 @@
  *   node eval/e2e/run.mjs --live-only     deployment checks alone, seconds
  *   node eval/e2e/run.mjs --with-model    adds the model-driven journeys
  *   node eval/e2e/run.mjs --verbose       print every assertion, not just the verdict
+ *   node eval/e2e/run.mjs --pglite        force the no-docker engine, even if docker is up
  *   node eval/e2e/run.mjs --keep          leave the throwaway database up afterwards
  *   node eval/e2e/run.mjs --json          provenance path only
  *
@@ -26,6 +27,7 @@ import { execFileSync } from "node:child_process";
 
 import { assertUniqueIds, runCase } from "./harness.mjs";
 import { startLocal, stopLocal } from "./local.mjs";
+import { startPglite, stopPglite } from "./pglite.mjs";
 import { openLive } from "./live.mjs";
 import { printResults, printSummary, writeProvenance } from "./report.mjs";
 import { allCases } from "./cases/index.mjs";
@@ -44,6 +46,7 @@ const WITH_MODEL = has("--with-model");
 const VERBOSE = has("--verbose");
 const KEEP = has("--keep");
 const JSON_ONLY = has("--json");
+const PGLITE_ONLY = has("--pglite");
 
 function gitSha() {
   try {
@@ -80,10 +83,35 @@ async function main() {
   const needsLocal = cases.some((c) => c.tier === "deterministic");
   const needsLive = cases.some((c) => c.tier === "live" || c.tier === "model");
 
+  /*
+   * DOCKER FIRST, THEN PGLITE, THEN SKIP.
+   *
+   * Docker first because it runs the real pgvector, so it is the only engine on which every case
+   * is meaningful. PGlite second because the alternative was nothing: `startLocal` returns null on
+   * a machine without Docker running, and the deterministic tier — 103 of 109 cases — has been
+   * skipping silently for weeks as a result. A second engine that runs most of them beats a first
+   * engine that runs none.
+   *
+   * Which one answered is reported, loudly, both ways. A pass on pglite is a pass against a
+   * pgvector substitute, and a reader of the report has to be able to see that without digging.
+   */
   let db = null;
   if (needsLocal) {
-    db = await startLocal({ log: say });
-    if (!db) say("Docker is not running — deterministic cases will be skipped, not passed.");
+    // --pglite exists so the second engine is reachable on a machine where Docker IS up. Without
+    // it the fallback is only ever exercised by accident, on the machines least able to report it.
+    db = PGLITE_ONLY ? null : await startLocal({ log: say });
+    if (!db) {
+      say(PGLITE_ONLY
+        ? "--pglite: skipping docker on purpose."
+        : "Docker is not running — falling back to pglite (real Postgres, substitute pgvector).");
+      db = await startPglite({ log: say });
+      if (db) {
+        say("Running on pglite. Cases needing a real vector index will skip, not pass.");
+      } else {
+        say("Neither Docker nor pglite is available — deterministic cases will be skipped, not passed.");
+        say("  npm install @electric-sql/pglite --prefix eval   # no daemon, no container");
+      }
+    }
   }
 
   const live = needsLive ? await openLive() : null;
@@ -123,7 +151,10 @@ async function main() {
     records.push(await runCase(spec, context));
   }
 
+  // Both, unconditionally: each is a no-op when it was not the engine that answered, and asking
+  // which one ran would be a third place that has to know.
   await stopLocal({ keep: KEEP });
+  await stopPglite();
 
   const provenance = writeProvenance(records, {
     git_sha: gitSha(),

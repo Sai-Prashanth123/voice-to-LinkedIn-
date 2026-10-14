@@ -1,0 +1,9 @@
+{
+  "name": "voice-to-content-eval",
+  "private": true,
+  "description": "The e2e harness's own dependencies. Separate from mcp-server/ so a client install never pulls a test database in.",
+  "comment": "pglite is Postgres 18 in WASM, so eval/e2e can build the whole schema with no Docker. See eval/e2e/pglite.mjs for what that costs (pgvector is substituted).",
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.10"
+  }
+}

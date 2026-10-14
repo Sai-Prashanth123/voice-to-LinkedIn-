@@ -6,7 +6,7 @@
  * setting that quietly becomes "on by default" in a later migration with nobody noticing.
  */
 
-import { defineCase } from "../harness.mjs";
+import { defineCase, skip } from "../harness.mjs";
 import { makeJob, makeMoment, q } from "../fixtures.mjs";
 
 export const cases = [
@@ -104,10 +104,32 @@ export const cases = [
     name: "an unauthorised chat is recorded with its id rather than dropped in silence",
     async run({ assert, seen }) {
       const fs = await import("node:fs");
-      const source = fs.readFileSync(
-        new URL("../../../supabase/functions/telegram-webhook/index.ts", import.meta.url),
-        "utf8",
-      );
+      const path = new URL("../../../supabase/functions/telegram-webhook/index.ts", import.meta.url);
+
+      /*
+       * SKIPPED, NOT DELETED, AND NOT PASSED.
+       *
+       * Telegram was removed from this repository on 9 October, so there is no source to read and
+       * this case threw ENOENT — which the report printed as a FAILURE, implying the guard had
+       * broken rather than that its subject had gone.
+       *
+       * It stays because three Telegram functions are STILL DEPLOYED on the project
+       * (docs/closeout.md), so the behaviour it describes is live even though the code that
+       * implements it is not in the tree. Deleting the case would delete the only automated
+       * reminder that they are up. A skip with a reason keeps the obligation visible; a pass would
+       * claim something was checked.
+       *
+       * When the three functions are torn down, delete this case in the same change.
+       */
+      if (!fs.existsSync(path)) {
+        skip(
+          "telegram-webhook was removed from the repo on 9 October, so its source cannot be read. " +
+            "Three Telegram functions are still deployed — see docs/closeout.md. Delete this case " +
+            "when they are torn down.",
+        );
+      }
+
+      const source = fs.readFileSync(path, "utf8");
       seen("telegram-webhook", { chars: source.length });
 
       // Rejecting an unknown chat has to stay silent to the sender (15.4). But silence is also what
