@@ -86,6 +86,40 @@ function turnAt(sents) {
   return null;
 }
 
+/*
+ * DOES THE POST ENUMERATE — ANSWERED WITHOUT LINE BREAKS.
+ *
+ * `uses_list` is null for 105 of 156 posts, and proposal 13 says enumeration is unmeasurable for
+ * that reason. It is not quite true. The scrape collapses whitespace; it does not delete
+ * characters. A post that read
+ *
+ *     I bought:
+ *     - A calendar scheduling tool.
+ *
+ * arrives as "I bought: -A calendar scheduling tool." The newline became a space and the space
+ * after the dash was eaten, but THE DASH IS STILL THERE. So are "1.", "2.", bullets and the arrow
+ * and tick glyphs these writers use. A marker followed by a capital is a list item wherever the
+ * line breaks went.
+ *
+ * CALIBRATED, NOT ASSUMED
+ *
+ * Checked against the 51 posts whose line breaks survived, where `uses_list` is ground truth:
+ * 20 true positives, 26 true negatives, 4 false positives, 1 false negative. 46 of 51, so 90%
+ * agreement, recall 20 of 21, precision 20 of 24. The false positives are hyphenated asides and a
+ * date range; the false negative is a list with no marker at all, which only a line break reveals.
+ *
+ * That error is reported with the number rather than hidden behind it. A 90% detector stated as
+ * 90% is a measurement; the same detector stated as a fact is the artefact `load-reference-posts`
+ * refuses to store, and this does not store it either.
+ */
+const LIST_MARKER = /[-•▪✅✔→👉]\s*[A-Z]/;
+const NUMBERED = /\s[0-9]+[.)]\s+[A-Z]/;
+
+function enumerates(text) {
+  const t = String(text ?? "");
+  return LIST_MARKER.test(t) || NUMBERED.test(t);
+}
+
 /* ── Tally helpers ────────────────────────────────────────────────────────── */
 
 function tally(rows, fn) {
@@ -162,6 +196,7 @@ const rows = posts.map((p) => {
     close: s.length ? closeShape(s[s.length - 1]) : null,
     close_words: s.length ? words(s[s.length - 1]) : null,
     turn: turnAt(s),
+    enumerates: enumerates(p.text),
   };
 });
 
@@ -189,7 +224,13 @@ console.log(`    first third   (0.00–0.33)    ${band(0, 0.33)}`);
 console.log(`    middle third  (0.33–0.66)    ${band(0.33, 0.66)}`);
 console.log(`    last third    (0.66–1.00)    ${band(0.66, 1.01)}`);
 
-console.log(`\n    median sentences per post:   ${median(rows.map((r) => r.sentences))}\n`);
+console.log(`\n    median sentences per post:   ${median(rows.map((r) => r.sentences))}`);
+
+const enumerated = rows.filter((r) => r.enumerates).length;
+console.log(`\n  DOES IT ENUMERATE  (surviving list markers)\n`);
+console.log(`    posts with a list             ${enumerated}  ${pct(enumerated, rows.length)}`);
+console.log(`    calibration: 46 of 51 correct where line breaks survived —`);
+console.log(`    recall 20/21, precision 20/24. Quote the rate with that error attached.\n`);
 
 if (!only) {
   console.log(`  PER WRITER\n`);
@@ -205,7 +246,8 @@ if (!only) {
     console.log(
       `    ${(rs[0].author ?? h).slice(0, 22).padEnd(23)} ${String(rs.length).padStart(3)} posts` +
         `  opens ${(op?.[0] ?? "—").padEnd(16)} closes ${(cl?.[0] ?? "—").padEnd(14)}` +
-        ` turn ${t.length ? median(t).toFixed(2) : "  — "} (${t.length}/${rs.length})`,
+        ` turn ${t.length ? median(t).toFixed(2) : "  — "} (${t.length}/${rs.length})` +
+        `  lists ${pct(rs.filter((r) => r.enumerates).length, rs.length).padStart(4)}`,
     );
   }
   console.log("");

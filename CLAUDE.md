@@ -59,11 +59,13 @@ back. He asked for this on 13 October and only he turns it off.
 
 ## The skills
 
-Three, in `.claude/skills/`. Use them rather than writing from instinct:
+Four, in `.claude/skills/`. Use them rather than writing from instinct:
 
 - **josh-voice** — before writing, editing or judging anything in his voice.
 - **draft-post** — writing a post from an idea, or redrafting after a rejection.
-- **gate-check** — the eight checks. Each judged on its own rubric, adversarially.
+- **gate-check** — the nine checks. Each judged on its own rubric, adversarially.
+- **barker-audit** — only when he asks why a draft feels flat structurally. It reports the
+  measured shape against the draft's and stops; it is not a tenth check and it never rewrites.
 
 They deliberately do not contain the standard. They fetch it from the system, so when Josh changes a
 rule the next draft is written against it with no deploy and nothing to keep in sync.
