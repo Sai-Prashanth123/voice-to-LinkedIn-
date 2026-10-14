@@ -248,6 +248,47 @@ async function daily(db: SupabaseClient): Promise<Response> {
   }
 
   /*
+   * THE SENTINELS GOING QUIET, WHICH IS WHAT ACTUALLY HAPPENED.
+   *
+   * At the kickoff on 1 September we told Josh: "then we keep scraping the Sentinel account... we
+   * tend to scrape and keep updating that." He quoted it back on 14 October, because it had not
+   * happened: they were scraped once on 7 September and nothing was collected for a month.
+   *
+   * The missing piece was never a cron. It was that NOBODY NOTICED. A refresh that stops is
+   * indistinguishable from a refresh that is up to date, because the only difference is a timestamp
+   * nothing reads — and the person who eventually noticed was the client, which is the worst
+   * possible detector.
+   *
+   * So this is the noticing. The scrape itself is still a script someone runs, deliberately: it
+   * needs a key that does not live in this vault, and automating the collection of a corpus that
+   * currently comes back without line breaks would be automating something half useless. This says
+   * when it went stale, which is the half that failed.
+   */
+  const { data: freshest } = await db
+    .from("reference_writer_posts")
+    .select("scraped_at")
+    .order("scraped_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!freshest?.scraped_at) {
+    alerts.push(
+      "No reference writer posts are stored at all. The Sentinels are what every structural " +
+        "judgement is measured against, so nothing can currently be judged on shape.",
+    );
+  } else {
+    const days = Math.floor((Date.now() - new Date(freshest.scraped_at).getTime()) / 86_400_000);
+    if (days >= 7) {
+      alerts.push(
+        `The reference writers were last collected ${days} days ago. We told Josh at the kickoff ` +
+          `that we keep scraping them, and in September they went a month without a refresh before ` +
+          `he noticed rather than us. Run: node scripts/scrape-sentinels.mjs --out <file>, then ` +
+          `load-reference-posts.mjs --apply.`,
+      );
+    }
+  }
+
+  /*
    * CLAUSE 13'S DELIVERY, WITHOUT A CHANNEL.
    *
    * These alerts are the point of this worker: the risk is not that the system breaks, it is that it
