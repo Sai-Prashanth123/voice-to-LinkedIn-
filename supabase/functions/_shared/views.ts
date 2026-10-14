@@ -48,6 +48,22 @@ export const GATING_SECTIONS = [
   "voice_guide",
   "banned_phrases",
   "gate_rules",
+  /*
+   * Added 14 Oct 2026 with the ninth check, and it is a change to the split above rather than an
+   * oversight being patched.
+   *
+   * The drafter has been shown the formatting rules since the beginning and the judge has not, so
+   * shape was advice a draft could ignore with no consequence — which is precisely what Josh
+   * reported: "it's quite text-heavy... rather than just a wall of text". The ninth check judges
+   * against this section, so withholding it would have left a check that can never be judged, and
+   * it was: the first live brief after the check shipped recorded shape as NOT JUDGED because the
+   * section read as empty in this view.
+   *
+   * The principle the split protects is untouched. reference_posts and voice_transcript stay out,
+   * because a judge that has read another writer's posts starts measuring against their voice.
+   * Formatting carries nobody's words.
+   */
+  "formatting",
 ] as const;
 
 export const INTERVIEW_SECTIONS = ["core_rules", "pillars", "audience", "prompt_set"] as const;
