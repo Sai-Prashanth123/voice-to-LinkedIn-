@@ -68,8 +68,10 @@ export const joshTools = [
         "LinkedIn except a post Josh has marked ready with a date, and the database refuses any " +
         "other route. Use it when he says to put one out: \"publish it Tuesday\", \"that one's " +
         "good, send it tomorrow\". Read him the post first — it goes out on that date without " +
-        "asking again. It refuses a draft the eight checks rejected, and refuses a post already " +
-        "approved; hold that one first if the date needs changing.",
+        "asking again. It refuses a post already approved; hold that one first if the date needs " +
+        "changing. A draft the checks rejected is refused UNLESS the gate ran advisorily, which is " +
+        "how it runs in one_step mode — then the verdict is his and this accepts it. Read him what " +
+        "the checks caught before he decides.",
       inputSchema: {
         post_id: z.number().int().describe("From list_calendar"),
         when: z.string().describe(
