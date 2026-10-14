@@ -31,6 +31,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 import { createDb } from "./db.mjs";
+import { writingSources } from "./sources.mjs";
+import { sourceEntry } from "../supabase/functions/_shared/entry.ts";
 import { tools } from "./tools/index.mjs";
 import { verifyDraft } from "../supabase/functions/_shared/claims.ts";
 import { keyKind } from "./tools/sessions.mjs";
@@ -471,12 +473,47 @@ test("get_drafting_brief hands over the standard, the material and the names", a
 });
 
 test("get_drafting_brief refuses a moment with nothing to write from", async () => {
+  /*
+   * "NOTHING TO WRITE FROM" IS NO LONGER "NO ROWS IN material".
+   *
+   * This looked only at the material table, which was right until the claim sources were widened:
+   * a moment can now be drafted from `his_words` — what Josh actually typed, rather than a model's
+   * write-up of it — or from `receipts`. A moment with no material rows and a paragraph of his
+   * words is not bare, and get_drafting_brief correctly accepts it.
+   *
+   * So the test was asserting the old definition and failing on the new behaviour. It now asks the
+   * same question the drafter asks.
+   */
+  /*
+   * "NOTHING TO WRITE FROM" IS NO LONGER "NO ROWS IN material", AND THIS ASKED THE OLD QUESTION.
+   *
+   * It looked only at the material table, which was right until the claim sources were widened: a
+   * moment can now be drafted from what Josh actually typed against it, or from his receipts,
+   * rather than only from a model's write-up of an interview. So it started picking moment 89 —
+   * the one he captured on 13 October, with no mined material but a raw capture in his own words —
+   * and expecting a refusal that correctly no longer comes. A draft citing his own typed words is
+   * exactly what the widening was for.
+   *
+   * It now evaluates the rule the two write paths evaluate. `get_drafting_brief` and `create_draft`
+   * both call `sourceEntry(material, writingSources(...))` and refuse on an empty entry, so this
+   * builds the same entry and trusts nothing else. Testing the old definition is how a test goes
+   * green over behaviour nobody wants.
+   */
   const db = createDb(creds);
-  const withMaterial = new Set(
-    (await db.select("material", { select: "moment_id", limit: 200 })).map((m) => m.moment_id),
-  );
-  const bare = (await call("list_moments", { limit: 200 })).moments
-    .find((m) => !withMaterial.has(m.id));
+  const moments = (await call("list_moments", { limit: 200 })).moments;
+
+  let bare = null;
+  for (const m of moments) {
+    const [material] = await db.select("material", {
+      select: "*",
+      moment_id: `eq.${m.id}`,
+      limit: 1,
+    });
+    const entry = sourceEntry(material, await writingSources(db, m.id));
+    if (Object.keys(entry).length === 0) { bare = m; break; }
+  }
+
+  // Nothing bare on this project today. Skipping is honest; inventing one would need a write.
   if (!bare) return;
 
   await assert.rejects(

@@ -124,7 +124,21 @@ test("the library lists every section, placeholders included", async () => {
   const lib = resourcesFor(context).find((r) => r.name === "library-section");
   const listed = await lib.uri.listCallback();
 
-  assert.equal(listed.resources.length, 14, "not all fourteen sections are listed");
+  /*
+   * COUNTED AGAINST THE DATABASE, NOT AGAINST A LITERAL.
+   *
+   * This asserted 14 and broke the day migration 0048 added `receipts` — a section the system is
+   * better for having, failing a test whose point is "every section is listed". A literal here
+   * tests the schema's size, which nothing cares about, instead of the property that matters: that
+   * the resource list and the table agree. Fifteen today, and it does not need editing at sixteen.
+   */
+  const sections = await context.db.select("library_sections", { select: "key" });
+  assert.equal(
+    listed.resources.length,
+    sections.length,
+    `${sections.length} sections in the library, ${listed.resources.length} listed as resources`,
+  );
+  assert.ok(listed.resources.length >= 14, "sections have gone missing from the library");
   assert.ok(listed.resources.every((r) => r.uri.startsWith("library://")));
   // A section Josh has not filled in must still be listed, and must say so. Hiding it would make
   // a missing voice guide invisible, which is exactly what isSupplied exists to prevent.

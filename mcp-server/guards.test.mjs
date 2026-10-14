@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 const readFile = async (rel) =>
   readFileSync(new URL(`../${rel}`, import.meta.url), "utf8");
 
-import { wrap } from "./server.mjs";
+import { unknownArgumentMessage, unknownArguments, wrap } from "./server.mjs";
 import { tools } from "./tools/index.mjs";
 import { HIGH_CONFIDENCE, scan } from "./aitells.mjs";
 
@@ -38,26 +38,49 @@ test("a wrong parameter name is refused, not dropped", async () => {
     handler: () => ({ posts: ["everyone's"] }),
   };
 
-  const bad = await call(tool, { writer: "mattjbarker1" });
-  assert.equal(bad.isError, true, "an unknown argument was accepted");
-  assert.match(bad.text, /no argument "writer"/);
-  // It says what the tool does take, because the next thing the caller needs is the right name.
-  assert.match(bad.text, /handle/);
-  assert.match(bad.text, /dropped rather than/);
+  /*
+   * ASSERTED AGAINST THE RAW-BODY CHECK, NOT AGAINST wrap().
+   *
+   * This test used to call wrap() and pass, while the real path did nothing — because calling
+   * wrap() directly is not what the SDK does. The SDK parses `params.arguments` against the zod
+   * shape first, and a non-strict object strips what it does not recognise, so by the time wrap()
+   * ran the unknown key was already gone. A green test over a dead guard.
+   *
+   * The only place the caller's actual request still exists is the raw body, so http.mjs checks
+   * there, before the transport. That is what these two assertions now exercise.
+   */
+  const unknown = unknownArguments(tool, { writer: "mattjbarker1" });
+  assert.deepEqual(unknown, ["writer"], "an unknown argument was not identified");
 
-  const good = await call(tool, { handle: "mattjbarker1" });
-  assert.equal(good.isError, false, good.text);
+  const message = unknownArgumentMessage(tool, unknown);
+  assert.match(message, /no argument "writer"/);
+  // It says what the tool does take, because the next thing the caller needs is the right name.
+  assert.match(message, /handle/);
+  assert.match(message, /dropped rather than/);
+
+  assert.deepEqual(unknownArguments(tool, { handle: "mattjbarker1" }), []);
 });
 
-test("the guard covers every tool, not the one that was caught", async () => {
-  // Checked at dispatch on purpose: the next tool to grow a filter would have the same hole.
-  const src = readFileSync(new URL("./server.mjs", import.meta.url), "utf8");
-  assert.match(src, /inputSchema/, "the dispatch no longer reads the declared arguments");
+test("the guard runs before the transport, and never inside the dispatch", async () => {
+  // It has to read the raw body: everything downstream has already had unknown keys stripped.
+  const http = readFileSync(new URL("./http.mjs", import.meta.url), "utf8");
+  assert.match(http, /unknownArguments\(tool, message\?\.params\?\.arguments\)/,
+    "http.mjs no longer checks the raw request body");
 
-  const noArgs = { name: "health", config: { inputSchema: {} }, handler: () => ({ ok: true }) };
-  const r = await call(noArgs, { anything: 1 });
-  assert.equal(r.isError, true);
-  assert.match(r.text, /takes no arguments/);
+  /*
+   * And it must NOT be in wrap(). Put back there it refuses every zero-argument tool, because the
+   * SDK calls those as `(extra)` and the context object lands where arguments were expected.
+   *
+   * The test that used to live here asserted `health` with `{anything: 1}` was refused — which is
+   * the broken behaviour written down as the requirement. health, system_status, next_action and
+   * next_work all failed on stdio for a day while this test stayed green.
+   */
+  const dispatch = readFileSync(new URL("./server.mjs", import.meta.url), "utf8");
+  const wrapBody = dispatch.slice(dispatch.indexOf("export function wrap"));
+  assert.ok(
+    !/const unknown = Object\.keys\(args/.test(wrapBody),
+    "the unknown-argument check is back in wrap() — it breaks every zero-argument tool",
+  );
 });
 
 test("a tool that genuinely takes nothing still works when given nothing", async () => {
@@ -323,4 +346,52 @@ test("a post is attributed to its author, never to the page it was found on", as
   );
   assert.match(block, /author\.publicIdentifier/, "Apify's nested author shape is not read");
   assert.match(block, /in SENTINELS/, "a row from outside the eight is no longer dropped");
+});
+
+/**
+ * A FOURTH GUARD, WHICH IS THE ABSENCE OF ONE.
+ *
+ * The unknown-argument check lived in `wrap()` for a day. For a tool that declares arguments it was
+ * unreachable, because the SDK strips unknown keys before the handler runs. For a tool that
+ * declares none it was actively harmful: the SDK calls a zero-argument tool as `(extra)`, so the
+ * context object arrived where arguments were expected and every SDK internal counted as an
+ * argument the tool does not have.
+ *
+ * All eight zero-argument tools refused every call — `health` and `system_status` among them, which
+ * are the two CLAUDE.md names for when something looks wrong. `node index.mjs --check` stayed green
+ * the whole time, because it calls handlers directly and never crosses the transport.
+ *
+ * This asserts the shape of the mistake rather than the fix, so it fails again if the check is ever
+ * moved back here, whatever it is called.
+ */
+test("a zero-argument tool survives being handed the SDK's own context", async () => {
+  const zero = tools.filter((t) => Object.keys(t.config?.inputSchema ?? {}).length === 0);
+  assert.ok(zero.length > 0, "no zero-argument tools left to protect — update this test");
+
+  // Exactly what the SDK passes as the first parameter when a tool declares no input schema.
+  const sdkContext = {
+    signal: new AbortController().signal,
+    sessionId: "test-session",
+    _meta: {},
+    requestId: 1,
+    sendNotification: () => {},
+    sendRequest: () => {},
+  };
+
+  for (const tool of zero) {
+    const called = { yes: false };
+    const stub = {
+      name: tool.name,
+      config: tool.config,
+      handler: async () => { called.yes = true; return { ok: true }; },
+    };
+
+    const result = await wrap(stub, {}, null)(sdkContext);
+
+    assert.ok(
+      !result.isError,
+      `${tool.name} refused the SDK's own context: ${result.content?.[0]?.text}`,
+    );
+    assert.ok(called.yes, `${tool.name} never reached its handler`);
+  }
 });

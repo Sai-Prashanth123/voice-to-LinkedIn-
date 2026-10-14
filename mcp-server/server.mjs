@@ -58,32 +58,30 @@ export function wrap(tool, context, onCall) {
     const started = Date.now();
     try {
       /*
-       * AN ARGUMENT THIS TOOL DOES NOT HAVE IS A MISTAKE, NOT A SUGGESTION.
+       * THE UNKNOWN-ARGUMENT CHECK IS NOT HERE, AND MUST NOT BE PUT BACK.
        *
-       * Unknown keys were dropped silently. Ask get_reference_posts for `writer: "mattjbarker1"`
-       * when the parameter is `handle`, and it does not refuse — it ignores the filter and returns
-       * the newest posts across all eight writers. Four other people, no error, no note.
+       * It was, for a day, and it did the opposite of its job in both directions.
        *
-       * That is almost certainly how Josh reported in September that testing Matt Barker "returned
-       * nothing": he would have been handed somebody else every time and concluded his were missing.
-       * A filter that silently does not apply is worse than one that fails, because the answer looks
-       * like an answer.
+       * For a tool that declares arguments it was dead code: the SDK parses `params.arguments`
+       * against the zod shape before this runs, and a non-strict object strips what it does not
+       * recognise, so `unknown` was always empty. The real check reads the raw request body in
+       * http.mjs, before the transport, and calls `unknownArguments` above.
        *
-       * Checked here rather than in any one tool, because the next tool to grow a filter would have
-       * the same hole and nobody would think to look.
+       * For a tool that declares NO arguments it was worse than dead. The SDK invokes a
+       * zero-argument tool's callback as `(extra)` rather than `(args, extra)`, so `args` here was
+       * the SDK's own context — `signal`, `sessionId`, `_meta`, `sendNotification`, `requestId` —
+       * and with nothing declared, every one of those counted as an argument the tool does not
+       * have. All eight zero-argument tools failed on stdio: `health`, `system_status`,
+       * `next_action`, `next_work`, `get_learning_brief`, `session_tracking_status`,
+       * `refresh_sentinels`, `export_bank`.
+       *
+       * Those are the four entry points CLAUDE.md tells every session to call, and the two it
+       * names for when something looks wrong. `node index.mjs --check` passed throughout, because
+       * it calls the handlers directly and never goes through the transport.
+       *
+       * So: nothing is checked here. The stdio path accepts an unknown argument silently, which is
+       * a known and recorded gap, and a smaller one than refusing `health`.
        */
-      const declared = Object.keys(tool.config?.inputSchema ?? {});
-      const unknown = Object.keys(args ?? {}).filter((k) => !declared.includes(k));
-      if (unknown.length > 0) {
-        throw new Error(
-          `${tool.name} has no argument ${unknown.map((k) => `"${k}"`).join(", ")}. ` +
-          (declared.length > 0
-            ? `It takes: ${declared.join(", ")}. A name it does not know is dropped rather than ` +
-              "applied, so the answer would have looked right and been wrong."
-            : "It takes no arguments."),
-        );
-      }
-
       const value = await tool.handler(args ?? {}, context);
       onCall?.(tool.name, true, Date.now() - started);
       return {
