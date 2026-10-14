@@ -345,18 +345,61 @@ export const inspectTools = [
       // The proposed body is deliberately not returned in the list. It is a whole section — often
       // several thousand characters — and returning twenty of them would bury the claims that are
       // the point of reading this at all.
+      /*
+       * TWO OPEN PROPOSALS AGAINST ONE SECTION ARE A SILENT OVERWRITE.
+       *
+       * Each one carries a whole replacement body, so approving both applies the second over the
+       * first and Josh never sees that he undid a decision he had just made. Nothing stops this
+       * being filed: the sentinel refresh can propose against a section a session also proposed
+       * against, and on 14 October two proposals landed on `frameworks` hours apart — the second
+       * measured, superseding the first, with nothing in the data saying so.
+       *
+       * Not resolved by closing one. A proposal is withdrawn by rejecting it, and rejecting is
+       * Josh's verb, not ours — clause 12.10 is that the system proposes and he decides, so a
+       * system that tidies away its own proposals has quietly taken the decision. The honest fix
+       * is to hand him the collision: newest first, so `supersedes` points back at what the newer
+       * one would overwrite, and he can reject the older one himself in one step.
+       */
+      const openBySection = new Map();
+      for (const p of data) {
+        if (p.status !== "open") continue;
+        if (!openBySection.has(p.section_key)) openBySection.set(p.section_key, []);
+        openBySection.get(p.section_key).push(p.id);
+      }
+
+      const collisions = [...openBySection.entries()].filter(([, ids]) => ids.length > 1);
+
       return {
-        proposals: data.map((p) => ({
-          ...p,
-          claim: p.claim,
-          evidence_kind: p.evidence?.kind ?? (p.evidence?.post_ids ? "post_ids" : "other"),
-          evidence_summary: p.evidence?.post_ids
-            ? p.evidence.post_ids.length + " post(s) cited"
-            : p.evidence?.handles
-              ? p.evidence.handles.length + " sentinel account(s), " +
-                (p.evidence.changes?.length ?? 0) + " change(s)"
-              : undefined,
-        })),
+        proposals: data.map((p) => {
+          const siblings = (openBySection.get(p.section_key) ?? []).filter((id) => id !== p.id);
+          return {
+            ...p,
+            claim: p.claim,
+            evidence_kind: p.evidence?.kind ?? (p.evidence?.post_ids ? "post_ids" : "other"),
+            evidence_summary: p.evidence?.post_ids
+              ? p.evidence.post_ids.length + " post(s) cited"
+              : p.evidence?.handles
+                ? p.evidence.handles.length + " sentinel account(s), " +
+                  (p.evidence.changes?.length ?? 0) + " change(s)"
+                : undefined,
+            // Only on the newer one: it is the one whose approval would discard the other.
+            ...(p.status === "open" && siblings.some((id) => id < p.id)
+              ? { supersedes: siblings.filter((id) => id < p.id) }
+              : {}),
+          };
+        }),
+        ...(collisions.length > 0
+          ? {
+            competing: collisions.map(([section, ids]) => ({
+              section_key: section,
+              open_proposals: ids,
+              warning:
+                `${ids.length} open proposals replace the whole of "${section}". Approving more ` +
+                `than one applies the last over the earlier ones. Read him the newest, and if he ` +
+                `takes it, reject the others explicitly rather than leaving them open.`,
+            })),
+          }
+          : {}),
         note: "A proposal changes nothing until Josh approves it (12.10). 'reverted' means he " +
           "approved it, the posts got worse, and he rolled it back — treat that as a stronger " +
           "rejection than 'rejected'.",
