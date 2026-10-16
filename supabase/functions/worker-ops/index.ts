@@ -15,6 +15,7 @@ import { loadSecrets } from "../_shared/secrets.ts";
 import { meetsAcceptanceBar } from "../_shared/diff.ts";
 import { json } from "../_shared/jobs.ts";
 import { LEARN_SYSTEM, PROMPT_VERSION } from "../_shared/prompts.ts";
+import { oneStepMode } from "../_shared/mode.ts";
 import { rephraseDeadQuestions } from "../_shared/questions.ts";
 import { announcement, markAnnounced, undeclared } from "../_shared/providers.ts";
 import { overall, score, summarise, voiceGuideWarning } from "../_shared/acceptance.ts";
@@ -101,11 +102,37 @@ async function daily(db: SupabaseClient): Promise<Response> {
       .select("*", { count: "exact", head: true })
       .eq("status", "mined");
 
+    /*
+     * THE ADVICE DEPENDS ON THE MODE, AND FOR THREE DAYS IT DID NOT.
+     *
+     * This said "there are N mined moments waiting, so it should refill on its own" — which was
+     * true when the selector ran and is false now. In one_step mode worker-select stands down by
+     * design, so nothing refills anything, ever. Josh was told otherwise on 14, 15 and 16 October:
+     * three identical warnings promising something that cannot happen, about a queue only he can
+     * fill, with no action attached that would work.
+     *
+     * The other branch was worse in the same direction — it offered to "run you through some
+     * questions", which is the interview he asked to stop on 13 October.
+     *
+     * An alert nobody can act on is noise, and this one arrives daily. So in one_step the advice
+     * is the only thing that is actually true: it refills when he sends something, and the ideas
+     * already on file are there if he wants one written from them.
+     */
+    const oneStep = await oneStepMode(db);
+
     alerts.push(
       `The queue is down to ${inHand ?? 0} approved posts against a target of ${target}. ` +
         (shortReason
           // The selector already explained itself this morning; do not contradict it with a guess.
           ? shortReason
+          : oneStep
+          ? (mined && mined > 0
+            ? `Nothing refills it on its own in one-step mode — that is the mode working as you ` +
+              `asked. Send me something that happened and I will write it, or say the word and I ` +
+              `will write from one of the ${mined} ideas already on file.`
+            : `Nothing refills it on its own in one-step mode, and there is nothing on file to ` +
+              `write from. Send me something that happened this week. Running short is better ` +
+              `than writing something thin.`)
           : mined && mined > 0
           ? `There are ${mined} mined moments waiting, so it should refill on its own.`
           : `There is nothing mined to write from — worth sending me a few thoughts, or asking me ` +
