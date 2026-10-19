@@ -45,7 +45,7 @@ modes have different first steps. Do not run the other one's path.
 
   one_step — he gives you material and you write it. Nothing asks him questions and nothing is
   pulled from the idea bank. start_post with his words, then write_post, then create_draft. The
-  eight checks still run and you still read him what they caught, but they no longer hold the post
+  checks still run and you still read him what they caught, but they no longer hold the post
   back: he decides. next_work returns nothing in this mode, by design.
 
   interviewed — the path the build specification describes. capture_thought, a few short questions

@@ -35,7 +35,7 @@ or three sentences; never recite tool names at him.
 
 **one_step** — he gives you material and you write it. Nothing asks him questions and nothing is
 pulled from the idea bank: `start_post` with his words, then `write_post`, then `create_draft`. The
-eight checks still run and you still read him what they caught, but they no longer hold the post
+checks still run and you still read him what they caught, but they no longer hold the post
 back. He asked for this on 13 October and only he turns it off.
 
 **interviewed** — the path below, as the specification describes it.
@@ -71,7 +71,7 @@ Four, in `.claude/skills/`. Use them rather than writing from instinct:
 
 - **josh-voice** — before writing, editing or judging anything in his voice.
 - **draft-post** — writing a post from an idea, or redrafting after a rejection.
-- **gate-check** — the nine checks. Each judged on its own rubric, adversarially.
+- **gate-check** — every check the brief hands back, judged on its own rubric, adversarially.
 - **barker-audit** — only when he asks why a draft feels flat structurally. It reports the
   measured shape against the draft's and stops; it is not a tenth check and it never rewrites.
 

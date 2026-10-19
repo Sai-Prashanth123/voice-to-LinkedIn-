@@ -1,6 +1,6 @@
 ---
 name: gate-check
-description: Use when judging a draft against the content system's eight quality checks — after drafting, when asked to "run the gate", or to review a draft before Josh sees it. Fetches the real rubrics from the system rather than judging by general taste.
+description: Use when judging a draft against the content system's quality checks — after drafting, when asked to "run the gate", or to review a draft before Josh sees it. Fetches the real rubrics from the system rather than judging by general taste.
 ---
 
 # Run the gate
@@ -75,9 +75,12 @@ placeholder, so there was nothing to compare a draft to and everything looked co
 
 **If a check does appear in your list, it has a real basis. Judge it.**
 
-## After the eight
+## After the last one
 
-`record_gate_verdict` tells you how many remain and what has failed so far. When all eight are in:
+`record_gate_verdict` tells you how many remain and what has failed so far. Judge every check the
+brief hands you — `checks_remaining` reaching zero is the only thing that means you are done, and a
+ninth check was added on 14 October that a skill saying "eight" would have told you to skip. When
+the count is zero:
 
 - **All passed** — the draft is filed in the calendar, where `list_calendar` shows it with its text.
   It is NOT published: only Josh can do that, with `mark_ready`, and that is the one thing in this

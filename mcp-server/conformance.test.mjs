@@ -142,3 +142,40 @@ test("no message tells Josh the gate has a number of checks it no longer has", (
     }
   }
 });
+
+test("nothing that instructs a session states the gate size as a word", () => {
+  /*
+   * The last place the count was written down, and the one that did the damage. The gate-check
+   * skill said "After the eight" and "When all eight are in", CLAUDE.md and the connector's own
+   * instructions said "the eight checks still run" — while CLAUDE.md's skill table said nine, two
+   * lines apart. A session reading any of those would stop at the eighth verdict and believe it was
+   * finished, which is exactly what happened from 14 to 19 October.
+   *
+   * The number belongs in one place. These files should say "the checks", and the brief and
+   * checks_remaining say how many there are today.
+   */
+  const files = [
+    "../CLAUDE.md",
+    "./instructions.mjs",
+    "../.claude/skills/gate-check/SKILL.md",
+    "../.claude/skills/draft-post/SKILL.md",
+    "../.claude/skills/josh-voice/SKILL.md",
+  ];
+
+  // "all eight are in", "the eight checks", "eight quality checks" — the forms that instruct.
+  // Not a bare "eight" anywhere: this file's own comments discuss the bug, and "weight" exists.
+  const instructing = /\b(all|the)\s+(eight|nine|ten)\s+(are|checks|quality)|\b(eight|nine|ten)\s+(quality\s+)?checks?\s+(still\s+)?(run|are|is)\b/i;
+
+  for (const f of files) {
+    const src = readFileSync(new URL(f, import.meta.url), "utf8");
+    // The one deliberate mention: the skill explains why it no longer says a number.
+    const body = src.split("\n").filter((l) => !l.includes("would have told you to skip")).join("\n");
+    const hit = body.match(instructing);
+    assert.equal(
+      hit,
+      null,
+      `${f} tells a session the gate is a fixed size ("${hit?.[0]}"). Say "the checks" and let ` +
+      "checks_remaining carry the number.",
+    );
+  }
+});
