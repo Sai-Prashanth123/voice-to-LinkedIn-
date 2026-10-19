@@ -380,7 +380,39 @@ export const writeTools = [
         // courtesy; the draft is the work.
       }
 
-      return { ...filed, name: moment.title ?? null, framework, framework_note: frameworkNote };
+      /*
+       * THE ARGUABLE TELLS TRAVEL WITH THE DRAFT.
+       *
+       * `blocking` above already refused the mechanical ones. What is left is judgement, so it is
+       * attached to the result rather than left for someone to go and ask for: the next thing read
+       * after "filed" is what is still wrong with it.
+       *
+       * This block used to sit at the end of submit_candidates, which has no `tells` in scope and
+       * no body to scan — so every successful call threw a ReferenceError after cc-submit had
+       * already stored the candidates, and create_draft never reported a tell at all.
+       */
+      const arguable = tells.findings.length > 0
+        ? {
+          ai_tells: tells.findings.map((f) => ({
+            line: f.line,
+            matched: f.matched,
+            rule: f.name,
+            fix: f.fix,
+          })),
+          ai_tells_mean: "Mechanical, from the same rules scrub_draft runs. None of them blocked " +
+            "the draft. Fix them with edit_post before Josh reads it, or say why you are keeping " +
+            "one — a filler word is a judgement, and the library says to delete it and read the " +
+            "sentence again.",
+        }
+        : {};
+
+      return {
+        ...filed,
+        name: moment.title ?? null,
+        framework,
+        framework_note: frameworkNote,
+        ...arguable,
+      };
     },
   },
 
@@ -489,24 +521,12 @@ export const writeTools = [
         throw new Error(`cc-submit ${res.status}: ${JSON.stringify(body).slice(0, 300)}`);
       }
 
-      // Attached to the result rather than left for someone to go and ask for. These are the
-      // arguable ones, so they do not refuse — but they travel with the draft id, which means the
-      // next thing read after "filed" is what is still wrong with it.
-      return tells.findings.length > 0
-        ? {
-          ...body,
-          ai_tells: tells.findings.map((f) => ({
-            line: f.line,
-            matched: f.matched,
-            rule: f.name,
-            fix: f.fix,
-          })),
-          ai_tells_mean: "Mechanical, from the same rules scrub_draft runs. None of them blocked " +
-            "the draft. Fix them with edit_post before Josh reads it, or say why you are keeping " +
-            "one — a filler word is a judgement, and the library says to delete it and read the " +
-            "sentence again.",
-        }
-        : body;
+      // The AI-tells attachment that used to sit here was pasted in from create_draft, and `tells`
+      // is declared in that handler, not this one. Every successful call therefore threw a
+      // ReferenceError AFTER cc-submit had already stored the candidates: the work landed and the
+      // tool reported failure. Candidates are not a draft and have no body to scan, so the right
+      // answer is the server's own.
+      return body;
     },
   },
 
@@ -516,16 +536,19 @@ export const writeTools = [
       title: "Record one gate check",
       description:
         "Record the outcome of a single check against a draft. One call per check — the gate is " +
-        "eight independent judgements and collapsing them into one loses which one rejected and " +
-        "why. A rejection needs a reason a person can act on: name the sentence, not the rule. " +
+        "a set of independent judgements and collapsing them into one loses which one rejected " +
+        "and why. A rejection needs a reason a person can act on: name the sentence, not the " +
+        "rule. " +
         "Verdicts are written as they are reached, so an interrupted run resumes rather than " +
         "starting over.",
       inputSchema: {
         draft_id: z.number().int().describe("The draft being checked"),
-        check_key: z.enum([
-          "anyone_else", "claims_trace", "hook_opens_loop", "aimed_at_someone",
-          "voice_guide", "names_cleared", "identifiable", "banned_phrases",
-        ]).describe("Which of the eight checks this is"),
+        // DERIVED, NEVER RESTATED. This list was written out by hand and fell one behind when the
+        // ninth check arrived on 14 October: the branch below required nine verdicts while this
+        // enum accepted eight, so gate_passed stayed null on every draft for five days and
+        // mark_ready refused all of them. Read off GATE_CHECKS, the two cannot disagree again.
+        check_key: z.enum(GATE_CHECKS.map((c) => c.key))
+          .describe(`Which of the ${GATE_CHECKS.length} checks this is`),
         passed: z.boolean().describe("Whether the draft cleared this check"),
         reason: z.string().optional()
           .describe("Required when passed is false. What specifically is wrong, and where."),
@@ -597,9 +620,10 @@ export const writeTools = [
         return {
           gate_run_id: row.id,
           checks_recorded: done,
-          checks_remaining: 8 - done,
+          checks_remaining: GATE_CHECKS.length - done,
           failed_so_far: failed,
-          note: `${8 - done} check(s) still to record. Every check runs even after one rejects — ` +
+          note: `${GATE_CHECKS.length - done} check(s) still to record. Every check runs even ` +
+            `after one rejects — ` +
             `Josh should see everything wrong with a draft at once, not one fault per round trip.`,
         };
       }
@@ -627,7 +651,7 @@ export const writeTools = [
           checks_recorded: done,
           checks_remaining: 0,
           failed_so_far: failed,
-          note: "All eight verdicts are recorded, but no key is configured to close the draft out, " +
+          note: "Every verdict is recorded, but no key is configured to close the draft out, " +
             "so nothing has been decided yet: gate_passed is unset and no rewrite is queued.",
         };
       }

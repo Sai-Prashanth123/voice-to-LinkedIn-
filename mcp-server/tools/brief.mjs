@@ -18,6 +18,8 @@
  */
 
 import { z } from "zod";
+
+import { recordBriefRead } from "../brief-read.mjs";
 import {
   DRAFTER_SYSTEM,
   DRAFT_USER,
@@ -108,7 +110,8 @@ export const briefTools = [
         moment_id: z.number().int().describe("Which moment to draft, from list_moments"),
       },
     },
-    async handler(args, { db }) {
+    async handler(args, context) {
+      const { db } = context;
       const id = args.moment_id;
 
       const [moment] = await db.select("moments", {
@@ -191,7 +194,7 @@ export const briefTools = [
 
       const library = await libraryText(db, "drafting");
 
-      return {
+      const brief = {
         moment_id: id,
         name: moment.title ?? null,
         prompt_version: PROMPT_VERSION,
@@ -211,6 +214,12 @@ export const briefTools = [
         must_not_name: uncleared,
         next: "Write the post, then call create_draft with every claim and its verbatim source span.",
       };
+
+      // Recorded so cc-submit can refuse a draft written against no standard. See brief-read.mjs
+      // for why this is a server-side record and not another hook.
+      await recordBriefRead(id, "drafting", context);
+
+      return brief;
     },
   },
 

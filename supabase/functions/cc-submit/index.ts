@@ -42,6 +42,7 @@ import { appendTurn, loadSession, renderTranscript } from "../_shared/session.ts
 import { autoName, setIdeaName } from "../_shared/idea-names.ts";
 import { joshSaid, missingNumbers, verifyExtraction, WRITTEN_UP } from "../_shared/extraction.ts";
 import { applyDraft } from "../_shared/handlers/draft.ts";
+import { checkRetelling, dedupText, loadThresholds } from "../_shared/dedup.ts";
 import * as decisions from "./decisions.ts";
 import * as maintenance from "./maintenance.ts";
 import type { Body } from "./decisions.ts";
@@ -103,6 +104,7 @@ Deno.serve(async (req) => {
     end_interview: decisions.endInterview,
 
     // Writing and judging.
+    brief_read: (d, b) => recordBriefRead(d, b),
     draft: (d, b) => fileDraft(d, b as unknown as DraftBody),
     gate_done: (d, b) => closeGate(d, b),
     pushback: decisions.pushBackRoute,
@@ -584,6 +586,40 @@ async function fileDraft(db: SupabaseClient, body: DraftBody) {
 
   const text = String(body.body ?? "").trim();
   if (!text) return json({ error: "body is required" }, 400);
+
+  /*
+   * THE STANDARD HAS TO HAVE BEEN READ, AND THIS IS WHERE THAT CAN BE REFUSED.
+   *
+   * The writing order is also guarded by a Claude Code hook, which runs only in a clone of this
+   * repo and fails open by design — so for Josh, on the hosted connector, it has never guarded
+   * anything. Two steps were already enforced below and above: a moment that was never mined
+   * cannot be drafted, and an extraction is verified against a source rebuilt server-side. The
+   * brief was the one step with no server-side equivalent, because reading it wrote nothing down.
+   *
+   * It does now, so this can ask. Durable per moment rather than per session: there is no session
+   * id on the hosted transport, and "the brief for this moment has been read" is the property that
+   * actually matters — a brief read in October is still the brief for that moment's material.
+   *
+   * write_post already calls get_drafting_brief itself, so the one-step path satisfies this
+   * without anyone doing anything differently. What it refuses is a create_draft that went
+   * straight to filing, which is the 14 October failure.
+   */
+  const { data: briefRead } = await db
+    .from("system_events")
+    .select("id")
+    .eq("kind", "brief_read")
+    .filter("detail->>moment_id", "eq", String(momentId))
+    .limit(1);
+
+  if (!briefRead || briefRead.length === 0) {
+    return json({
+      error: "The brief for this moment has not been read, so there is no standard this draft " +
+        "was written against.",
+      next: "Call get_drafting_brief for this moment and write from what it returns — it carries " +
+        "the live library, the material, and the names that must not appear. For a rewrite, " +
+        "get_rewrite_brief does the same and names what to keep.",
+    }, 409);
+  }
   if (!Array.isArray(body.claims)) return json({ error: "claims must be an array (it may be empty)" }, 400);
 
   const { data: moment } = await db
@@ -670,7 +706,37 @@ async function fileDraft(db: SupabaseClient, body: DraftBody) {
   const attempt = payload.attempt !== undefined
     ? Number(payload.attempt)
     : (rejectedBefore ?? 0) + 1;
-  const nearMiss = (payload.near_miss as string | null | undefined) ?? null;
+  /*
+   * 7.2 ON THIS PATH, BECAUSE IT RAN ON NO PATH AT ALL.
+   *
+   * "near_miss" came off the waiting draft job, which is written by worker-select. In one_step mode
+   * the selector never runs — 38 skips in the fortnight to 19 October — so there was no job, no
+   * near_miss, and checkRetelling was imported by exactly one file in the repository: the
+   * selector. Across 49 drafts nothing had ever compared new material against a story Josh has
+   * already told. moment_embeddings stopped being written on 5 October and nobody noticed, because
+   * a check that is never called logs nothing at all.
+   *
+   * ADVISORY, DELIBERATELY. The selector HOLDS a moment it cannot check (dedup.ts:111) and that is
+   * right there: nothing is lost by waiting four hours. Here the draft is already written and Josh
+   * is in the room, so the verdict is reported and he decides — the same stance the gate takes in
+   * this mode. "unavailable" therefore does not hold the draft; it says so and files it.
+   *
+   * The result is carried in nearMiss, the channel the interviewed path already uses, so the
+   * drafter and the rewrite brief read it the way they always have. A job-carried value still
+   * wins: a caller cannot talk its way out of a warning the selector already recorded.
+   */
+  let retelling = null;
+  if ((payload.near_miss as string | null | undefined) === undefined) {
+    const text = await dedupText(db, momentId);
+    if (text.trim().length > 0) {
+      retelling = await checkRetelling(db, momentId, text, await loadThresholds(db));
+    }
+  }
+
+  const nearMiss = (payload.near_miss as string | null | undefined) ??
+    (retelling && (retelling.verdict === "warn" || retelling.verdict === "block")
+      ? retelling.against
+      : null);
 
   const { data: library } = await db
     .from("library_versions").select("version").order("version", { ascending: false }).limit(1).maybeSingle();
@@ -708,6 +774,27 @@ async function fileDraft(db: SupabaseClient, body: DraftBody) {
     attempt,
     claims_verified: filed.verified,
     failures: filed.failures,
+    // 7.2's verdict travels with the draft rather than waiting to be asked for, the same way the
+    // arguable AI tells do. Nothing here refused anything.
+    ...(retelling
+      ? {
+        retelling: {
+          verdict: retelling.verdict,
+          similarity: retelling.similarity,
+          against: retelling.against,
+          method: retelling.method,
+          means: retelling.verdict === "block"
+            ? "This reads as the same incident Josh has already told. It is filed anyway because " +
+              "the decision is his, but read him what it resembles before he approves it."
+            : retelling.verdict === "warn"
+            ? "Close to something already told. Rewriting an angle is fine; repeating the " +
+              "anecdote is not — so say what it resembles and let him judge which this is."
+            : retelling.verdict === "unavailable"
+            ? "The retelling check could not run, so nothing has been compared. Not a pass."
+            : "Nothing resembling this has been told before.",
+        },
+      }
+      : {}),
     /*
      * SAY WHAT ACTUALLY HAPPENED.
      *
@@ -727,6 +814,23 @@ async function fileDraft(db: SupabaseClient, body: DraftBody) {
       : "Filed, and every claim traced. The eight checks are waiting for you: call next_work and " +
         "it hands you this draft with its rubrics, in a fresh session.",
   });
+}
+
+/**
+ * "The brief for this moment was read." One row, so the write door can ask.
+ *
+ * Deliberately not a moment or draft update: this is an observation about a session, it is never
+ * read back as state, and clause 13's events table is where observations live. Unknown moments are
+ * accepted without complaint — a bad id makes a useless row, not a failed brief, and refusing here
+ * would turn bookkeeping into something that can cost someone their brief.
+ */
+async function recordBriefRead(db: SupabaseClient, body: Body) {
+  const momentId = Number((body as Record<string, unknown>).moment_id);
+  if (!Number.isInteger(momentId)) return json({ error: "moment_id must be an integer" }, 400);
+
+  const which = String((body as Record<string, unknown>).which ?? "drafting");
+  await logEvent(db, "brief_read", "info", { moment_id: momentId, which });
+  return json({ ok: true, moment_id: momentId, which });
 }
 
 /**

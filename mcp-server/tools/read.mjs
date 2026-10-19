@@ -22,9 +22,27 @@ import { score, overall, summarise } from "../../supabase/functions/_shared/acce
 import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
 import { isSupplied } from "../../supabase/functions/_shared/views.ts";
 
+/*
+ * TWO FIELDS ADDED HERE BECAUSE NOTHING HAD EVER SELECTED THEM.
+ *
+ * Both were written faithfully for weeks and read by nobody, which is the same fault as
+ * drafts.framework: the data looks healthy precisely because nothing looks at it.
+ *
+ *   audience_is_buyer — written by the same extraction call as framework
+ *   (handlers/interview.ts:529), declared in schemas.ts and types.ts, selected nowhere. Clause 6
+ *   asks for "a note that it is deliberately not the buyer", and that note existed and could not
+ *   be seen.
+ *
+ *   last_score_reasons — whose own migration says it is "shown on the bank page so 7.4 overrides
+ *   are informed rather than blind" (0018_selection.sql:74). That reader has never existed, so
+ *   Josh has been pinning and killing against a ranking whose stated justification was written
+ *   every four hours into a column nothing opened. last_scored_at comes with it, because a score
+ *   from before the selector last stopped looks identical to a fresh one without it.
+ */
 const MOMENT_FIELDS =
-  "id,title,source,status,depth_reached,pillar,audience,strength,pinned,killed," +
-  "time_sensitive,decays_at,not_before,parked_reason,notes,captured_at,last_score";
+  "id,title,source,status,depth_reached,pillar,audience,audience_is_buyer,strength,pinned,killed," +
+  "time_sensitive,decays_at,not_before,parked_reason,notes,captured_at,last_score," +
+  "last_score_reasons,last_scored_at";
 
 /** A killed row is `true`; everything else is live, including a null. */
 const LIVE_ONLY = { killed: "is.false" };

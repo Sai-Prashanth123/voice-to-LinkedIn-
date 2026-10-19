@@ -28,6 +28,33 @@ import { RetellingSchema } from "./schemas.ts";
 
 export type Verdict = "block" | "warn" | "clear" | "unavailable";
 
+/**
+ * The text that stands for a moment when asking whether it has been told before.
+ *
+ * Lifted out of worker-select because there is now a second caller. The embedding cache is keyed on
+ * a hash of this string (see byEmbeddings), so two callers building it two ways would not merely
+ * disagree — they would each re-embed the same moment under a different key and then compare
+ * vectors made from different text. One function, so that cannot happen.
+ *
+ * Material only, in the order a reader would meet it. Not the draft body: the question is whether
+ * the STORY is a repeat, and the same incident written two ways is exactly the case to catch.
+ */
+export async function dedupText(db: SupabaseClient, momentId: number): Promise<string> {
+  const { data: mat } = await db
+    .from("material")
+    .select("the_moment, the_detail, the_realisation, the_lesson, their_actual_words")
+    .eq("moment_id", momentId)
+    .maybeSingle();
+
+  return [
+    mat?.the_moment,
+    mat?.the_detail,
+    mat?.their_actual_words,
+    mat?.the_realisation,
+    mat?.the_lesson,
+  ].filter(Boolean).join(" ");
+}
+
 export interface DedupResult {
   verdict: Verdict;
   /** 0–1 where it came from embeddings; null where the model made the call or nothing was found. */

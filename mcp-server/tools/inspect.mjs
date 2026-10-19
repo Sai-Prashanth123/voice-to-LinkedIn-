@@ -27,6 +27,8 @@
  */
 
 import { z } from "zod";
+
+import { recordBriefRead } from "../brief-read.mjs";
 // The same measure that classifies a draft against what Josh published (12.2). Reused so "how
 // much changed" means one thing everywhere, rather than two similar numbers computed two ways.
 import { similarity } from "../../supabase/functions/_shared/diff.ts";
@@ -118,7 +120,8 @@ export const inspectTools = [
       },
     },
 
-    async handler(args, { db }) {
+    async handler(args, context) {
+      const { db } = context;
       const [draft] = await db.select("drafts", {
         select: "id,moment_id,version,attempt,body,hook,framework,gate_passed,gate_reason",
         id: `eq.${args.draft_id}`,
@@ -166,7 +169,7 @@ export const inspectTools = [
         .filter((n) => n.kind !== "not_a_name" && !n.cleared)
         .map((n) => n.name);
 
-      return {
+      const brief = {
         draft_id: draft.id,
         moment_id: draft.moment_id,
         framework: draft.framework,
@@ -194,6 +197,12 @@ export const inspectTools = [
         next: "Write the fixed post, then create_draft with the full claim ledger. It becomes a " +
           "new version rather than replacing this one — nothing is overwritten (6.3).",
       };
+
+      // A rewrite reads this instead of the drafting brief, so it satisfies the same requirement.
+      // Recorded against the moment, not the draft: the next attempt is a new draft id.
+      await recordBriefRead(draft.moment_id, "rewrite", context);
+
+      return brief;
     },
   },
 
@@ -711,6 +720,53 @@ export const inspectTools = [
       );
       const strangers = mix.filter((m) => m.in_library === false);
 
+      /*
+       * HAS ANYTHING STOPPED HAPPENING? The generalisation of the line above, and the read this
+       * repository has needed for weeks.
+       *
+       * Every recent fault here has been one of two things: code nothing ever ran, or a value
+       * nothing ever read. Neither announces itself. A ninth gate check was added on 14 October and
+       * the tool that records verdicts was left accepting eight, so from that day no draft could
+       * close and mark_ready refused every one of them — for five days, with the tool reporting
+       * "0 check(s) still to record". Nothing failed. Nothing logged. The numbers below are what
+       * would have said so on the first afternoon.
+       *
+       * Only what content_mcp may select (0028). moment_embeddings and system_events are not in
+       * that grant, so the retelling cache cannot be read from here — the archive count is the half
+       * that can, and it is the half that matters most, because an empty archive means the
+       * published-comparison side of 7.2 has nothing to compare against.
+       */
+      const [lastClosed] = await rows(
+        db,
+        "drafts?select=id,created_at&gate_passed=not.is.null&order=created_at.desc&limit=1",
+      );
+      const [lastSelection] = await rows(
+        db,
+        "selection_runs?select=id,ran_at&order=ran_at.desc&limit=1",
+      );
+      const archived = await rows(db, "published_archive?select=id&limit=1");
+
+      const daysSince = (iso) =>
+        iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000) : null;
+      const closedDays = daysSince(lastClosed?.created_at);
+
+      const stalled = [];
+      if (needGate > 0 && (closedDays === null || closedDays >= 2)) {
+        stalled.push(
+          lastClosed
+            ? `No draft has been given a verdict in ${closedDays} days, and ${needGate} are ` +
+              `waiting. A draft the gate never closes cannot be approved at all — mark_ready ` +
+              `refuses an unjudged draft in every mode.`
+            : "No draft has ever been given a verdict, so none of them can be approved.",
+        );
+      }
+      if (archived.length === 0) {
+        stalled.push(
+          "The retelling index is empty, so the published half of 7.2 has nothing to compare " +
+            "against. New material is checked against other moments only.",
+        );
+      }
+
       return {
         reading_from: {
           // No regex: the project ref is the first label of the host. A hand-written escape in this
@@ -760,6 +816,13 @@ export const inspectTools = [
                 `${strangers.map((s) => `"${s.framework}"`).join(", ")}.`
               : lead;
           })(),
+        // The same idea as framework_note, asked of the pipeline rather than of the structures:
+        // what has quietly stopped? A dormant path announces itself here instead of waiting to be
+        // stumbled over.
+        last_gate_verdict: lastClosed?.created_at ?? null,
+        last_selection_run: lastSelection?.ran_at ?? null,
+        retelling_index_rows: archived.length === 0 ? 0 : "1 or more",
+        stalled_note: stalled.length ? stalled : undefined,
         published,
         waiting_on_josh: waiting.length ? waiting : ["nothing"],
         // Read these to him. They are the half of the system that cannot ask for attention.

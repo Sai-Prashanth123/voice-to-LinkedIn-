@@ -193,7 +193,7 @@ export async function markReady(
           why: draft.gate_passed === false
             ? `Draft ${draft.id} was rejected by the checks, so it cannot be approved. ` +
               `${draft.gate_reason ?? ""} Ask for a rewrite instead.`.trim()
-            : `Draft ${draft.id} has not been judged yet — run the eight checks first.`,
+            : `Draft ${draft.id} has not been judged yet — run the gate checks first.`,
         };
       }
       overAdvisory = String(draft.gate_reason ?? "")

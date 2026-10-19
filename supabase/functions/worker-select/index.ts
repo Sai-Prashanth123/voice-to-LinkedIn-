@@ -21,7 +21,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { admin, getSetting, logEvent } from "../_shared/db.ts";
 import { loadSecrets } from "../_shared/secrets.ts";
-import { checkRetelling, loadThresholds, type DedupResult } from "../_shared/dedup.ts";
+import { checkRetelling, dedupText, loadThresholds, type DedupResult } from "../_shared/dedup.ts";
 import { canSeeImages } from "../_shared/llm.ts";
 import { recordEditDiff } from "../_shared/outcome.ts";
 import { notice } from "../_shared/notices.ts";
@@ -328,19 +328,9 @@ async function shortlist(
   const ranked: Candidate[] = [];
 
   for (const s of top) {
-    const { data: mat } = await db
-      .from("material")
-      .select("the_moment, the_detail, the_realisation, the_lesson, their_actual_words")
-      .eq("moment_id", s.moment.id)
-      .maybeSingle();
-
-    const text = [
-      mat?.the_moment,
-      mat?.the_detail,
-      mat?.their_actual_words,
-      mat?.the_realisation,
-      mat?.the_lesson,
-    ].filter(Boolean).join(" ");
+    // Built by dedupText so the one-step path and this one cannot disagree about what represents
+    // a moment — the embedding cache is keyed on a hash of exactly this string.
+    const text = await dedupText(db, s.moment.id);
 
     if (text.trim().length === 0) continue; // nothing to write from, and nothing to compare
     ranked.push({ ...s, text });

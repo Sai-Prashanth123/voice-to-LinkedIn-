@@ -115,8 +115,13 @@ test("it refuses only the mechanical ones, and reports the arguable ones", () =>
   // Everything else travels back with the draft id rather than blocking it. A filler word is a
   // judgement — "delete it and read the sentence again" — and a check that cannot be overruled on
   // a judgement is one that will eventually be wrong with no way back.
-  assert.match(src, /ai_tells/, "the non-blocking findings are not returned to the caller");
-  assert.match(src, /ai_tells_mean/, "the findings come back with no explanation of their standing");
+  // READ OFF create_draft'S HANDLER, NOT THE FILE. These two assertions passed for weeks against
+  // a copy of this block that had been pasted into submit_candidates, where it threw a
+  // ReferenceError on every call and create_draft returned no tells at all. A source-text match
+  // cannot tell which function the text is in.
+  const createDraft = String(tools.find((t) => t.name === "create_draft").handler);
+  assert.match(createDraft, /ai_tells/, "the non-blocking findings are not returned to the caller");
+  assert.match(createDraft, /ai_tells_mean/, "the findings come back with no explanation of their standing");
 
   // The subset that blocks is the one already defined as "the construction is simply wrong".
   assert.ok(HIGH_CONFIDENCE.size > 0);
