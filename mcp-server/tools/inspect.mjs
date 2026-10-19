@@ -736,28 +736,37 @@ export const inspectTools = [
        * that can, and it is the half that matters most, because an empty archive means the
        * published-comparison side of 7.2 has nothing to compare against.
        */
-      const [lastClosed] = await rows(
+      /*
+       * JUDGED AND NEVER CLOSED is the symptom, and it is the one worth counting.
+       *
+       * The first version of this read "when was a verdict last recorded", which would have been
+       * reassuring and wrong: eight verdicts WERE recorded on 19 October, on two drafts, and both
+       * stayed unapproved because the ninth could not be. There is no decision timestamp on drafts
+       * to ask instead. So the question is asked the way it actually bites — a draft carrying
+       * verdicts whose gate_passed is still null is a draft someone judged and nobody can approve,
+       * whatever stopped it.
+       */
+      const openDrafts = await rows(db, "drafts?select=id&gate_passed=is.null");
+      const verdictRows = await rows(
         db,
-        "drafts?select=id,created_at&gate_passed=not.is.null&order=created_at.desc&limit=1",
+        "gate_runs?select=draft_id,created_at&order=created_at.desc&limit=2000",
       );
+      const judged = new Set(verdictRows.map((r) => r.draft_id));
+      const judgedNeverClosed = openDrafts.filter((d) => judged.has(d.id)).length;
+
       const [lastSelection] = await rows(
         db,
         "selection_runs?select=id,ran_at&order=ran_at.desc&limit=1",
       );
       const archived = await rows(db, "published_archive?select=id&limit=1");
 
-      const daysSince = (iso) =>
-        iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000) : null;
-      const closedDays = daysSince(lastClosed?.created_at);
-
       const stalled = [];
-      if (needGate > 0 && (closedDays === null || closedDays >= 2)) {
+      if (judgedNeverClosed > 0) {
         stalled.push(
-          lastClosed
-            ? `No draft has been given a verdict in ${closedDays} days, and ${needGate} are ` +
-              `waiting. A draft the gate never closes cannot be approved at all — mark_ready ` +
-              `refuses an unjudged draft in every mode.`
-            : "No draft has ever been given a verdict, so none of them can be approved.",
+          `${judgedNeverClosed} draft(s) carry gate verdicts and were never closed, so ` +
+            `gate_passed is still unset on them and mark_ready refuses an unjudged draft in ` +
+            `every mode. Either the run stopped part way, or something is stopping it from ` +
+            `finishing — read one of them back with get_gate_brief, which lists what is left.`,
         );
       }
       if (archived.length === 0) {
@@ -819,7 +828,8 @@ export const inspectTools = [
         // The same idea as framework_note, asked of the pipeline rather than of the structures:
         // what has quietly stopped? A dormant path announces itself here instead of waiting to be
         // stumbled over.
-        last_gate_verdict: lastClosed?.created_at ?? null,
+        last_verdict_recorded: verdictRows[0]?.created_at ?? null,
+        drafts_judged_but_never_closed: judgedNeverClosed,
         last_selection_run: lastSelection?.ran_at ?? null,
         retelling_index_rows: archived.length === 0 ? 0 : "1 or more",
         stalled_note: stalled.length ? stalled : undefined,

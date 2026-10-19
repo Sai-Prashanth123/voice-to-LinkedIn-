@@ -360,7 +360,7 @@ export async function finishGate(
       await notice(
         db,
         "draft_ready",
-        `A draft is in your calendar with ${failures.length} of 8 checks flagged: ` +
+        `A draft is in your calendar with ${failures.length} of ${GATE_CHECKS.length} checks flagged: ` +
           `${failures.map((f) => f.key).join(", ")}. It is yours to judge.`,
         { momentId, actedOn: ["list_calendar", "mark_ready", "hold_post"] },
       );

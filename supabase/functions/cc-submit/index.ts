@@ -47,6 +47,7 @@ import * as decisions from "./decisions.ts";
 import * as maintenance from "./maintenance.ts";
 import type { Body } from "./decisions.ts";
 import { finishGate } from "../_shared/handlers/gate.ts";
+import { GATE_CHECKS } from "../_shared/prompts.ts";
 import type { Claim } from "../_shared/claims.ts";
 import type { Extraction } from "../_shared/schemas.ts";
 import { applyCandidates, type Candidate, candidateRoom } from "../_shared/triage.ts";
@@ -809,9 +810,11 @@ async function fileDraft(db: SupabaseClient, body: DraftBody) {
         : "The claim ledger failed, so the checks were not run. It is back on next_work with the " +
           "failures attached — fix those claims against what he actually said."
       : filed.gateQueued
-      ? "Filed, and every claim traced. The server is running the eight checks now. If it is " +
+      ? `Filed, and every claim traced. The server is running the ${GATE_CHECKS.length} checks ` +
+        "now. If it is " +
         "rejected, it comes back to next_work with the reasons attached."
-      : "Filed, and every claim traced. The eight checks are waiting for you: call next_work and " +
+      : `Filed, and every claim traced. The ${GATE_CHECKS.length} checks are waiting for you: ` +
+        "call next_work and " +
         "it hands you this draft with its rubrics, in a fresh session.",
   });
 }
@@ -880,13 +883,15 @@ async function closeGate(db: SupabaseClient, body: Record<string, unknown>): Pro
   });
 
   const next = result.outcome === "incomplete"
-    ? `Only ${result.judged} of 8 checks have a verdict. Record the rest; nothing is decided until ` +
+    ? `Only ${result.judged} of ${GATE_CHECKS.length} checks have a verdict. Record the rest; nothing ` +
+      `is decided until ` +
       `every check has answered.`
     : result.outcome === "rejected"
     ? `Rejected by ${result.failed.join(", ")}. The rewrite is queued with the reasons attached — ` +
       `call next_work. After three failed attempts the idea parks instead (9.8).`
     : result.outcome === "advisory"
-    ? `${result.failed.length} of 8 checks flagged it: ${result.failed.join(", ")}. The post is in ` +
+    ? `${result.failed.length} of ${GATE_CHECKS.length} checks flagged it: ` +
+      `${result.failed.join(", ")}. The post is in ` +
       `his calendar and the decision is his. Read him the post in full first, then say which ` +
       `checks flagged it and what each one said — in one line each, not a lecture. Do not talk him ` +
       `into it and do not talk him out of it. If he wants it changed, edit_post or ` +

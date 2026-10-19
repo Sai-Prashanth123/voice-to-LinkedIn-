@@ -105,3 +105,40 @@ test("the arguable AI tells are attached by the tool that scanned the body", () 
     );
   }
 });
+
+test("no message tells Josh the gate has a number of checks it no longer has", () => {
+  /*
+   * The enum was not the only place the count was written down. Three messages he actually reads
+   * still said eight after the ninth check landed: "Only N of 8 checks have a verdict", "N of 8
+   * checks flagged it", and the calendar notice. A count in prose drifts exactly the way a count in
+   * a schema does, and it is worse, because it is the sentence he is reading when he decides
+   * whether to trust the thing.
+   *
+   * Comment lines are dropped before reading. "judged on six of eight checks" in write.mjs is the
+   * record of a real bug from September and must stay exactly as it is; what matters here is what
+   * the code says OUT LOUD, so only the lines that can reach him are checked.
+   */
+  const files = [
+    "../supabase/functions/cc-submit/index.ts",
+    "../supabase/functions/_shared/handlers/gate.ts",
+    "../supabase/functions/_shared/approve.ts",
+    "./tools/write.mjs",
+    "./tools/brief.mjs",
+  ];
+
+  const isComment = (line) => /^\s*(\/\/|\*|\/\*)/.test(line);
+
+  for (const f of files) {
+    const code = readFileSync(new URL(f, import.meta.url), "utf8")
+      .split(/\r?\n/)
+      .filter((line) => !isComment(line))
+      .join(" ");
+
+    for (const bad of ["of 8 checks", "of eight checks", "run the eight checks"]) {
+      assert.ok(
+        !code.includes(bad),
+        `${f} reports the gate size as a literal ("${bad}"). Count from GATE_CHECKS.length.`,
+      );
+    }
+  }
+});
