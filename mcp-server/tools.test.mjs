@@ -419,6 +419,34 @@ test("propose_library_change refuses an immutable section", async () => {
   );
 });
 
+/*
+ * A DECISION HE CANNOT READ IS NOT A DECISION.
+ *
+ * list_proposals omitted proposed_body on purpose — twenty whole sections would bury the claims —
+ * but the result was that Josh had no route to the text at all. On 19 October he asked for the
+ * wording of proposal 14 after it had been open for five days: "I can see the reasoning but not the
+ * text." So the body is behind a flag now, and body_chars always says one exists.
+ */
+test("list_proposals tells him a body exists and hands it over when asked", async () => {
+  const slim = await call("list_proposals", { limit: 3 });
+  assert.ok(slim.proposals.length > 0, "there is a proposal on file to read");
+
+  for (const p of slim.proposals) {
+    assert.equal(p.proposed_body, undefined, "the body is not in the list by default");
+    assert.equal(typeof p.body_chars, "number", "but its size always is");
+    assert.ok(p.body_chars > 0, "a proposal with no body would be a proposal with nothing to apply");
+  }
+
+  const full = await call("list_proposals", { limit: 1, include_body: true });
+  const one = full.proposals[0];
+  assert.equal(typeof one.proposed_body, "string");
+  assert.equal(
+    one.proposed_body.length,
+    one.body_chars,
+    "body_chars is the size of the text he would be approving, not an estimate of it",
+  );
+});
+
 // ── The scope itself, read from the database rather than assumed ──────────────────────────────
 
 test("the role cannot do more than it should", async () => {

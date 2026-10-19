@@ -40,6 +40,14 @@ back. He asked for this on 13 October and only he turns it off.
 
 **interviewed** — the path below, as the specification describes it.
 
+The writing stage is **ordered, and enforced** by a hook in `.claude/settings.json`. If a call comes
+back refused, read the reason: it is naming the step that has not happened yet, not objecting to the
+post. It also refuses a read of `data/josh/` while a post is in progress — fetch the standard with
+`get_voice_brief`, because the library wins where the two differ and the files carry no version to
+say when they disagree. The hook runs only in a clone of this repo, never on the hosted connector,
+and it fails open: it is a sequence, not a safeguard. The rules that must never fail open live in
+Postgres.
+
 ## What you can do
 
 | He says | You call |

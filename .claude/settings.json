@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__content-system(-remote)?__(start_post|write_post|create_draft|capture_thought)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/writing-order.mjs pre",
+            "timeout": 10,
+            "statusMessage": "Checking the writing order"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/writing-order.mjs pre",
+            "timeout": 10,
+            "statusMessage": "Checking the writing order"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__content-system(-remote)?__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/writing-order.mjs post",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/writing-order.mjs stop",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

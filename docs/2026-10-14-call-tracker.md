@@ -141,3 +141,58 @@ neither is code, and both have been waiting since September.
 3. Chase the Matt Barker course material from the kickoff.
 4. Tell him to `git pull`.
 5. Own the two that are ours: the line breaks, and the month the Sentinels sat still.
+
+---
+
+## 9. His 19 October email, and what it turned up
+
+He pulled the latest, read the proposals screen, and raised four things. Three faults behind them
+were ours.
+
+| # | What he asked | Status |
+|---|---|---|
+| 1 | Send the actual wording of proposal 14 | **DONE.** `list_proposals` never returned `proposed_body` — the omission was deliberate and commented, and the effect was that a 2,713-char rewrite of his section waited on him for five days with no route to its text. `include_body` added; `body_chars` always returned. Deployed, so it reaches the connector too. |
+| 2 | Narrow the ban to the wording | **PROPOSAL 16, open.** Narrowed by *attribution* instead: a belief may open a post when someone identifiable in the scene held it; the ownerless form stays banned. He should decide knowing the rule was written against the construction, not the phrasing, and says so in its own text. The whole 7,967-char section refiled with one 790-char block inserted — head and tail byte-identical, built programmatically rather than retyped. |
+| 3 | Keep all three structures, add the measured patterns on top | **PROPOSAL 15, open.** Supersedes 11, 13 and 14. 14 was the right measurement in the wrong body: it deleted the three structures and told the writer "Do not open by naming what the reader believes", the opposite of what he wants kept. |
+| 4 | Keep clause 9.3 so variety is visible | **DONE and it proves his point.** See below. |
+
+### What the 9.3 column had been recording all along
+
+Nobody had ever read it. The answer was waiting:
+
+- **19 of the 20 drafts since 1 October used "What, why, how."** One used "problem, agitate, solve".
+  **Zero** used the third structure.
+- **"Hook, frame, insight, lesson" has been used 3 times ever** — all on 8 September, never since.
+  That is the structure whose frame step collides with `banned_phrases`. A structure that fights the
+  gate is one the drafter stops picking, so the contradiction he spotted had already cost him a
+  third of his options.
+- **11 distinct values all time**, including **20 drafts under "The scene"**, which is not in his
+  library, plus two spellings of "what, why, how" and two of "problem, agitate, solve" — one
+  carrying a U+2011 non-breaking hyphen, so any variety count was wrong by construction.
+- **Our tool invited the drift**: `create_draft`'s `framework` help said *"e.g. 'story-lesson'"*, a
+  name from outside his library. Now it points at the frameworks section.
+
+Shipped with it: the value is normalised on write, an unrecognised framework is flagged when the
+draft is filed (advisory, never blocking, and the names are read from the live section so it follows
+him when he changes it), and `system_status` reports the mix.
+
+### Hooks on the writing stage
+
+P3 from the call — the session skipping steps it had been told to take — is now a gate rather than
+advice. `.claude/settings.json` (new, committed; the only settings file before this was gitignored)
+plus `.claude/hooks/writing-order.mjs`. It refuses `write_post` without `start_post` for that idea,
+`create_draft` without `write_post` and a brief, any writing tool before `system_status`, and a read
+of `data/josh/` while a post is in progress. A `Stop` hook catches a draft that never reached the
+gate, once per draft.
+
+Two things to keep saying out loud: **it is local only** — no effect through the connector — and it
+**fails open** by design. Publishing, deleting and direct writes stay enforced in Postgres and
+`cc-submit`. 18 tests cover it and the 9.3 normalisation (`hooks.test.mjs`, `frameworks.test.mjs`).
+
+### Still his
+
+Proposals 15 and 16 together, and explicit rejections on 11, 13 and 14 — approving two would apply
+one over the other and he would never see that he had undone his own decision. Plus everything in
+section 6 that has not moved: the recording, one marked-up draft, the Barker material, LinkedIn,
+and a `git pull`, which this change needs more than the last one did because the hooks are read off
+his disk.

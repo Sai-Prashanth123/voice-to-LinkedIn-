@@ -34,6 +34,8 @@ import { similarity } from "../../supabase/functions/_shared/diff.ts";
 // less than the first attempt was.
 import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
 import { isSupplied } from "../../supabase/functions/_shared/views.ts";
+// 9.3 — the recorded framework, compared on a key so one structure spelled two ways counts once.
+import { frameworkMix } from "../frameworks.mjs";
 import { modeName, oneStepMode } from "../mode.mjs";
 
 /** PostgREST returns rows; a missing table returns a permission error, which is the useful answer. */
@@ -328,12 +330,17 @@ export const inspectTools = [
           .describe("Filter by decision. Omit for all."),
         section_key: z.string().optional().describe("Only proposals against this library section"),
         limit: z.number().int().min(1).max(100).optional().describe("Default 20"),
+        include_body: z.boolean().optional()
+          .describe(
+            "Return the full proposed text of each section. Default false. Ask for it with one " +
+            "proposal in view — it is what Josh is deciding, so read it to him before he decides.",
+          ),
       },
     },
     async handler(args, { db }) {
       const q = new URLSearchParams({
         select: "id,section_key,claim,evidence,status,decided_at,decided_reason," +
-          "applied_library_version,applied_section_version,created_at",
+          "applied_library_version,applied_section_version,created_at,proposed_body",
         order: "id.desc",
         limit: String(args.limit ?? 20),
       });
@@ -342,9 +349,15 @@ export const inspectTools = [
 
       const data = await rows(db, "library_proposals?" + q);
 
-      // The proposed body is deliberately not returned in the list. It is a whole section — often
-      // several thousand characters — and returning twenty of them would bury the claims that are
-      // the point of reading this at all.
+      /*
+       * THE BODY IS BEHIND A FLAG, NOT ABSENT. The original reasoning still holds — a body is a
+       * whole section, often several thousand characters, and twenty of them would bury the claims
+       * that are the point of reading this at all. But omitting it entirely meant Josh had no route
+       * to the text at all: on 19 October he asked for the wording of proposal 14 and said "I can
+       * see the reasoning but not the text", after it had sat open for five days. A decision he
+       * cannot read is not a decision. So `body_chars` always says a body exists and how big it is,
+       * and `include_body` returns it.
+       */
       /*
        * TWO OPEN PROPOSALS AGAINST ONE SECTION ARE A SILENT OVERWRITE.
        *
@@ -360,21 +373,38 @@ export const inspectTools = [
        * is to hand him the collision: newest first, so `supersedes` points back at what the newer
        * one would overwrite, and he can reject the older one himself in one step.
        */
+      /*
+       * Counted from the open proposals themselves, not from the page above. Asked with limit 2 on
+       * 19 October this warned about "2 open proposals" against `frameworks` when there were four —
+       * a collision understated by the size of the page is exactly the kind of quiet wrongness the
+       * warning exists to prevent. Ids and keys only, so this stays one cheap request.
+       */
+      const openRows = await rows(
+        db,
+        "library_proposals?select=id,section_key&status=eq.open&order=id.desc&limit=200",
+      );
       const openBySection = new Map();
-      for (const p of data) {
-        if (p.status !== "open") continue;
+      for (const p of openRows) {
         if (!openBySection.has(p.section_key)) openBySection.set(p.section_key, []);
         openBySection.get(p.section_key).push(p.id);
       }
 
-      const collisions = [...openBySection.entries()].filter(([, ids]) => ids.length > 1);
+      // Only for sections the caller is actually looking at. The counts come from every open
+      // proposal; the warnings do not, or asking about `hooks` would report a collision on
+      // `frameworks` that has nothing to do with the question.
+      const onThePage = new Set(data.map((p) => p.section_key));
+      const collisions = [...openBySection.entries()]
+        .filter(([section, ids]) => ids.length > 1 && onThePage.has(section));
 
       return {
-        proposals: data.map((p) => {
+        proposals: data.map((row) => {
+          const { proposed_body: body, ...p } = row;
           const siblings = (openBySection.get(p.section_key) ?? []).filter((id) => id !== p.id);
           return {
             ...p,
             claim: p.claim,
+            body_chars: (body ?? "").length,
+            ...(args.include_body ? { proposed_body: body } : {}),
             evidence_kind: p.evidence?.kind ?? (p.evidence?.post_ids ? "post_ids" : "other"),
             evidence_summary: p.evidence?.post_ids
               ? p.evidence.post_ids.length + " post(s) cited"
@@ -402,7 +432,9 @@ export const inspectTools = [
           : {}),
         note: "A proposal changes nothing until Josh approves it (12.10). 'reverted' means he " +
           "approved it, the posts got worse, and he rolled it back — treat that as a stronger " +
-          "rejection than 'rejected'.",
+          "rejection than 'rejected'. Call this again with include_body before he decides: " +
+          "body_chars is the size of the text that would replace the section, and he should hear " +
+          "the text, not a summary of it.",
       };
     },
   },
@@ -657,6 +689,28 @@ export const inspectTools = [
         "library_versions?select=version&order=version.desc&limit=1",
       );
 
+      /*
+       * IS HE ACTUALLY VARYING THE STRUCTURE? Clause 9.3 has the drafter record which framework it
+       * used so that it "can be reviewed", and for seven weeks nothing reviewed it. Josh asked to
+       * keep 9.3 on 19 October in those words — "it's how we'll see whether posts are actually
+       * varying" — and the column had the answer waiting: 19 of the 20 drafts since 1 October used
+       * one structure. That is the thing he is worried about, stated in his own data, and it needed
+       * no new measurement, only a read.
+       *
+       * The window is the last twenty, not all time: the question is what the system is doing now,
+       * and an all-time count would bury a month of monotony under the variety of August.
+       */
+      const recentDrafts = await rows(
+        db,
+        "drafts?select=framework,created_at&framework=not.eq.acceptance-fixture" +
+          "&order=created_at.desc&limit=20",
+      );
+      const mix = frameworkMix(
+        recentDrafts,
+        sections.find((s) => s.key === "frameworks")?.body,
+      );
+      const strangers = mix.filter((m) => m.in_library === false);
+
       return {
         reading_from: {
           // No regex: the project ref is the first label of the host. A hand-written escape in this
@@ -689,6 +743,23 @@ export const inspectTools = [
         library: `${sections.length - empty.length} of ${sections.length} sections filled in`,
         idea_bank: { ready_to_draft: mined, awaiting_interview: halfMined, just_arrived: captured },
         drafts_written: needGate,
+        // 9.3, read back. One line he can act on: if one structure holds most of the window, the
+        // variety he asked for is not happening, whatever the library says is available.
+        framework_mix: mix.length ? mix : undefined,
+        framework_note: mix.length === 0
+          ? undefined
+          : (() => {
+            const top = mix[0];
+            const total = mix.reduce((n, m) => n + m.used, 0);
+            const lead = top.used >= Math.ceil(total * 0.7)
+              ? `${top.used} of the last ${total} drafts used "${top.framework}" — the structure ` +
+                `is barely varying.`
+              : `${mix.length} structure(s) across the last ${total} drafts.`;
+            return strangers.length
+              ? `${lead} ${strangers.length} value(s) are not named in his frameworks section: ` +
+                `${strangers.map((s) => `"${s.framework}"`).join(", ")}.`
+              : lead;
+          })(),
         published,
         waiting_on_josh: waiting.length ? waiting : ["nothing"],
         // Read these to him. They are the half of the system that cannot ask for attention.

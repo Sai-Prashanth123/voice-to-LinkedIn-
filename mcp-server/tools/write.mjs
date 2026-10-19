@@ -51,6 +51,8 @@ import { verifyDraft } from "../../supabase/functions/_shared/claims.ts";
 import { CLAIMABLE_FIELDS, sourceEntry } from "../../supabase/functions/_shared/entry.ts";
 import { writingSources } from "../sources.mjs";
 import { HIGH_CONFIDENCE, scan } from "../aitells.mjs";
+// 9.3 — the recorded framework, normalised on the way in and checked against his own section.
+import { isNamedFramework, namedFrameworks, tidyFramework } from "../frameworks.mjs";
 
 /**
  * THE LEDGER SHAPE, WHICH IS NOT NEGOTIABLE AND USED TO BE
@@ -180,7 +182,12 @@ export const writeTools = [
         body: z.string().min(1).describe("The post itself, as it would appear on LinkedIn"),
         hook: z.string().optional().describe("The opening line, if it is worth naming separately"),
         framework: z.string().min(1)
-          .describe("The shape used, e.g. 'story-lesson'. Never 'acceptance-fixture'."),
+          .describe(
+            "Which body framework from the library you used, named as the frameworks section " +
+            "names it. Not a description you invent: get_drafting_brief carries the section, and " +
+            "9.3 records this so Josh can see whether the structure is varying. Never " +
+            "'acceptance-fixture'.",
+          ),
         claims: z.array(CLAIM)
           .describe("Every factual claim in the body, each with its verbatim source span"),
         model: z.string().optional().describe("What wrote it. Defaults to claude-code."),
@@ -203,11 +210,17 @@ export const writeTools = [
 
       // Reserved for the acceptance harness, which counts drafts and must be able to exclude its
       // own fixtures. A real draft carrying this label would corrupt component test 8.
-      if (args.framework === "acceptance-fixture") {
+      // Tidied first, so the reservation cannot be walked past with a trailing space, and so that
+      // one structure spelled two ways does not count as two when 9.3 is read back.
+      const framework = tidyFramework(args.framework);
+      if (framework.toLowerCase() === "acceptance-fixture") {
         throw new Error(
           "'acceptance-fixture' is reserved for the acceptance harness. Use the name of the " +
           "shape the post actually uses.",
         );
+      }
+      if (!framework) {
+        throw new Error("A draft has to record which framework it used (9.3).");
       }
 
       // The whole list, not just the uncleared half: verifyDraft below is handed every real name
@@ -324,7 +337,7 @@ export const writeTools = [
           moment_id: args.moment_id,
           body: args.body,
           hook: args.hook ?? "",
-          framework: args.framework,
+          framework,
           claims: args.claims,
           model: args.model ?? "claude-code",
         }),
@@ -335,7 +348,39 @@ export const writeTools = [
         throw new Error(filed.next ? `${detail}\n\n${filed.next}` : detail);
       }
 
-      return { ...filed, name: moment.title ?? null };
+      /*
+       * 9.3, SAID OUT LOUD WHEN IT IS WRONG — AND NOT ENFORCED.
+       *
+       * The draft is already filed above, deliberately. A framework name outside his library is a
+       * labelling mistake, not a reason to throw away a post that passed the claim ledger; and the
+       * advisory decision of 13 October covers this for the same reason it covers the gate. The
+       * names are read from the live section rather than listed here, so the day Josh approves a
+       * rewrite of `frameworks` this check follows him with no deploy.
+       *
+       * What it catches: 20 of 49 drafts were filed under "The scene", which has never been one of
+       * his structures, and nothing said a word.
+       */
+      let frameworkNote;
+      try {
+        const [section] = await db.select("library_sections", {
+          select: "body",
+          key: "eq.frameworks",
+          limit: 1,
+        });
+        const named = namedFrameworks(section?.body);
+        if (named.length > 0 && !isNamedFramework(framework, section?.body)) {
+          frameworkNote =
+            `Filed, but "${framework}" is not one of the frameworks his library names. His are: ` +
+            `${named.map((n) => `"${n}"`).join(", ")}. 9.3 records this so he can see whether the ` +
+            `structure is varying, and a name from outside the section makes that unreadable — ` +
+            `use one of his, or tell him the section is missing a structure he wants.`;
+        }
+      } catch {
+        // A section read that fails must not turn a filed draft into an error. The note is a
+        // courtesy; the draft is the work.
+      }
+
+      return { ...filed, name: moment.title ?? null, framework, framework_note: frameworkNote };
     },
   },
 
