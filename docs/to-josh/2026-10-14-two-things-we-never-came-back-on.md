@@ -39,7 +39,8 @@ drafts keep failing it.
 Fifteen minutes is plenty. The useful shape is you making a case for something you'd argue with
 someone about, not answering questions — an unfiltered opinion, where the hedging and the
 self-interruption come through. That's what transfers. Send audio or a transcript, whichever is
-less work.
+less work for you — if it's audio we'll type it up this end, so don't let the transcript be the
+thing that holds it up.
 
 ---
 
@@ -54,3 +55,17 @@ actually holding the quality back, neither of which is code.
 Not the three decisions that override the call, and not the `git pull`. Those are a different
 conversation — one is us asking him to confirm something, this is us asking him for something. Mixing
 them gives him four tasks and he will do the smallest.
+
+## Why the recording ask says we will type it up
+
+Checked on 19 October: nothing can ingest an audio file. The Telegram bot was the only thing that
+ever did, and it went on 9 October. `library_recordings` now has no reader and no writer anywhere in
+the codebase, and the two rows in it are eleven seconds of someone saying "hello" and a note about
+an AWS outage. `raw_inputs` still carries the eight voice notes from that era, but the only insert
+left writes text, and the `raw_inputs_voice_keeps_audio` constraint requires an `audio_path` that
+nothing supplies — so a voice input cannot be stored on the current path at all.
+
+The route is therefore: he sends a file, a person transcribes it, `append_voice_transcript` takes
+the text. That is fine for one fifteen-minute recording and building a pipeline for it would be the
+wrong shape. But asking him for audio while implying it lands automatically would be asking for
+something we cannot process, so the sentence says who does the typing.
