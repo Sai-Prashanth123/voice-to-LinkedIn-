@@ -195,13 +195,51 @@ if (!APPLY) {
 
 const { url, key } = credentials();
 
-// Upsert on the activity id, in batches: a re-run after a fresh scrape updates the same rows and adds
-// only what is new, so this is safe to run as often as he likes.
+/*
+ * NEVER REGRESS A SHAPED ROW TO A FLAT ONE.
+ *
+ * The upsert below merges duplicates on activity_id, and 0046 revokes DELETE from every role. So a
+ * flat copy of a post we already hold with its line breaks would null six columns — paragraphs,
+ * above_fold_words, opening_words, opening_shape, close_shape, uses_list — with no way back. The
+ * console strips line breaks on every LinkedIn post it returns (platform bug 5), so this is not a
+ * hypothetical: one `--via console` run over an Apify harvest destroys the shape of the whole
+ * corpus, silently, and reports success.
+ *
+ * Dropping the row is the right move rather than merging columns. The text is identical either way;
+ * the only thing the flat copy could add is a fresher reaction count, which is not worth the risk of
+ * getting the merge wrong.
+ */
+const ids = rows.map((r) => r.activity_id);
+const shapedAlready = new Set();
+for (let i = 0; i < ids.length; i += 200) {
+  const inList = ids.slice(i, i + 200).map((s) => `"${s.replace(/"/g, '\\"')}"`).join(",");
+  const res = await fetch(
+    `${url}/rest/v1/reference_writer_posts?select=activity_id&has_line_breaks=is.true&activity_id=in.(${encodeURIComponent(inList)})`,
+    { headers: { apikey: key, Authorization: `Bearer ${key}` } },
+  );
+  if (!res.ok) {
+    console.error(`\n  could not read what is already stored: ${res.status} ${await res.text()}`);
+    console.error("  Refusing to upsert blind — a flat row over a shaped one cannot be undone.");
+    process.exit(1);
+  }
+  for (const r of await res.json()) shapedAlready.add(r.activity_id);
+}
+
+const wouldRegress = rows.filter((r) => !r.has_line_breaks && shapedAlready.has(r.activity_id));
+const toStore = rows.filter((r) => !(!r.has_line_breaks && shapedAlready.has(r.activity_id)));
+
+if (wouldRegress.length) {
+  console.log(
+    `\n  ${wouldRegress.length} post(s) arrived flat that we already hold with their line breaks. ` +
+      `Skipped, so the shape columns survive.`,
+  );
+}
+
 const BATCH = 100;
 let stored = 0;
 
-for (let i = 0; i < rows.length; i += BATCH) {
-  const chunk = rows.slice(i, i + BATCH);
+for (let i = 0; i < toStore.length; i += BATCH) {
+  const chunk = toStore.slice(i, i + BATCH);
   const res = await fetch(`${url}/rest/v1/reference_writer_posts?on_conflict=activity_id`, {
     method: "POST",
     headers: {
@@ -218,7 +256,7 @@ for (let i = 0; i < rows.length; i += BATCH) {
     process.exit(1);
   }
   stored += chunk.length;
-  process.stdout.write(`\r  stored ${stored}/${rows.length}`);
+  process.stdout.write(`\r  stored ${stored}/${toStore.length}`);
 }
 
 console.log(`\n\n  Done. Josh can read these with get_reference_posts.`);

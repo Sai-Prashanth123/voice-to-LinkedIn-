@@ -26,12 +26,16 @@ Report the number, then the draft's number, then nothing. Do not soften a gap an
 one. "Your turn lands at 0.71; across the eight the median is 0.23 and Barker's is 0.10" is the
 whole finding — whether that matters is Josh's call, and he is better at it than you are.
 
-**Two of Barker's signature moves are ruled out on purpose.** Do not recommend either:
+**One of Barker's signature moves is ruled out on purpose.** Do not recommend it:
 
 - His turn that renames the reader's problem is the construction `banned_phrases` forbids.
-- He closes on an ask in nearly every post. Josh's rule rations that to one in five.
 
-A draft that scores badly *because* it avoids those two is correct. Say so.
+A draft that scores badly *because* it avoids that is correct. Say so.
+
+This listed a second until 20 October — that he closes on an ask in nearly every post. It was read
+off six of his posts and it was backwards. Across 241 he asks 9% of the time, against 17% for the
+other seven and the 20% Josh's rule allows. **Do not tell him his closing habit is one to avoid.**
+The habit those six actually showed was a postscript, on one post in five.
 
 ## Steps
 

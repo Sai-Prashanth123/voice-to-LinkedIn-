@@ -289,7 +289,24 @@ function credentials() {
 
 /* ── Main ─────────────────────────────────────────────────────────────────── */
 
-const posts = JSON.parse(readFileSync(postsPath, "utf8"));
+/*
+ * Three shapes, because three things produce this file and only one of them was ever fed to this
+ * script. `scrape-sentinels.mjs` writes `{fetched_at, source, shape_measurable, posts}`; a raw Apify
+ * dump is `{items}`; the hand-exported 5 October seed is a bare array. Passing the first of those
+ * threw `posts is not iterable` on the first attempt, 20 October — the two scripts are printed as
+ * consecutive steps in each other's "next:" output and had never been run in that order.
+ */
+const raw = JSON.parse(readFileSync(postsPath, "utf8"));
+const posts = Array.isArray(raw) ? raw : (raw.posts ?? raw.items ?? null);
+if (!Array.isArray(posts)) {
+  console.error(`  ${postsPath} holds no post array (looked for a bare array, .posts and .items).`);
+  process.exit(2);
+}
+if (raw.shape_measurable === false) {
+  console.error("  That scrape came back with its line breaks stripped, so every paragraph-wise");
+  console.error("  measurement in it would be an artefact of the scraper. Refusing to measure it.");
+  process.exit(2);
+}
 const next = measure(posts);
 
 mkdirSync(DIR, { recursive: true });

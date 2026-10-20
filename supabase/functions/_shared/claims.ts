@@ -15,9 +15,12 @@
  *   1. every number in the draft must appear somewhere in the source entry
  *   2. every double-quoted string in the draft must appear in the source entry
  *   3. no uncleared name may appear (9.10)
+ *   4. no run of words may be one of the reference writers' (8.3), when the index is supplied
  *
  * Pure functions, no I/O, no model calls. Runs in Deno (Edge Functions) and Node.
  */
+
+import { borrowedRuns } from "./shingles.ts";
 
 export type ClaimKind = "quote" | "number" | "name" | "event" | "detail";
 
@@ -51,6 +54,11 @@ export interface VerificationResult {
   unsourcedNumbers: string[];
   unsourcedQuotes: string[];
   unclearedNames: string[];
+  /**
+   * Runs of words in this draft that appear verbatim in a reference writer's post (8.3).
+   * Taken from the draft, so a refusal names only what the caller already submitted.
+   */
+  borrowedPhrases: string[];
   /** Plain-language failures, suitable for the gate's rejection reason (9.8). */
   failures: string[];
 }
@@ -268,12 +276,16 @@ function verifyOne(claim: Claim, entry: SourceEntry): ClaimVerdict {
  * @param claims    the ledger the drafter emitted
  * @param entry     the idea bank entry fields the drafter was given
  * @param names     per-moment name clearance (9.10)
+ * @param referenceShingles hashed word-runs from the eight reference writers (8.3), or null when
+ *   the index is not loaded. PASSED IN, never fetched: this module is pure and dual-runtime, and
+ *   reaching for a database here would be the thing that stops it running in both.
  */
 export function verifyDraft(
   draftBody: string,
   claims: Claim[],
   entry: SourceEntry,
   names: NameClearance[] = [],
+  referenceShingles: Set<string> | null = null,
 ): VerificationResult {
   const verdicts = claims.map((c) => verifyOne(c, entry));
   const haystack = normalise(concatSources(entry));
@@ -291,6 +303,8 @@ export function verifyDraft(
     .filter((n) => n.name.trim().length > 0)
     .filter((n) => draftNormalised.includes(normalise(n.name)))
     .map((n) => n.name);
+
+  const borrowedPhrases = borrowedRuns(draftBody, referenceShingles);
 
   const failures: string[] = [];
   for (const v of verdicts) {
@@ -313,6 +327,14 @@ export function verifyDraft(
       `The draft names ${unclearedNames.join(", ")} without clearance for this post (9.10).`,
     );
   }
+  if (borrowedPhrases.length > 0) {
+    failures.push(
+      `The draft reuses ${borrowedPhrases.map((p) => `"${p}"`).join(", ")} — ` +
+        `${borrowedPhrases.length === 1 ? "a run" : "runs"} of words that ` +
+        `${borrowedPhrases.length === 1 ? "appears" : "appear"} verbatim in a reference writer's ` +
+        `post. Take the shape, never the words (8.3): rewrite the idea in Josh's own.`,
+    );
+  }
 
   return {
     ok: failures.length === 0,
@@ -320,6 +342,7 @@ export function verifyDraft(
     unsourcedNumbers,
     unsourcedQuotes,
     unclearedNames,
+    borrowedPhrases,
     failures,
   };
 }

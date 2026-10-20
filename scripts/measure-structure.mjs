@@ -162,22 +162,35 @@ function credentials() {
   return { url: url.replace(/\/+$/, ""), key };
 }
 
+/*
+ * Paged, because a fixed limit here does not fail — it narrows the corpus and reports the narrower
+ * number as the finding. On 20 October the limit of 1000 ordered by handle returned four of the
+ * eight writers and printed "1000 posts, 4 writer(s)" as though that were the whole of it. Ordering
+ * by handle made it worse than a random slice: it dropped the last four alphabetically, every time.
+ */
 async function fetchPosts() {
   const { url, key } = credentials();
-  const q = new URLSearchParams({
-    select: "handle,author_name,text,has_line_breaks,words",
-    order: "handle",
-    limit: "1000",
-  });
-  if (only) q.set("handle", `eq.${only}`);
-  const res = await fetch(`${url}/rest/v1/reference_writer_posts?${q}`, {
-    headers: { apikey: key, authorization: `Bearer ${key}` },
-  });
-  if (!res.ok) {
-    console.error(`  Could not read the corpus: ${res.status} ${await res.text()}`);
-    process.exit(1);
+  const PAGE = 1000;
+  const all = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const q = new URLSearchParams({
+      select: "handle,author_name,text,has_line_breaks,words,uses_list",
+      order: "handle,activity_id",
+      limit: String(PAGE),
+      offset: String(offset),
+    });
+    if (only) q.set("handle", `eq.${only}`);
+    const res = await fetch(`${url}/rest/v1/reference_writer_posts?${q}`, {
+      headers: { apikey: key, authorization: `Bearer ${key}` },
+    });
+    if (!res.ok) {
+      console.error(`  Could not read the corpus: ${res.status} ${await res.text()}`);
+      process.exit(1);
+    }
+    const page = await res.json();
+    all.push(...page);
+    if (page.length < PAGE) return all;
   }
-  return res.json();
 }
 
 /* ── Main ─────────────────────────────────────────────────────────────────── */
@@ -197,6 +210,8 @@ const rows = posts.map((p) => {
     close_words: s.length ? words(s[s.length - 1]) : null,
     turn: turnAt(s),
     enumerates: enumerates(p.text),
+    // Counted at load time from the line breaks themselves, null where there were none.
+    uses_list: p.uses_list,
   };
 });
 
@@ -226,11 +241,35 @@ console.log(`    last third    (0.66–1.00)    ${band(0.66, 1.01)}`);
 
 console.log(`\n    median sentences per post:   ${median(rows.map((r) => r.sentences))}`);
 
+/*
+ * GROUND TRUTH WHERE IT EXISTS, THE DETECTOR ONLY WHERE IT DOES NOT.
+ *
+ * The marker detector was written when 105 of 156 posts arrived flat and `uses_list` was null for
+ * two thirds of the corpus. After the Apify backend first ran on 20 October that is inverted: 1,839
+ * of 1,900 posts kept their line breaks, so `uses_list` is counted rather than inferred for 97% of
+ * them and the detector is needed for the remaining 61.
+ *
+ * Recalibrating it against all 1,839 also showed the original figure was flattering. Measured on 51
+ * posts it read 90%; measured on 1,839 it is 83.8% — recall 94.3%, precision 81.4%, so it finds
+ * nearly every list and calls 236 things lists that are not.
+ *
+ * The error is not a constant offset. Across the whole corpus the inferred rate runs above the
+ * counted one; for Matt Barker it runs 11 points BELOW it (54% against 65%), because his lists are
+ * often plain line-broken clauses with no dash or digit for a marker to find. So the two numbers
+ * must never be swapped for one another, and the counted one is the one to publish.
+ */
 const enumerated = rows.filter((r) => r.enumerates).length;
-console.log(`\n  DOES IT ENUMERATE  (surviving list markers)\n`);
-console.log(`    posts with a list             ${enumerated}  ${pct(enumerated, rows.length)}`);
-console.log(`    calibration: 46 of 51 correct where line breaks survived —`);
-console.log(`    recall 20/21, precision 20/24. Quote the rate with that error attached.\n`);
+const truth = rows.filter((r) => r.uses_list === true || r.uses_list === false);
+const truthLists = truth.filter((r) => r.uses_list === true).length;
+
+console.log(`\n  DOES IT ENUMERATE\n`);
+if (truth.length) {
+  console.log(`    counted, line breaks intact   ${truthLists}  ${pct(truthLists, truth.length)}   (${truth.length} posts)`);
+}
+console.log(`    inferred from markers, all    ${enumerated}  ${pct(enumerated, rows.length)}   (${rows.length} posts)`);
+console.log(`    the detector agrees with the count on 83.8% of the corpus — recall 94.3%, precision 81.4%.`);
+console.log(`    It disagrees in both directions and by different amounts per writer, so the two rates`);
+console.log(`    above are not interchangeable. Quote the counted one; the inferred one covers the rest.\n`);
 
 if (!only) {
   console.log(`  PER WRITER\n`);

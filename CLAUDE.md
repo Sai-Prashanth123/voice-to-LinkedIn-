@@ -87,10 +87,14 @@ He chose eight for their storytelling structure — Matt Barker most of all. You
 run of words from one of them could be recognised in something of his, it has been used wrongly.
 
 Matt Barker is not a peer reference: he is where Josh's own rules came from. A draft that agrees with
-Matt proves nothing about Josh's voice, and his cadence is the one most likely to leak. Two of his
-signature moves are ruled out on purpose — his turn that renames the reader's problem is the exact
-construction Josh's banned-phrases list forbids, and he closes on an ask in nearly every post where
-Josh's rule rations that to one in five.
+Matt proves nothing about Josh's voice, and his cadence is the one most likely to leak. **One** of his
+signature moves is ruled out on purpose: his turn that renames the reader's problem is the exact
+construction Josh's banned-phrases list forbids.
+
+This said two until 20 October. The second was that he closes on an ask in nearly every post — read
+off six of his posts, and wrong. Measured across 241 he closes on an ask 9% of the time, against 17%
+for the other seven and the 20% Josh's own rule allows. He is the most restrained closer of the
+eight. What the six showed was his postscript habit: one post in five, where nobody else passes 4%.
 
 ## His voice
 

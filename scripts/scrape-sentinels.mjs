@@ -74,6 +74,11 @@ const CONSOLE_BASE = "https://scraping.thought-pilot.co/api";
 const USER_AGENT = "voice-to-content/1.0 (+reference-writer refresh)";
 
 const APIFY_ACTOR = "harvestapi~linkedin-profile-posts";
+/*
+ * The default, not the ceiling. It was a hardcoded constant until 20 October, which capped every
+ * Apify run at 50 posts per profile with nothing saying so — a run asked for 250 and returned 50
+ * and looked like it had finished. `--max` overrides it; `--since` narrows the window instead.
+ */
 const POSTS_PER_PROFILE = 50;
 const POLL_EVERY_MS = 10_000;
 const CONSOLE_DEADLINE_MS = 10 * 60_000;
@@ -90,9 +95,32 @@ const only = arg("--only");
 const checkOnly = has("--check");
 const via = arg("--via") ?? null;
 
+/*
+ * How many, and how far back. Apify only — the console job input has no post-count parameter at
+ * all, so passing either of these with --via console would silently do nothing, and this refuses
+ * instead. `postedLimit` and `postedLimitDate` are in the actor's schema, read on 14 October, and
+ * were never sent until now.
+ */
+const maxPosts = Number(arg("--max") ?? POSTS_PER_PROFILE);
+const since = arg("--since");
+
+if (!Number.isInteger(maxPosts) || maxPosts < 1) {
+  console.error(`--max must be a whole number of posts, got "${arg("--max")}"`);
+  process.exit(2);
+}
+if ((arg("--max") || since) && via === "console") {
+  console.error("--max and --since are Apify-only. The console job input has no post-count or date parameter.");
+  process.exit(2);
+}
+if (since && !/^\d{4}-\d{2}-\d{2}$/.test(since)) {
+  console.error(`--since must be YYYY-MM-DD, got "${since}"`);
+  process.exit(2);
+}
+
 if (!outPath && !checkOnly) {
   console.error(
     "usage: node scripts/scrape-sentinels.mjs --out <file.json> [--only <handle>] [--via console|apify]\n" +
+      "                                        [--max <n>] [--since YYYY-MM-DD]   # apify only\n" +
       "       node scripts/scrape-sentinels.mjs --check",
   );
   process.exit(2);
@@ -109,7 +137,9 @@ function env(name) {
   return (process.env[name] ?? (text.match(new RegExp(`^${name}=(.*)$`, "m")) ?? [])[1] ?? "").trim();
 }
 
-const handles = only ? [only] : Object.keys(SENTINELS);
+// A comma-separated list, so the seven who still need collecting can run without paying to fetch
+// the one who does not. Still validated against the eight, one name at a time.
+const handles = only ? only.split(",").map((h) => h.trim()).filter(Boolean) : Object.keys(SENTINELS);
 for (const h of handles) {
   if (!(h in SENTINELS)) {
     console.error(`"${h}" is not one of the eight reference writers.`);
@@ -232,7 +262,8 @@ async function fetchFromApify(profileHandles) {
      */
     body: JSON.stringify({
       targetUrls: profileHandles.map((h) => `https://www.linkedin.com/in/${h}/`),
-      maxPosts: POSTS_PER_PROFILE,
+      maxPosts,
+      ...(since ? { postedLimitDate: since } : {}),
       includeReposts: false,
       scrapeReactions: false,
       scrapeComments: false,
@@ -284,7 +315,10 @@ if (checkOnly) {
     console.log("    backend whose text keeps its line breaks. See mcp-server/.env.example");
   } else {
     const me = await apify(`users/me?token=${env("APIFY_TOKEN")}`);
-    console.log(`    token ok — ${me.data?.username ?? "account"}, plan ${me.data?.plan ?? "unknown"}`);
+    // plan is an object on this endpoint, so the obvious interpolation printed "[object Object]".
+    const plan = me.data?.plan;
+    const planName = (typeof plan === "string" ? plan : plan?.id ?? plan?.name) ?? "unknown";
+    console.log(`    token ok — ${me.data?.username ?? "account"}, plan ${planName}`);
   }
 
   console.log(`\n  would fetch ${handles.length} profile(s). Nothing was run and nothing was charged.\n`);
@@ -322,6 +356,21 @@ const first = (row, ...names) => {
     const v = n.split(".").reduce((o, k) => (o == null ? o : o[k]), row);
     if (v !== undefined && v !== null && v !== "") return v;
   }
+  return null;
+};
+
+/**
+ * A posted-at value from either backend, as an ISO string or null.
+ *
+ * The console sends a string. Apify sends `{ timestamp, date, postedAgoShort, postedAgoText }`.
+ * Returning null rather than guessing matters: `posted_at` orders every window and every "oldest
+ * post" claim, and a wrong date is worse than a missing one because nothing downstream questions it.
+ */
+const toIso = (v) => {
+  if (v == null) return null;
+  if (typeof v === "string") return Number.isNaN(Date.parse(v)) ? null : new Date(v).toISOString();
+  if (typeof v === "number") return new Date(v).toISOString();
+  if (typeof v === "object") return toIso(v.date ?? v.timestamp ?? v.iso ?? null);
   return null;
 };
 
@@ -383,7 +432,17 @@ for (const row of result.rows) {
     unmapped.add("text");
     continue;
   }
-  const postedAt = first(row, "posted_at", "postedAt", "date", "publishedAt", "postedAtISO");
+  /*
+   * Apify returns postedAt as an OBJECT, not a date:
+   *   { timestamp: 1791806316736, date: "2026-10-12T11:58:36.736Z", postedAgoShort: "1w", ... }
+   *
+   * Found on the first run this path ever made, 20 October. Interpolated into the activity_id
+   * fallback it becomes the literal string "[object Object]", which is stable across every post and
+   * would have collapsed a whole profile onto one primary key; written to posted_at it is a
+   * timestamptz the database refuses. The console returns a plain ISO string, so nothing here ever
+   * saw the other shape.
+   */
+  const postedAt = toIso(first(row, "posted_at", "postedAt", "date", "publishedAt", "postedAtISO"));
   if (!postedAt) unmapped.add("posted_at");
 
   rows.push({

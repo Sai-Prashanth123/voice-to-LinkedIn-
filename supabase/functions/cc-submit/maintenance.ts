@@ -99,11 +99,29 @@ export async function runWorker(db: SupabaseClient, body: Body): Promise<Respons
  *   can reach `library_sections`.
  */
 export async function refreshSentinels(db: SupabaseClient, _body: Body): Promise<Response> {
+  /*
+   * 2000 was comfortable at 156 stored posts and became a silent truncation at 1,900 on 20 October,
+   * when the Apify backend first ran. Ordered newest-first, so the posts it would have dropped are
+   * the oldest — the measurement would have quietly become "the recent corpus" and still reported
+   * itself as the whole of it. Read the count first and refuse rather than measure a slice.
+   */
+  const { count: total } = await db
+    .from("reference_writer_posts")
+    .select("activity_id", { count: "exact", head: true });
+
+  const CEILING = 20000;
+  if ((total ?? 0) > CEILING) {
+    return json({
+      error: `${total} reference posts are stored, above the ${CEILING} this measures in one pass.`,
+      next: "Raise the ceiling deliberately — a partial measurement reported as a whole one is worse.",
+    }, 409);
+  }
+
   const { data: posts } = await db
     .from("reference_writer_posts")
     .select("handle, author_name, posted_at, text, has_line_breaks")
     .order("posted_at", { ascending: false })
-    .limit(2000);
+    .limit(CEILING);
 
   if (!posts || posts.length === 0) {
     return json({

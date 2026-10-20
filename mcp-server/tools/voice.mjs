@@ -364,7 +364,13 @@ export const referencePostTools = [
           "close_shape,uses_list,sentence_words_sd,has_line_breaks,reaction_count",
         handle: `eq.${args.handle}`,
         order: "posted_at.desc",
-        limit: "200",
+        /*
+         * 200 was above every writer's count until 20 October, when the Apify backend first ran and
+         * each of the eight landed at 250. Newest-first, so it would have dropped the oldest fifth
+         * and reported the rest as the writer's habits without saying a word. posts_read below is
+         * the honest number either way.
+         */
+        limit: "1000",
       });
 
       if (posts.length === 0) {
@@ -444,12 +450,18 @@ export const referencePostTools = [
               "One mechanism per post. List it only when the point IS a process.",
               "Name the audience once, in the middle, where a reader who stayed is deciding.",
             ],
+            /*
+             * ONE, not two. The second used to be "he closes on an ask in nearly every post", read
+             * off six of his posts on 5 October whose line breaks the scrape had stripped. Measured
+             * across 241 he closes on an ask 9% of the time — less than the other seven at 17% and
+             * less than the 20% Josh's own rule allows. The six showed his postscript habit, which
+             * is one post in five and which no other writer here comes near.
+             */
             does_not_transfer: [
               "His turn renames the reader's problem — state it, deny it, substitute another. That " +
                 "is the exact construction Josh's banned-phrases section forbids, and the most " +
-                "recognisable AI cadence on LinkedIn.",
-              "He closes on an ask in nearly every post. Josh's rule rations a direct ask to one in " +
-                "five, and his buyer lurks.",
+                "recognisable AI cadence on LinkedIn. It is a reading of the construction rather " +
+                "than a count — nothing measures it, so treat it as the judgement it is.",
             ],
             why_careful: "He is where Josh's rules came from, not a peer. His cadence is the most " +
               "likely to leak, and a draft that agrees with him proves nothing about Josh's voice.",

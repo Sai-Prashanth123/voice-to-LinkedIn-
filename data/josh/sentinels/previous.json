@@ -1,29 +1,33 @@
 {
-  "measured_at": "2026-09-08T07:10:06.811Z",
+  "measured_at": "2026-10-05T10:23:03.180Z",
   "accounts": 7,
-  "posts": 59,
+  "posts": 112,
+  "shape_basis": 51,
+  "skipped_not_a_sentinel": 0,
   "totals": {
+    "of": 51,
     "opens_with_question": 4,
     "engagement_asks": 2,
-    "direct_asks": 5
+    "direct_asks": 4
   },
   "report": [
     {
       "handle": "amangrowth",
       "name": "Aman Ghataura",
-      "posts_measured": 9,
+      "posts_measured": 18,
       "window": {
         "from": "2026-02-27",
-        "to": "2026-07-23"
+        "to": "2026-10-05"
       },
       "median_words": 53,
-      "above_fold_words_median": 19,
-      "opening_words_median": 8,
+      "sd_median": 5.3,
+      "above_fold_words_median": 17,
+      "opening_words_median": 7.5,
       "paragraphs_median": 4,
       "opening_shapes": [
         [
           "statement",
-          7
+          6
         ],
         [
           "colon_setup",
@@ -37,7 +41,7 @@
       "close_shapes": [
         [
           "soft_close",
-          5
+          4
         ],
         [
           "short_landing",
@@ -48,18 +52,19 @@
           1
         ]
       ],
-      "list_rate": 0.33,
-      "sd_median": 3.4
+      "list_rate": 0.38,
+      "shape_basis": 8
     },
     {
       "handle": "curtishowland",
       "name": "Curtis Howland",
-      "posts_measured": 9,
+      "posts_measured": 18,
       "window": {
         "from": "2026-08-28",
-        "to": "2026-09-06"
+        "to": "2026-10-04"
       },
-      "median_words": 214,
+      "median_words": 271,
+      "sd_median": 12.7,
       "above_fold_words_median": 20,
       "opening_words_median": 7,
       "paragraphs_median": 10,
@@ -83,11 +88,7 @@
           5
         ],
         [
-          "question",
-          1
-        ],
-        [
-          "short_landing",
+          "postscript",
           1
         ],
         [
@@ -95,22 +96,27 @@
           1
         ],
         [
-          "postscript",
+          "question",
+          1
+        ],
+        [
+          "short_landing",
           1
         ]
       ],
       "list_rate": 0.89,
-      "sd_median": 11.5
+      "shape_basis": 9
     },
     {
       "handle": "demandjen1",
       "name": "Jen Allen-Knuth",
-      "posts_measured": 8,
+      "posts_measured": 17,
       "window": {
         "from": "2026-08-26",
-        "to": "2026-09-03"
+        "to": "2026-10-03"
       },
-      "median_words": 251.5,
+      "median_words": 180,
+      "sd_median": 6.9,
       "above_fold_words_median": 69.5,
       "opening_words_median": 25.5,
       "paragraphs_median": 8.5,
@@ -143,19 +149,20 @@
         ]
       ],
       "list_rate": 0.38,
-      "sd_median": 7.3
+      "shape_basis": 8
     },
     {
       "handle": "juliacarter98",
       "name": "Julia Carter",
-      "posts_measured": 8,
+      "posts_measured": 17,
       "window": {
         "from": "2026-08-19",
-        "to": "2026-09-04"
+        "to": "2026-10-04"
       },
-      "median_words": 161.5,
-      "above_fold_words_median": 72.5,
-      "opening_words_median": 22,
+      "median_words": 146,
+      "sd_median": 16.2,
+      "above_fold_words_median": 74.5,
+      "opening_words_median": 23,
       "paragraphs_median": 7.5,
       "opening_shapes": [
         [
@@ -163,7 +170,7 @@
           5
         ],
         [
-          "colon_setup",
+          "number_claim",
           1
         ],
         [
@@ -171,17 +178,17 @@
           1
         ],
         [
-          "number_claim",
+          "colon_setup",
           1
         ]
       ],
       "close_shapes": [
         [
-          "short_landing",
+          "soft_close",
           4
         ],
         [
-          "soft_close",
+          "short_landing",
           3
         ],
         [
@@ -190,25 +197,22 @@
         ]
       ],
       "list_rate": 0.13,
-      "sd_median": 12.1
+      "shape_basis": 8
     },
     {
       "handle": "mattjbarker1",
       "name": "Matt Barker",
-      "posts_measured": 9,
+      "posts_measured": 15,
       "window": {
         "from": "2026-08-30",
-        "to": "2026-09-06"
+        "to": "2026-10-04"
       },
-      "median_words": 118,
-      "above_fold_words_median": 61,
-      "opening_words_median": 20,
-      "paragraphs_median": 7,
+      "median_words": 154,
+      "sd_median": 8.3,
+      "above_fold_words_median": 61.5,
+      "opening_words_median": 23.5,
+      "paragraphs_median": 7.5,
       "opening_shapes": [
-        [
-          "time_anchored",
-          2
-        ],
         [
           "colon_setup",
           2
@@ -218,33 +222,29 @@
           2
         ],
         [
-          "question",
-          1
-        ],
-        [
-          "statement",
-          1
+          "time_anchored",
+          2
         ],
         [
           "consensus_claim",
+          1
+        ],
+        [
+          "question",
           1
         ]
       ],
       "close_shapes": [
         [
           "soft_close",
-          5
-        ],
-        [
-          "postscript",
-          1
-        ],
-        [
-          "question",
-          1
+          4
         ],
         [
           "short_landing",
+          2
+        ],
+        [
+          "postscript",
           1
         ],
         [
@@ -252,18 +252,19 @@
           1
         ]
       ],
-      "list_rate": 0.44,
-      "sd_median": 9.2
+      "list_rate": 0.5,
+      "shape_basis": 8
     },
     {
       "handle": "outboundphd",
-      "name": "Eric Nowoslawski",
-      "posts_measured": 7,
+      "name": "🦾Eric Nowoslawski",
+      "posts_measured": 15,
       "window": {
         "from": "2026-09-01",
-        "to": "2026-09-04"
+        "to": "2026-09-28"
       },
-      "median_words": 282,
+      "median_words": 197,
+      "sd_median": 7.9,
       "above_fold_words_median": 61,
       "opening_words_median": 23,
       "paragraphs_median": 10,
@@ -277,11 +278,11 @@
           2
         ],
         [
-          "consensus_claim",
+          "statement",
           1
         ],
         [
-          "statement",
+          "consensus_claim",
           1
         ]
       ],
@@ -300,58 +301,43 @@
         ]
       ],
       "list_rate": 0.14,
-      "sd_median": 8.6
+      "shape_basis": 7
     },
     {
       "handle": "ryanscarlin",
       "name": "Ryan Carlin",
-      "posts_measured": 9,
+      "posts_measured": 12,
       "window": {
         "from": "2026-07-20",
-        "to": "2026-09-03"
+        "to": "2026-09-10"
       },
-      "median_words": 408,
-      "above_fold_words_median": 28,
-      "opening_words_median": 6,
-      "paragraphs_median": 19,
+      "median_words": 422,
+      "sd_median": 11.6,
+      "above_fold_words_median": 22,
+      "opening_words_median": 5,
+      "paragraphs_median": 14,
       "opening_shapes": [
         [
           "statement",
-          4
+          2
         ],
         [
           "number_claim",
-          3
-        ],
-        [
-          "first_person",
-          1
-        ],
-        [
-          "colon_setup",
           1
         ]
       ],
       "close_shapes": [
         [
           "question",
-          4
+          2
         ],
         [
           "short_landing",
-          3
-        ],
-        [
-          "direct_ask",
-          1
-        ],
-        [
-          "soft_close",
           1
         ]
       ],
-      "list_rate": 0.44,
-      "sd_median": 11.4
+      "list_rate": 0.33,
+      "shape_basis": 3
     }
   ]
 }

@@ -48,11 +48,40 @@ import { GATE_CHECKS } from "../../supabase/functions/_shared/prompts.ts";
 import { z } from "zod";
 
 import { verifyDraft } from "../../supabase/functions/_shared/claims.ts";
+// 8.3 — "Take the shape. Never the words." The index is hashes of the reference writers' word runs,
+// never their sentences, so loading it here does not put their text anywhere near a drafter.
+import { indexToSet } from "../../supabase/functions/_shared/shingles.ts";
+import SHINGLES from "../../data/josh/reference-shingles.json" with { type: "json" };
 import { CLAIMABLE_FIELDS, sourceEntry } from "../../supabase/functions/_shared/entry.ts";
 import { writingSources } from "../sources.mjs";
 import { HIGH_CONFIDENCE, scan } from "../aitells.mjs";
 // 9.3 — the recorded framework, normalised on the way in and checked against his own section.
 import { isNamedFramework, namedFrameworks, tidyFramework } from "../frameworks.mjs";
+
+/**
+ * The borrowed-run index, read once and kept.
+ *
+ * IMPORTED, NOT READ OFF DISK, AND THAT IS THE WHOLE POINT.
+ *
+ * The obvious version of this was `readFileSync` on `data/josh/reference-shingles.json`, wrapped in
+ * a try/catch so a missing file could not break anything. It would have worked perfectly in a clone
+ * and done nothing at all on the hosted connector, because the edge function deploys its own module
+ * graph and a data file nobody imports is not in it. The check would have been real in testing and
+ * absent for Josh — the same shape as the hooks that only ran locally, and as every other bug this
+ * repository has spent a fortnight finding. A static import puts the index in the module graph, so
+ * it deploys or the deploy fails, and there is no third outcome where it is quietly missing.
+ *
+ * 4.4MB, 2.7MB compressed. Large for a module and the right place for it anyway.
+ *
+ * Rebuilt by scripts/build-reference-shingles.mjs after any scrape, and the build date rides back on
+ * the result: an index older than the corpus cannot catch what was collected since, and that is a
+ * fact about the answer rather than an excuse to hide.
+ */
+let shingleIndex;
+function referenceShingles() {
+  if (shingleIndex === undefined) shingleIndex = indexToSet(SHINGLES);
+  return shingleIndex;
+}
 
 /**
  * THE LEDGER SHAPE, WHICH IS NOT NEGOTIABLE AND USED TO BE
@@ -274,6 +303,7 @@ export const writeTools = [
         args.claims,
         entry,
         realNames.map((n) => ({ name: n.name, cleared: Boolean(n.cleared) })),
+        referenceShingles(),
       );
       if (!verification.ok) {
         throw new Error(
@@ -411,6 +441,17 @@ export const writeTools = [
         name: moment.title ?? null,
         framework,
         framework_note: frameworkNote,
+        /*
+         * Said on every draft, including the ones that pass. A check reports that it ran, or nobody
+         * can tell the difference between "nothing borrowed" and "nothing looked" — which is how
+         * the retelling check went 49 drafts without running and the gate went five days without
+         * closing. The post count dates the index: it cannot catch a post collected after it.
+         */
+        borrowed_phrases: {
+          checked_against: `${SHINGLES.posts} posts by ${SHINGLES.writers.length} reference writers`,
+          index_built: SHINGLES.built_at,
+          found: 0,
+        },
         ...arguable,
       };
     },

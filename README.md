@@ -303,8 +303,10 @@ Two of his signature moves are ruled out on purpose:
 - **His turn that renames the reader's problem** — "you don't have an ideas problem, you have a
   distillation problem". That is the exact construction your banned-phrases list forbids, and the most
   recognisable AI cadence on LinkedIn.
-- **His close.** He asks in nearly every post. Your rule rations a direct ask to one in five, and your
-  buyer lurks rather than engages.
+His close used to be listed here too, as a second thing not to take. That was read off six of his
+posts and it was wrong: measured across 241 he closes on an ask **9%** of the time, where the other
+seven average 17% and your own rule allows 20%. He is the most restrained closer of the eight. What
+those six actually showed was his postscript habit — one post in five, where nobody else passes 4%.
 
 What does transfer: open on someone else's situation with their number in it (which also anonymises,
 and suits material you cannot name); anchor the point to something mundane and specific; one mechanism

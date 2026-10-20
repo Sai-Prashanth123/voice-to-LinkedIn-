@@ -47,13 +47,35 @@ const HEADING = "## Matt Barker, read structurally";
 /**
  * The read itself.
  *
- * Every claim is either a measurement from `latest.json` or a count across the six posts of his
- * collected on 5 October, and each one says which. The distinction matters: the measured half rests
- * on the eight of his posts that still had their line breaks, and the counted half on the six that
- * did not and so could only be read by eye.
+ * REWRITTEN 20 OCTOBER, AND ONE OF ITS CENTRAL CLAIMS WAS WRONG.
+ *
+ * The first version of this read rested on six of his posts, collected on 5 October, read by eye
+ * because their line breaks had been stripped. It said he "asks in nearly every post" and ruled his
+ * closing habit out of bounds for Josh on that basis. Measured across 241, he closes on an ask in
+ * 22 of them — 9%, against 17% for the other seven and 20% for Josh's own one-in-five rule. He is
+ * the most restrained closer of the eight, and the claim was the exact opposite of the truth.
+ *
+ * What the six showed was a postscript, not an ask: he ends a fifth of his posts with one, five
+ * times any other writer here, and a P.S. carrying a link reads as a pitch when you have six posts
+ * and as a habit when you have 241.
+ *
+ * So every number below is now counted from the corpus rather than read off a sample, and the two
+ * claims that remain judgements say so in the line that makes them.
  */
 function section() {
   const L = [];
+  const pc = (n) => Math.round((100 * n) / matt.shape_basis);
+  const closes = Object.fromEntries(matt.close_shapes ?? []);
+  const opens = Object.fromEntries(matt.opening_shapes ?? []);
+  const asks = (closes.direct_ask ?? 0) + (closes.engagement_ask ?? 0);
+  // The other seven, so "he is restrained" is a comparison rather than an impression.
+  const others = sentinels.report.filter((r) => r.handle !== "mattjbarker1" && r.close_shapes);
+  const othersAsks = others.reduce((t, r) => {
+    const c = Object.fromEntries(r.close_shapes);
+    return t + (c.direct_ask ?? 0) + (c.engagement_ask ?? 0);
+  }, 0);
+  const othersBasis = others.reduce((t, r) => t + r.shape_basis, 0);
+  const othersAskPc = Math.round((100 * othersAsks) / othersBasis);
   L.push(HEADING);
   L.push("");
   L.push("Josh asked to lean most into Matt Barker — his frameworks, structures and methods, in Josh's");
@@ -68,34 +90,61 @@ function section() {
     `${rank}th of ${lengths.length} by length`;
   L.push(`- **${matt.posts_measured} posts**, ${matt.window.from} to ${matt.window.to}, median ` +
     `**${matt.median_words} words** — the ${place} of the ${lengths.length}.`);
-  L.push(`- Sentence-length variation **${matt.sd_median}**, mid-pack. He is not writing in uniform` +
-    ` blocks, and he is not Aman's staccato either.`);
+  /*
+   * Derived, like the length rank beside it. "Mid-pack" was true of eight posts in October and is
+   * false at 241: he is the second most uniform of the eight. A claim about a writer's rhythm that
+   * survives the corpus growing tenfold has to be computed, not typed.
+   */
+  const sds = sentinels.report.map((r) => r.sd_median).sort((a, b) => a - b);
+  const sdRank = sds.indexOf(matt.sd_median) + 1;
+  const sdPlace = sdRank <= 2
+    ? `the ${["", "most", "second most"][sdRank]} uniform of the ${sds.length}`
+    : sdRank >= sds.length - 1
+      ? `the ${sdRank === sds.length ? "most" : "second most"} varied of the ${sds.length}`
+      : `${sdRank}th of ${sds.length}, mid-pack`;
+  L.push(`- Sentence-length variation **${matt.sd_median}** — ${sdPlace}. He writes in steadier ` +
+    `lengths than his reputation for punchiness suggests.`);
   L.push("");
   L.push("## Where he starts");
   L.push("");
-  L.push("**Someone else's situation, with their number in it.** Four of his six most recent posts open on");
-  L.push("somebody else — a client, a peer, a stranger who had emailed him — and in three of those a figure");
-  L.push("belonging to that person lands within the first two lines. Of the other two, one opens on his own");
-  L.push("errand and hands the post over to a stranger by line four. His own standing is implied by having");
-  L.push("been in the room; he rarely opens by asserting it.");
+  L.push(`**On a number, and it is the most distinctive thing he does.** ${opens.number_claim} of his ` +
+    `${matt.shape_basis} posts open on a figure — **${pc(opens.number_claim)}%**. He is the only one of the`);
+  L.push("eight whose commonest opening is anything other than a plain statement, and the nearest any of");
+  L.push("the other seven gets to his rate is 27%. If one move is worth taking from him, it is this one.");
+  L.push("");
+  L.push(`**Then a time, an errand, a place.** ${opens.time_anchored} posts (**${pc(opens.time_anchored)}%**) ` +
+    `open time-anchored, his second commonest and the highest`);
+  L.push("of the eight. He anchors a commercial point to something mundane and verifiable, and the ordinary");
+  L.push("detail does the work a credential would otherwise do.");
+  L.push("");
+  L.push("**A judgement, not a count: he opens on somebody else's situation and keeps himself in frame as");
+  L.push("the person it happened to.** That is a reading of his openings rather than a measurement, and it");
+  L.push("is offered as one. It matters for Josh because a shape built around someone else's situation");
+  L.push("survives anonymising, where one built around a named account does not.");
   L.push("");
   L.push("This is the move Josh's hook rules already describe as *how I, not how to*, with one difference:");
-  L.push("Matt's version puts somebody else at the centre and keeps himself in the frame as the person it");
-  L.push("happened to. For Josh that is the easier version to write honestly, because his material is");
-  L.push("client work he cannot name — and a shape built around someone else's situation survives");
-  L.push("anonymising, where one built around a named account does not.");
+  L.push("Matt's version puts somebody else at the centre. For Josh that is the easier version to write");
+  L.push("honestly, because his material is client work he cannot name.");
   L.push("");
-  L.push("**The scene is small and physical.** A specific weekday, an errand, a place. He anchors a");
-  L.push("commercial point to something mundane and verifiable, and the ordinary detail does the work a");
-  L.push(`credential would otherwise do. Measured: his openings run **${matt.opening_words_median} words**`);
-  L.push(`with **${matt.above_fold_words_median} words above the fold** — a scene, not a cut.`);
+  L.push(`**He cuts, he does not set a scene.** His openings run **${matt.opening_words_median} words** with `  +
+    `**${matt.above_fold_words_median} words above the fold** — the`);
+  L.push("second fewest of the eight, where Jen Allen-Knuth and Eric Nowoslawski run past 60. The earlier");
+  L.push("version of this read called his opening *a scene, not a cut*, on eight posts that put him at");
+  L.push("61.5. At 241 he is at 39, and the opposite is true: he gets in fast and explains afterwards.");
   L.push("");
   L.push("## What the middle does");
   L.push("");
-  L.push("**One mechanism, and it is listed once or not at all.** A list appears in half his posts");
-  L.push(`(**${Math.round(matt.list_rate * 100)}%**, measured). The pattern underneath that number: numbered`);
-  L.push("steps when the point IS a process, unbroken prose when the point is a judgement. He does not run");
-  L.push("a numbered list and a causal argument in the same post, which is why they stay short.");
+  L.push(`**He turns early, and more often than anyone here.** 180 of 250 posts reverse on a marked turn`);
+  L.push("(**72%**) against 44% across the corpus, and his median turn lands **0.16** of the way through");
+  L.push("against 0.25. He sets up and reverses inside the first few sentences and spends the rest on the");
+  L.push("consequence. Measured sentence-wise by `scripts/measure-structure.mjs` on 20 October, so it does");
+  L.push("not depend on a line break surviving.");
+  L.push("");
+  L.push(`**One mechanism, and it is listed about two posts in three.** A list appears in ` +
+    `**${Math.round(matt.list_rate * 100)}%** of them, counted`);
+  L.push("from the line breaks rather than inferred. That is above the corpus and below Curtis Howland's");
+  L.push("82%. The pattern underneath the number is a judgement, not a count: numbered steps when the");
+  L.push("point IS a process, unbroken prose when the point is a judgement.");
   L.push("");
   L.push("**He re-aims mid-post with an audience tag.** A paragraph that is just the name of who the rest");
   L.push("is for. It does the altitude filtering Josh's hook section asks of the opening, except Matt does");
@@ -105,12 +154,22 @@ function section() {
   L.push("**Proof arrives as a range, not a trophy.** Where he quotes an outcome it is bounded (a figure");
   L.push("from-to, a share, a count) and attributed to the person it happened to. It reads as reporting.");
   L.push("");
-  L.push("## The two things that do NOT transfer");
+  L.push("## How he lands");
   L.push("");
-  L.push("Said plainly, because they are the most recognisable things he does and the reason a draft that");
+  L.push(`**Short.** ${closes.short_landing} of ${matt.shape_basis} posts end in eight words or fewer ` +
+    `(**${pc(closes.short_landing)}%**), the highest of the eight.`);
+  L.push("");
+  L.push(`**And then, one post in five, a postscript.** ${closes.postscript} posts (**${pc(closes.postscript)}%**) ` +
+    `close on a P.S. No other writer here`);
+  L.push("passes 4%. It is the most distinctive thing about his endings and nothing in Josh's rules");
+  L.push("mentions it.");
+  L.push("");
+  L.push("## One thing that does NOT transfer, where we previously said two");
+  L.push("");
+  L.push("Said plainly, because it is the most recognisable thing he does and the reason a draft that");
   L.push("imitates him fails Josh's own gate.");
   L.push("");
-  L.push("**1. His turn renames the reader's problem.** The structure is: state the problem the reader");
+  L.push("**His turn renames the reader's problem.** The structure is: state the problem the reader");
   L.push("thinks they have, deny it, substitute a renamed one. That is exactly the construction the");
   L.push("banned-phrases section forbids — rejecting a frame in order to assert another — and it is the");
   L.push("single most recognisable AI cadence on LinkedIn, which is not a coincidence: it is a cadence");
@@ -119,27 +178,55 @@ function section() {
   L.push("that section: delete the rejected half and state the second problem once, with the detail");
   L.push("attached.");
   L.push("");
-  L.push("**2. He asks in nearly every post.** All six posts collected on 5 October end on an offer and a");
-  L.push("link, two of them as a postscript. Josh's closing rule rations a direct ask to roughly one post");
-  L.push("in five, and the measurements across all seven writers put a direct ask on");
-  L.push(`**${sentinels.totals.direct_asks} of ${sentinels.totals.of}** — Matt is the outlier, not the`);
-  L.push("standard. His frequency fits a creator selling a course to a list. Josh sells consulting to a");
-  L.push("buyer who lurks, and the same frequency would read as a pitch feed.");
+  L.push("**This one was not re-verified at scale.** It is a reading of the construction, not a count —");
+  L.push("nothing here detects a renamed problem mechanically. Given the closing claim beside it turned");
+  L.push("out backwards on six posts, treat this as the judgement it is until something measures it.");
+  L.push("");
+  L.push("## The correction: he does not ask in nearly every post");
+  L.push("");
+  L.push("**This section said he did, and that was wrong.** It was written off six posts collected on");
+  L.push("5 October whose line breaks the scrape had stripped, so they were read by eye. Counted across");
+  L.push(`**${matt.shape_basis}** posts he closes on an ask — direct or engagement — **${asks} times**, ` +
+    `which is **${pc(asks)}%**.`);
+  L.push(`The other seven writers close on one **${othersAskPc}%** of the time. Josh's own rule rations it ` +
+    `to one post in`);
+  L.push("five, which is 20%. So Matt asks less often than the other seven, and less often than Josh's");
+  L.push("rule allows. He is the most restrained closer of the eight, not the outlier.");
+  L.push("");
+  L.push(`What the six posts actually showed was the postscript habit above: **${pc(closes.postscript)}%** ` +
+    `of his posts end on a P.S.,`);
+  L.push("and a P.S. carrying a link reads as a pitch when you have six of them and as a habit when you");
+  L.push("have 241. **Nothing about his closing needs to be ruled out for Josh.** The rule that rations a");
+  L.push("direct ask stays, because it is Josh's rule and it was never Matt's to justify — but it is no");
+  L.push("longer a place where leaning into Matt would breach it.");
   L.push("");
   L.push("## What to take, in order");
   L.push("");
-  L.push("1. **Open on someone else's situation, with their number.** Highest value, and it anonymises.");
-  L.push("2. **Anchor it to something mundane and specific.** A weekday and an errand beat an adjective.");
-  L.push("3. **One mechanism per post.** List it only if it is genuinely a process.");
-  L.push("4. **Name the audience once, in the middle.** New to Josh's rules, and cheap.");
+  L.push(`1. **Open on a number.** Half his posts do (**${pc(opens.number_claim)}%**), and he is the only ` +
+    `one of the eight who`);
+  L.push("   leads with one. The strongest-evidenced move here by a distance.");
+  L.push("2. **Turn early.** His median turn is at 0.16 against the corpus 0.25, and he turns in 72% of");
+  L.push("   posts against 44%. The turn buys the rest of the post; it is not the climax.");
+  L.push(`3. **Get in fast — ${matt.above_fold_words_median} words above the fold**, second fewest of the ` +
+    `eight. Explain afterwards.`);
+  L.push("4. **Anchor it to something mundane and specific.** A weekday and an errand beat an adjective.");
+  L.push(`5. **Land short** — ${pc(closes.short_landing)}% of his closes are eight words or fewer, the ` +
+    `highest here.`);
+  L.push("6. **One mechanism per post.** List it only if it is genuinely a process.");
+  L.push("7. **Name the audience once, in the middle.** New to Josh's rules, and cheap.");
   L.push("");
-  L.push("Not: the renamed-problem turn, and not the ask on every post.");
+  L.push("Not: the renamed-problem turn. That is the only one, and it is a judgement rather than a count.");
   L.push("");
-  L.push("**Josh — the first conflict above is a real fork.** We have kept your banned-phrases rule and");
-  L.push("ruled Matt's turn out of bounds, because an over-strict gate fails visibly and is easy to");
-  L.push("correct. If you want that construction available to you because it is how he lands a post, say");
-  L.push("so and it comes out of the banned list — but it would then be allowed everywhere, and it is the");
-  L.push("one pattern most likely to make a draft read as generated.");
+  L.push("**Josh — this is a real fork.** We have kept your banned-phrases rule and ruled Matt's turn out");
+  L.push("of bounds, because an over-strict gate fails visibly and is easy to correct. If you want that");
+  L.push("construction available because it is how he lands a post, say so and it comes out of the banned");
+  L.push("list — but it would then be allowed everywhere, and it is the one pattern most likely to make a");
+  L.push("draft read as generated.");
+  L.push("");
+  L.push(`_Counted across ${matt.posts_measured} posts, ${matt.window.from} to ${matt.window.to}. ` +
+    `Shape figures rest on the ${matt.shape_basis} that kept`);
+  L.push("their line breaks. The previous version of this section rested on six posts and got his closing");
+  L.push("habit backwards; the numbers above are what replaced it._");
   return L.join("\n");
 }
 
@@ -184,17 +271,34 @@ if (!open.length) {
 }
 
 const p = open[0];
-if (p.proposed_body.includes(HEADING)) {
-  console.log(`  Proposal #${p.id} already carries the reading. Nothing to do.`);
-  process.exit(0);
-}
 
 // Before "What never to take", which is the section's closing rule and should stay last.
 const anchor = "## What never to take";
-const at = p.proposed_body.indexOf(anchor);
+
+/*
+ * REPLACE AN EXISTING READING, DO NOT SKIP IT.
+ *
+ * This used to exit 0 with "already carries the reading" whenever the heading was present. That was
+ * right while the reading was written once and never revised, and wrong the moment it needed
+ * correcting: on 20 October the proposal carried the six-post version saying Matt asks in nearly
+ * every post, this script had the 241-post version saying he does not, and it declined to fold it in
+ * because the heading it was about to replace was already there. A refusal to overwrite that is
+ * indistinguishable from success is the shape of bug this repository keeps finding.
+ *
+ * The replaced span runs from the heading to the anchor, or to the end if there is no anchor.
+ */
+const existing = p.proposed_body.indexOf(HEADING);
+const base = existing === -1 ? p.proposed_body : (() => {
+  const after = p.proposed_body.indexOf(anchor, existing);
+  const tail = after === -1 ? "" : p.proposed_body.slice(after);
+  console.log(`  Proposal #${p.id} already carried a reading — replacing it.`);
+  return p.proposed_body.slice(0, existing).replace(/\n*(?:---\n*)?$/, "\n\n") + tail;
+})();
+
+const at = base.indexOf(anchor);
 const merged = at === -1
-  ? `${p.proposed_body}\n\n${body}\n`
-  : `${p.proposed_body.slice(0, at)}${body}\n\n---\n\n${p.proposed_body.slice(at)}`;
+  ? `${base.replace(/\n*$/, "")}\n\n${body}\n`
+  : `${base.slice(0, at)}${body}\n\n---\n\n${base.slice(at)}`;
 
 const res = await fetch(`${url}/rest/v1/library_proposals?id=eq.${p.id}`, {
   method: "PATCH",
