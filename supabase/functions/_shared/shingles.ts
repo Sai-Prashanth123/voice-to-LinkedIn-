@@ -46,7 +46,7 @@
 /** Runs shorter than this are ordinary English, not anybody's writing. */
 export const SHINGLE_WORDS = 7;
 
-/** Fixed width, so the index packs into one string with no separators to store. */
+/** Fixed width, so a hash is the same length however small the number inside it happened to be. */
 export const HASH_WIDTH = 11;
 
 /**
@@ -98,26 +98,6 @@ export function hashRun(run: string): string {
   h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
   const n = 4294967296 * (2097151 & h2) + (h1 >>> 0);
   return n.toString(36).padStart(HASH_WIDTH, "0");
-}
-
-export interface ShingleIndex {
-  built_at: string;
-  algorithm: string;
-  posts: number;
-  writers: string[];
-  words: number;
-  distinct: number;
-  /** Every hash concatenated at fixed width. One string beats 400,000 array entries to parse. */
-  packed: string;
-}
-
-/** Unpack the index into the set the matcher wants. Done once, at load. */
-export function indexToSet(index: ShingleIndex): Set<string> {
-  const out = new Set<string>();
-  for (let i = 0; i + HASH_WIDTH <= index.packed.length; i += HASH_WIDTH) {
-    out.add(index.packed.slice(i, i + HASH_WIDTH));
-  }
-  return out;
 }
 
 /**

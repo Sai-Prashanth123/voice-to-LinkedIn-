@@ -48,10 +48,9 @@ import { GATE_CHECKS } from "../../supabase/functions/_shared/prompts.ts";
 import { z } from "zod";
 
 import { verifyDraft } from "../../supabase/functions/_shared/claims.ts";
-// 8.3 — "Take the shape. Never the words." The index is hashes of the reference writers' word runs,
-// never their sentences, so loading it here does not put their text anywhere near a drafter.
-import { indexToSet } from "../../supabase/functions/_shared/shingles.ts";
-import SHINGLES from "../../data/josh/reference-shingles.json" with { type: "json" };
+// 8.3 — "Take the shape. Never the words." The index holds hashes of the reference writers' word
+// runs, never their sentences, so consulting it puts none of their text near a drafter.
+import { hashRun, shinglesOf } from "../../supabase/functions/_shared/shingles.ts";
 import { CLAIMABLE_FIELDS, sourceEntry } from "../../supabase/functions/_shared/entry.ts";
 import { writingSources } from "../sources.mjs";
 import { HIGH_CONFIDENCE, scan } from "../aitells.mjs";
@@ -59,28 +58,39 @@ import { HIGH_CONFIDENCE, scan } from "../aitells.mjs";
 import { isNamedFramework, namedFrameworks, tidyFramework } from "../frameworks.mjs";
 
 /**
- * The borrowed-run index, read once and kept.
+ * Which of this draft's seven-word runs are already one of the reference writers' (8.3).
  *
- * IMPORTED, NOT READ OFF DISK, AND THAT IS THE WHOLE POINT.
+ * ASKED OF THE DATABASE, AND IN THIS DIRECTION ONLY.
  *
- * The obvious version of this was `readFileSync` on `data/josh/reference-shingles.json`, wrapped in
- * a try/catch so a missing file could not break anything. It would have worked perfectly in a clone
- * and done nothing at all on the hosted connector, because the edge function deploys its own module
- * graph and a data file nobody imports is not in it. The check would have been real in testing and
- * absent for Josh — the same shape as the hooks that only ran locally, and as every other bug this
- * repository has spent a fortnight finding. A static import puts the index in the module graph, so
- * it deploys or the deploy fails, and there is no third outcome where it is quietly missing.
+ * The draft's own run hashes go out; the ones that are known come back. Nothing is read INTO the
+ * session — there is no query here that could return a sentence, or even a hash the draft did not
+ * already contain, so the check cannot become a route to the text it exists to protect.
  *
- * 4.4MB, 2.7MB compressed. Large for a module and the right place for it anyway.
+ * Two earlier shapes were wrong and are worth recording. A `readFileSync` of a data file would have
+ * worked in a clone and done nothing on the connector, because the edge function deploys its own
+ * module graph — the same failure as the hooks that only ran locally. A static import fixed that and
+ * then exceeded Supabase's 5MB function limit, so it shipped nowhere, which the deploy caught. A
+ * table is the answer to both, and better than either: the corpus grows, and an index in a row needs
+ * no deploy to catch up.
  *
- * Rebuilt by scripts/build-reference-shingles.mjs after any scrape, and the build date rides back on
- * the result: an index older than the corpus cannot catch what was collected since, and that is a
- * fact about the answer rather than an excuse to hide.
+ * Returns null when the index is empty — not an empty set. "We could not check" and "nothing
+ * borrowed" are different answers and the caller is told which one it got.
  */
-let shingleIndex;
-function referenceShingles() {
-  if (shingleIndex === undefined) shingleIndex = indexToSet(SHINGLES);
-  return shingleIndex;
+async function borrowedIndexFor(db, body) {
+  const wanted = [...new Set(shinglesOf(body).map(hashRun))];
+  if (wanted.length === 0) return new Set();
+
+  const known = new Set();
+  // PostgREST puts the filter in the URL, so this goes in chunks a URL can hold.
+  for (let i = 0; i < wanted.length; i += 150) {
+    const rows = await db.select("reference_shingles", {
+      select: "hash",
+      hash: `in.(${wanted.slice(i, i + 150).join(",")})`,
+      limit: "150",
+    });
+    for (const r of rows) known.add(r.hash);
+  }
+  return known;
 }
 
 /**
@@ -298,19 +308,39 @@ export const writeTools = [
         );
       }
 
+      // 8.3, before the ledger, because "you have used his words" is the more useful refusal and
+      // is not fixed by mending a ledger either.
+      const borrowedIndex = await borrowedIndexFor(db, args.body);
+      const shingleRuns = shinglesOf(args.body).length;
+
       const verification = verifyDraft(
         args.body,
         args.claims,
         entry,
         realNames.map((n) => ({ name: n.name, cleared: Boolean(n.cleared) })),
-        referenceShingles(),
+        borrowedIndex,
       );
       if (!verification.ok) {
+        /*
+         * The headline and the advice have to match the failure, and they stopped matching the day
+         * verifyDraft learned a second kind. A borrowed run was announced as "the claim ledger does
+         * not hold" and answered with "fix the ledger", which is advice for a different problem
+         * entirely — a caller following it would edit a ledger that was already correct and call
+         * again with the same borrowed sentence. Named rather than inferred, because a refusal that
+         * misdescribes itself wastes the attempt it refused.
+         */
+        const onlyBorrowed = verification.borrowedPhrases.length > 0 &&
+          verification.failures.length === 1;
         throw new Error(
-          `The claim ledger does not hold, so nothing was stored (9.4).\n\n` +
-          verification.failures.map((f) => `  · ${f}`).join("\n") +
-          `\n\nEvery span must be copied verbatim out of the field it names. Fix the ledger, or ` +
-          `take the claim out of the post, then call create_draft again.`,
+          (onlyBorrowed
+            ? `The draft uses a reference writer's words, so nothing was stored (8.3).`
+            : `The claim ledger does not hold, so nothing was stored (9.4).`) +
+          `\n\n` + verification.failures.map((f) => `  · ${f}`).join("\n") + `\n\n` +
+          (onlyBorrowed
+            ? `Take the shape and write the line again in his words, then call create_draft again. ` +
+              `The ledger is fine — nothing about it needs changing.`
+            : `Every span must be copied verbatim out of the field it names. Fix the ledger, or ` +
+              `take the claim out of the post, then call create_draft again.`),
         );
       }
 
@@ -445,11 +475,10 @@ export const writeTools = [
          * Said on every draft, including the ones that pass. A check reports that it ran, or nobody
          * can tell the difference between "nothing borrowed" and "nothing looked" — which is how
          * the retelling check went 49 drafts without running and the gate went five days without
-         * closing. The post count dates the index: it cannot catch a post collected after it.
+         * closing.
          */
         borrowed_phrases: {
-          checked_against: `${SHINGLES.posts} posts by ${SHINGLES.writers.length} reference writers`,
-          index_built: SHINGLES.built_at,
+          checked: `${shingleRuns} seven-word run(s) of this draft, against the reference index (8.3)`,
           found: 0,
         },
         ...arguable,

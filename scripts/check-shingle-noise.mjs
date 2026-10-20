@@ -23,7 +23,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
-import { borrowedRuns, indexToSet } from "../supabase/functions/_shared/shingles.ts";
+import { borrowedRuns, hashRun, shinglesOf } from "../supabase/functions/_shared/shingles.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
@@ -37,8 +37,6 @@ const url = field("SUPABASE_URL").replace(/\/+$/, "");
 const key = field("SUPABASE_SERVICE_ROLE_KEY");
 if (!url || !key) { console.error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY."); process.exit(2); }
 
-const index = indexToSet(JSON.parse(readFileSync(join(ROOT, "data/josh/reference-shingles.json"), "utf8")));
-
 async function rows(path) {
   const res = await fetch(`${url}/rest/v1/${path}`, {
     headers: { apikey: key, authorization: `Bearer ${key}` },
@@ -46,6 +44,27 @@ async function rows(path) {
   if (!res.ok) { console.error(`  ${path}: ${res.status} ${await res.text()}`); process.exit(1); }
   return res.json();
 }
+
+/*
+ * The same question create_draft asks, the same way: send this text's own run hashes and keep the
+ * ones that come back known. Asking it differently here would calibrate something other than the
+ * check that actually runs.
+ */
+async function knownRuns(text) {
+  const wanted = [...new Set(shinglesOf(text).map(hashRun))];
+  const known = new Set();
+  for (let i = 0; i < wanted.length; i += 150) {
+    const batch = wanted.slice(i, i + 150).join(",");
+    for (const r of await rows(`reference_shingles?select=hash&hash=in.(${batch})&limit=150`)) {
+      known.add(r.hash);
+    }
+  }
+  return known;
+}
+
+const indexSize = (await rows("reference_shingles?select=hash&limit=1")).length
+  ? "stored"
+  : "EMPTY — nothing will be caught";
 
 const drafts = await rows("drafts?select=id,body&limit=2000");
 const published = await rows("published_archive?select=id,body&limit=2000");
@@ -56,14 +75,14 @@ const corpus = [
 ].filter((x) => typeof x.body === "string" && x.body.length > 0);
 
 console.log(`\n  Borrowed-phrase calibration\n`);
-console.log(`  index: ${index.size} runs from the reference corpus`);
+console.log(`  index: ${indexSize}`);
 console.log(`  control group: ${drafts.length} draft(s), ${published.length} published post(s)\n`);
 
 let hitCount = 0;
 const runsSeen = new Map();
 
 for (const item of corpus) {
-  const hits = borrowedRuns(item.body, index);
+  const hits = borrowedRuns(item.body, await knownRuns(item.body));
   if (hits.length === 0) continue;
   hitCount++;
   console.log(`  ${item.what}: ${hits.length} run(s)`);

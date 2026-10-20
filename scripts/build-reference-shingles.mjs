@@ -11,9 +11,19 @@
  * cannot normalise a sentence two different ways.
  *
  * Re-run it after any scrape. An index built before a post was collected cannot catch that post.
+ *
+ * WHY IT WRITES A TABLE AND NOT A FILE
+ *
+ * The first version wrote data/josh/reference-shingles.json and the MCP tools imported it, so that
+ * it would be in the deployed module graph rather than a file that quietly goes missing on the
+ * connector. Supabase refuses an edge function over 5MB and the index is 4.4MB, so that version
+ * shipped nowhere — caught by the deploy, which is the right place to catch it.
+ *
+ * A table is the better answer regardless. The corpus grows; an index in a file needs a deploy to
+ * catch up, and an index in a row does not.
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
@@ -28,7 +38,6 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
 const APPLY = process.argv.includes("--apply");
-const OUT = join(ROOT, "data", "josh", "reference-shingles.json");
 
 /*
  * Runs that are ordinary English rather than anybody's writing.
@@ -91,41 +100,68 @@ for (const p of posts) {
   }
 }
 
-const out = {
-  built_at: new Date().toISOString(),
-  algorithm: `cyrb53 base36 x${HASH_WIDTH} of ${SHINGLE_WORDS}-word runs, normalised`,
-  posts: posts.length,
-  writers: [...writers].sort(),
-  words: SHINGLE_WORDS,
-  distinct: hashes.size,
-  packed: [...hashes].sort().join(""),
-};
+const all = [...hashes].sort();
 
 /*
- * The guard sentinel-structure.mjs carries, for the same reason. This file must contain no readable
- * run of anybody's post, and if a bug ever put one there it has to fail loudly rather than ship
- * quietly, whatever the comments above promise.
+ * The guard sentinel-structure.mjs carries, for the same reason. What goes to the database must
+ * contain no readable run of anybody's post, and if a bug ever put one there it has to fail loudly
+ * rather than ship quietly, whatever the comments above promise. A hash is not text, so this cannot
+ * fire — which is exactly why it is cheap to keep and worth keeping.
  */
-const emitted = JSON.stringify(out);
+const emitted = JSON.stringify(all);
 for (const p of posts) {
   const sample = normaliseRun(p.text).slice(0, 40);
   if (sample.length >= 40 && emitted.includes(sample)) {
-    console.error("\nREFUSING: post text leaked into the shingle file.");
+    console.error("\nREFUSING: post text leaked into the shingle index.");
     process.exit(1);
   }
 }
 
 console.log(`\n  Reference shingles\n`);
-console.log(`  ${out.posts} posts across ${out.writers.length} writer(s)`);
-console.log(`  ${runs} runs of ${SHINGLE_WORDS} words, ${out.distinct} distinct`);
+console.log(`  ${posts.length} posts across ${writers.size} writer(s)`);
+console.log(`  ${runs} runs of ${SHINGLE_WORDS} words, ${all.length} distinct`);
 console.log(`  ${EXEMPT.length} exempted as ordinary English`);
-console.log(`  ${(emitted.length / 1e6).toFixed(1)} MB, no readable post text in it`);
+console.log(`  hashes are ${HASH_WIDTH} chars of base36; no readable post text in them`);
 
 if (!APPLY) {
-  console.log(`\n  Dry run. Nothing written. Pass --apply to write data/josh/reference-shingles.json\n`);
+  console.log(`\n  Dry run. Nothing written. Pass --apply to store them.\n`);
   process.exit(0);
 }
 
-mkdirSync(dirname(OUT), { recursive: true });
-writeFileSync(OUT, emitted);
-console.log(`\n  written: data/josh/reference-shingles.json\n`);
+/*
+ * Replaced wholesale, not merged. A run that is no longer anywhere in the corpus must stop being a
+ * borrowing, or an index built today would keep refusing drafts on the strength of a post that was
+ * removed months ago and nothing would say why.
+ */
+const del = await fetch(`${url}/rest/v1/reference_shingles?hash=neq.`, {
+  method: "DELETE",
+  headers: { apikey: key, authorization: `Bearer ${key}`, Prefer: "return=minimal" },
+});
+if (!del.ok) {
+  console.error(`  could not clear the old index: ${del.status} ${await del.text()}`);
+  process.exit(1);
+}
+
+const BATCH = 5000;
+let stored = 0;
+for (let i = 0; i < all.length; i += BATCH) {
+  const chunk = all.slice(i, i + BATCH).map((hash) => ({ hash }));
+  const res = await fetch(`${url}/rest/v1/reference_shingles`, {
+    method: "POST",
+    headers: {
+      apikey: key,
+      authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify(chunk),
+  });
+  if (!res.ok) {
+    console.error(`\n  failed at row ${i}: ${res.status} ${(await res.text()).slice(0, 200)}`);
+    process.exit(1);
+  }
+  stored += chunk.length;
+  process.stdout.write(`\r  stored ${stored}/${all.length}`);
+}
+
+console.log(`\n\n  Stored. create_draft now refuses a draft that reuses one of these runs.\n`);

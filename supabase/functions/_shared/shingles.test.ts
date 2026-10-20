@@ -9,7 +9,7 @@
  */
 
 import { assert, assertEquals } from "jsr:@std/assert";
-import { borrowedRuns, hashRun, indexToSet, normaliseRun, shinglesOf } from "./shingles.ts";
+import { borrowedRuns, hashRun, normaliseRun, shinglesOf } from "./shingles.ts";
 
 /** Build a small index the way the real builder does, so the test exercises the real path. */
 function indexOf(...texts: string[]): Set<string> {
@@ -94,19 +94,14 @@ Deno.test("a draft shorter than the window is not a borrowing", () => {
   assertEquals(borrowedRuns("Too short.", indexOf(BORROWED)), []);
 });
 
-Deno.test("the packed index round-trips to exactly the hashes that went in", () => {
-  // The file stores one long string with no separators. An off-by-one in the width would silently
-  // produce an index full of nonsense that matches nothing, and nothing else would notice.
-  const hashes = [...indexOf(BORROWED)].sort();
-  const unpacked = indexToSet({
-    built_at: "", algorithm: "", posts: 1, writers: [], words: 7,
-    distinct: hashes.length, packed: hashes.join(""),
-  });
-  assertEquals(unpacked.size, hashes.length);
-  for (const h of hashes) assert(unpacked.has(h), `${h} survived the round trip`);
+Deno.test("the same run always hashes to the same thing", () => {
+  // The index is built by one process and queried by another, hours or weeks apart. If the hash
+  // were not stable across runs the check would match nothing and report every draft as clean.
+  assertEquals(hashRun("the quickest way to lose a client"), hashRun("the quickest way to lose a client"));
+  assert(hashRun("the quickest way to lose a client") !== hashRun("the quickest way to keep a client"));
 });
 
-Deno.test("every hash is the same fixed width, or the packing is meaningless", () => {
+Deno.test("every hash is the same fixed width, so a stored one is never truncated", () => {
   const widths = new Set<number>();
   for (const w of ["a", "the quick brown fox jumps over it", "9 11 2026 x y z", "élan café naïve"]) {
     for (const run of shinglesOf(w + " one two three four five six seven")) {
