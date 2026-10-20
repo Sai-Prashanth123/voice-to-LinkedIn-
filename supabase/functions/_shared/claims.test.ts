@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { hashRun, shinglesOf } from "./shingles.ts";
 import {
   extractNumbers,
   extractQuotedStrings,
@@ -7,6 +8,8 @@ import {
   verifyDraft,
   type Claim,
 } from "./claims.ts";
+
+const BORROWED = "the quickest way to lose a client is to stop telling them what you are doing";
 
 const entry = {
   the_moment:
@@ -192,4 +195,37 @@ test("punctuation INSIDE the quote still has to match", () => {
   // sentence, and inventing one is inventing what was said.
   const entry = { their_actual_words: "if Dan goes we start from zero" };
   assert.equal(verifyDraft(`He said "if Dan goes, we start from zero."`, [], entry).ok, false);
+});
+
+test("a borrowed run is one failure on its own, and says 8.3", () => {
+  // create_draft chooses its headline and its advice from this: exactly one failure, and it is the
+  // borrowed one, means "you used his words" rather than "your ledger is wrong". Told the second
+  // thing, a caller edits a ledger that was already correct and resubmits the same sentence. This
+  // pins the condition that distinguishes them.
+  const index = new Set([...shinglesOf(BORROWED).map(hashRun)]);
+  const result = verifyDraft(`I was in the room. ${BORROWED}. That was it.`, [], entry, [], index);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.borrowedPhrases.length, 1);
+  assert.equal(result.failures.length, 1, "nothing else should fire on a clean draft");
+  assert.match(result.failures[0], /8\.3/);
+});
+
+test("a borrowed run and a bad ledger are two failures, not one", () => {
+  // The other side of the same condition: when both fire, the ledger headline is the right one and
+  // the borrowed line still appears in the list.
+  const index = new Set([...shinglesOf(BORROWED).map(hashRun)]);
+  const bad: Claim[] = [
+    { kind: "quote", claim: "he said it", source_field: "their_actual_words", source_span: "never said this" },
+  ];
+  const result = verifyDraft(`${BORROWED}.`, bad, entry, [], index);
+
+  assert.equal(result.borrowedPhrases.length, 1);
+  assert.ok(result.failures.length > 1, "both kinds reported");
+});
+
+test("without an index nothing is reported as borrowed", () => {
+  // The default. Every existing caller passes four arguments and must keep behaving as it did.
+  const clean = verifyDraft(`${BORROWED}.`, [], entry);
+  assert.deepEqual(clean.borrowedPhrases, []);
 });
