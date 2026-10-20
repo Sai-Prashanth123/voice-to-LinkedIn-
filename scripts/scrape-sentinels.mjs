@@ -456,8 +456,35 @@ for (const row of result.rows) {
     posted_at: postedAt,
     text,
     headline: first(row, "headline"),
-    reaction_count: first(row, "reaction_count", "reactionsCount", "likesCount", "numLikes"),
-    comment_count: first(row, "comment_count", "commentsCount", "numComments"),
+    /*
+     * Apify nests these: `engagement: { likes, comments, shares, reactions: [...] }`. None of the
+     * four flat names below it match, and `first()` returns null for a name it cannot find rather
+     * than complaining — so the 20 October load wrote null over the reaction and comment counts of
+     * all 1,900 rows, and the upsert made that permanent. One row of 1,900 survived.
+     *
+     * It mattered immediately: proposal 17 argues from "147 reactions and 156 comments" on a
+     * specific post, and the numbers it cites had been erased hours before Josh could check them.
+     *
+     * The nested names go FIRST, because they are the ones this backend actually sends. The flat
+     * ones stay for the console, which does send them.
+     */
+    reaction_count: first(
+      row,
+      "engagement.likes",
+      "engagement.reactionCount",
+      "reaction_count",
+      "reactionsCount",
+      "likesCount",
+      "numLikes",
+    ),
+    comment_count: first(
+      row,
+      "engagement.comments",
+      "engagement.commentCount",
+      "comment_count",
+      "commentsCount",
+      "numComments",
+    ),
     is_repost: Boolean(first(row, "is_repost", "isRepost", "reshared")),
   });
 }

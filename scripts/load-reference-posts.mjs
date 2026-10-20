@@ -235,6 +235,39 @@ if (wouldRegress.length) {
   );
 }
 
+/*
+ * AND NEVER NULL OVER A VALUE WE ALREADY HAVE.
+ *
+ * The line-break guard above was written for one specific loss and missed the general one. On
+ * 20 October the Apify mapping looked for `reactionsCount` where the payload says `engagement.likes`,
+ * so every row arrived with null engagement, the upsert merged it in, and the reaction and comment
+ * counts of all 1,900 posts were erased. The run reported success; the only sign was a column of
+ * nulls nobody queried until hours later.
+ *
+ * `merge-duplicates` means a key present with a null value overwrites. So any column this scrape
+ * could not fill is dropped from the payload entirely, which leaves whatever is stored alone. A
+ * backend that genuinely cannot see a field must not be able to delete it.
+ */
+const NULLABLE_ON_MERGE = [
+  "author_name", "url", "posted_at", "reaction_count", "comment_count",
+  "words", "sentence_words_sd",
+];
+let fieldsHeld = 0;
+for (const r of toStore) {
+  for (const col of NULLABLE_ON_MERGE) {
+    if (r[col] === null || r[col] === undefined) {
+      delete r[col];
+      fieldsHeld++;
+    }
+  }
+}
+if (fieldsHeld) {
+  console.log(
+    `  ${fieldsHeld} empty field(s) left out of the upsert rather than written as null, so a ` +
+      `backend that cannot see a column cannot erase it.`,
+  );
+}
+
 const BATCH = 100;
 let stored = 0;
 
