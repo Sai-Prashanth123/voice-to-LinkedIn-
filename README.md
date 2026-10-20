@@ -379,7 +379,8 @@ data/josh/            your law set and your measured voiceprint
 docs/
   03-runbook.md       how to run it, change it and fix it
   04-handover.md      taking it over entirely
-  00-spec-understanding.md   every clause of the build spec, restated
+  02-cost-model.md    what it costs to run
+  from-josh/          your own material: the spec, the prompt sets, the checklists
 eval/                 the test harness that proves the rules still hold
 ```
 

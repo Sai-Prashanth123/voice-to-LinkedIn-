@@ -49,3 +49,31 @@ supabase/.temp/
 # This file was tracked until 14 Oct 2026 and shipped a pre-approved allow-list —
 # execute_sql and a functions deploy against the live project — to anyone who cloned.
 .claude/settings.local.json
+
+# ─── The 21 October clear-out ────────────────────────────────────────────────
+# Untracked rather than deleted, so the copies stay on our disk and nothing is lost. They leave the
+# repository because the repository is what Josh clones, and none of this is his.
+#
+# NOTE ON WHAT THIS DOES NOT DO: every one of these files is still in the pushed history of a PUBLIC
+# repository. Untracking stops them reaching a fresh clone; it does not unpublish them. Only making
+# the repo private changes that, and on 21 October the decision was to leave it public for now.
+
+# Two scrapes of the reference writers, 182 posts in full text. Superseded by the 1,900 in Postgres,
+# and other people's writing does not belong in a public repo under clause 8.3.
+data/josh/sentinels/scrape-2026-10-05.json
+data/josh/sentinels/scrape-2026-10-09.json
+
+# Our working notes. Written to think with, never for Josh.
+docs/00-spec-understanding.md
+docs/05-walkthrough.md
+docs/06-roadmap.md
+docs/TODO.md
+docs/status-2026-10-05.md
+docs/2026-10-14-call-tracker.md
+docs/build-report.html
+docs/build-status.html
+docs/Josh fryszer-report.pdf
+
+# Superseded by the dated SEND- files beside it. An undated "send this" is the one a future session
+# picks up by mistake.
+docs/to-josh/SEND-THIS.md

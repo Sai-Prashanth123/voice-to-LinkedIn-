@@ -362,8 +362,9 @@ receives and the one you run cannot disagree.
 ## 6c. Handing it over
 
 `docs/04-handover.md` is the sequence for moving everything into Josh's accounts (14.1, 14.3),
-written from a rehearsal rather than from these setup steps. `docs/05-walkthrough.md` is the
-running order for the recorded session 14.5 requires, and `OWNERSHIP.md` states what transfers.
+written from a rehearsal rather than from these setup steps, and `OWNERSHIP.md` states what
+transfers. The running order for the recorded session 14.5 requires is no longer kept here — it was
+a working note for us, not a document for Josh, and it went in the 21 October clear-out.
 
 ## 7. Running the tests
 
