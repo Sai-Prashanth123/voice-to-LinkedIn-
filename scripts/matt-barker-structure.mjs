@@ -62,20 +62,31 @@ const HEADING = "## Matt Barker, read structurally";
  * So every number below is now counted from the corpus rather than read off a sample, and the two
  * claims that remain judgements say so in the line that makes them.
  */
+/*
+ * THE CLOSING FIGURES, COMPUTED ONCE.
+ *
+ * These live out here because three things state them: the body, the one-line claim Josh reads first
+ * on the decision screen, and the evidence block. On 20 October the body was rewritten with the
+ * counted version and the other two were left carrying the six-post one, so the proposal argued
+ * against itself — the summary said he asks in nearly every post and the text three screens down
+ * said 9%. A number stated in more than one place has to be derived in one.
+ */
+const closes = Object.fromEntries(matt.close_shapes ?? []);
+const opens = Object.fromEntries(matt.opening_shapes ?? []);
+const asks = (closes.direct_ask ?? 0) + (closes.engagement_ask ?? 0);
+const askPc = Math.round((100 * asks) / matt.shape_basis);
+// The other seven, so "he is restrained" is a comparison rather than an impression.
+const others = sentinels.report.filter((r) => r.handle !== "mattjbarker1" && r.close_shapes);
+const othersAsks = others.reduce((t, r) => {
+  const c = Object.fromEntries(r.close_shapes);
+  return t + (c.direct_ask ?? 0) + (c.engagement_ask ?? 0);
+}, 0);
+const othersBasis = others.reduce((t, r) => t + r.shape_basis, 0);
+const othersAskPc = Math.round((100 * othersAsks) / othersBasis);
+
 function section() {
   const L = [];
   const pc = (n) => Math.round((100 * n) / matt.shape_basis);
-  const closes = Object.fromEntries(matt.close_shapes ?? []);
-  const opens = Object.fromEntries(matt.opening_shapes ?? []);
-  const asks = (closes.direct_ask ?? 0) + (closes.engagement_ask ?? 0);
-  // The other seven, so "he is restrained" is a comparison rather than an impression.
-  const others = sentinels.report.filter((r) => r.handle !== "mattjbarker1" && r.close_shapes);
-  const othersAsks = others.reduce((t, r) => {
-    const c = Object.fromEntries(r.close_shapes);
-    return t + (c.direct_ask ?? 0) + (c.engagement_ask ?? 0);
-  }, 0);
-  const othersBasis = others.reduce((t, r) => t + r.shape_basis, 0);
-  const othersAskPc = Math.round((100 * othersAsks) / othersBasis);
   L.push(HEADING);
   L.push("");
   L.push("Josh asked to lean most into Matt Barker — his frameworks, structures and methods, in Josh's");
@@ -300,14 +311,34 @@ const merged = at === -1
   ? `${base.replace(/\n*$/, "")}\n\n${body}\n`
   : `${base.slice(0, at)}${body}\n\n---\n\n${base.slice(at)}`;
 
+/*
+ * The claim gets the same treatment as the body, for the same reason. The body has a replace path
+ * above; the claim did not, so the first re-run appended a second reading after the first and left
+ * the superseded sentence — "he asks in nearly every post" — standing at the front, where Josh reads
+ * it. The sentence below is the marker for everything this script has ever appended, so cutting at
+ * it recovers whatever the refresh wrote and nothing else.
+ */
+const CLAIM_MARKER = ". Plus a structural reading of Matt Barker";
+const cut = p.claim.indexOf(CLAIM_MARKER);
+const claimHead = (cut === -1 ? p.claim : p.claim.slice(0, cut)).replace(/\.\s*$/, "");
+
 const res = await fetch(`${url}/rest/v1/library_proposals?id=eq.${p.id}`, {
   method: "PATCH",
   headers: { ...headers, Prefer: "return=representation" },
   body: JSON.stringify({
     proposed_body: merged,
-    claim: `${p.claim}. Plus a structural reading of Matt Barker, which Josh asked to lean most ` +
-      `into: what transfers from his posts, and the two things that cannot — his renamed-problem ` +
-      `turn is the construction the banned-phrases section forbids, and he asks in nearly every post.`,
+    /*
+     * This is the line Josh reads before he reads anything else, so it carries the counted figure
+     * rather than a summary of the reading. It used to say "the two things that cannot" transfer and
+     * name his closing ask as the second. There is ONE: the renamed-problem turn. The closing claim
+     * was measured and came out backwards, which is why the number is in the sentence.
+     */
+    claim: `${claimHead}. Plus a structural reading of Matt Barker, which Josh asked to lean most ` +
+      `into: what transfers from his ${matt.posts_measured} posts and the one thing that cannot — ` +
+      `his renamed-problem turn is the construction the banned-phrases section forbids. It also ` +
+      `corrects this section: he does not close on an ask in nearly every post. Counted across ` +
+      `${matt.shape_basis}, he does it ${askPc}%, against ${othersAskPc}% for the other seven and ` +
+      `the 20% Josh's own rule allows.`,
     evidence: {
       ...(p.evidence ?? {}),
       matt_barker: {
@@ -316,8 +347,13 @@ const res = await fetch(`${url}/rest/v1/library_proposals?id=eq.${p.id}`, {
         median_words: matt.median_words,
         list_rate: matt.list_rate,
         shape_basis: matt.shape_basis,
-        read_by_eye: "the 6 posts collected 2026-10-05, whose line breaks the scrape stripped",
-        closes_on_an_ask: "6 of those 6",
+        // Counted, with the superseded basis kept beside it rather than deleted: the old figure is
+        // what the library has been telling drafters since 5 October, so it belongs in the record of
+        // what changed. Labelled as superseded so nobody reads it as current evidence.
+        closes_on_an_ask: `${asks} of ${matt.shape_basis} (${askPc}%)`,
+        closes_on_an_ask_other_seven: `${othersAsks} of ${othersBasis} (${othersAskPc}%)`,
+        superseded_reading: "6 of 6, off the posts collected 2026-10-05 whose line breaks the " +
+          "scrape stripped, read by eye",
         direct_asks_across_all_seven: `${sentinels.totals.direct_asks} of ${sentinels.totals.of}`,
       },
     },
