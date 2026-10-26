@@ -229,3 +229,71 @@ test("without an index nothing is reported as borrowed", () => {
   const clean = verifyDraft(`${BORROWED}.`, [], entry);
   assert.deepEqual(clean.borrowedPhrases, []);
 });
+
+/* ── Where a quote may come from ────────────────────────────────────────────── *
+ *
+ * Added 26 October, after the second time a fabricated quote reached a draft.
+ *
+ * The check searched the union of all twelve fields, so a quoted sentence verified if it appeared
+ * ANYWHERE in the entry. `his_words` is whatever Josh pasted into raw_inputs, and on 21 October
+ * that included a strategy document — so `"$40K a year for ZoomInfo"` verified cleanly and reached
+ * a TAM draft. He filed the rule the same day: "Real quotes only. A quote needs a confirmed speaker
+ * who actually said it. Never take a quote from a persona or strategy document."
+ *
+ * A quote is a claim about who SAID something. It may only rest on a field that records speech.
+ */
+
+test("a sentence lifted from a strategy document is not a quote", () => {
+  // The live shape of the 21 October failure: real text, in the entry, nobody said it.
+  const entry = {
+    the_moment: "I was working out the TAM for a cold email play.",
+    his_words: "Pasted from their strategy deck: buyers spend $40K a year for ZoomInfo and get "
+      + "nothing back.",
+  };
+  const r = verifyDraft(`Their CRO told me: "buyers spend $40K a year for ZoomInfo"`, [], entry);
+  assert.equal(r.ok, false, "a quote from a pasted document still verifies");
+  assert.ok(r.unsourcedQuotes.length > 0);
+  assert.match(r.failures.join(" "), /confirmed speaker|persona or strategy document/);
+});
+
+test("a conclusion in quotation marks has no speaker", () => {
+  const entry = {
+    the_lesson: "nobody owns the number once the consultants leave",
+    their_actual_words: "we will pick it up next quarter",
+  };
+  const r = verifyDraft(`The lesson was "nobody owns the number once the consultants leave".`, [], entry);
+  assert.equal(r.ok, false, "a line from the_lesson passed as something someone said");
+});
+
+test("what somebody actually said still verifies", () => {
+  const entry = {
+    the_moment: "A call in March.",
+    their_actual_words: "the number was fine before you got here",
+  };
+  const r = verifyDraft(`She said "the number was fine before you got here" and moved on.`, [], entry);
+  assert.equal(r.ok, true, `a real quote was refused: ${r.failures.join(" | ")}`);
+});
+
+test("a quote sitting only in his raw paste is refused, and told where to put it", () => {
+  /*
+   * The deliberate strictness. his_words is whatever he pasted, which on 21 October was a strategy
+   * document — so a quote has to reach their_actual_words through the extraction step, where the
+   * question "who said this" is actually asked. The message has to name that fix, or this becomes
+   * a refusal with nowhere to go.
+   */
+  const entry = {
+    the_moment: "A call in March.",
+    his_words: "she told me the number was fine before you got here",
+  };
+  const r = verifyDraft(`She said "the number was fine before you got here" and moved on.`, [], entry);
+  assert.equal(r.ok, false);
+  assert.match(r.failures.join(" "), /their_actual_words/);
+  assert.match(r.failures.join(" "), /drop the quotation marks/);
+});
+
+test("narrowing the quote check did not narrow anything else", () => {
+  // Numbers and spans still read the whole entry. Only the speaker question got stricter.
+  const entry = { the_detail: "it took 11 weeks and cost 40% of the quarter" };
+  const r = verifyDraft("It took 11 weeks and ate 40% of the quarter.", [], entry);
+  assert.equal(r.ok, true, `a sourced figure outside the speech fields was refused: ${r.failures.join(" | ")}`);
+});

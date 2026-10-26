@@ -82,6 +82,39 @@ export const EXTRA_SOURCES = [
 /** Everything a claim may name. The ten first, because that is the order the drafter reads. */
 export const CLAIMABLE_FIELDS = [...SOURCE_FIELDS, ...EXTRA_SOURCES] as const;
 
+/**
+ * WHERE A QUOTE MAY COME FROM, which is narrower than where a fact may come from.
+ *
+ * The quote check searched the union of all twelve fields, so a quoted sentence verified if it
+ * appeared ANYWHERE in the entry — including in a persona or strategy document Josh had pasted into
+ * raw_inputs, which lands in `his_words`. That is exactly how a made-up `"$40K a year for ZoomInfo"`
+ * quote reached a TAM draft on 21 October, after which he filed the rule himself:
+ *
+ *   "Real quotes only. A quote needs a confirmed speaker who actually said it. Never take a quote
+ *    from a persona or strategy document."
+ *
+ * A quote is a claim about who SAID something, so it may only rest on the field that records
+ * speech. A line sitting in `the_lesson` or `reader_takeaway` is a conclusion somebody drew, not a
+ * thing anybody said, and putting quotation marks round it invents a speaker.
+ *
+ * `his_words` IS DELIBERATELY NOT ON THIS LIST, and that is the whole fix.
+ *
+ * The first version of this included it, on the reasoning that what Josh typed is a legitimate
+ * source for a quote. It is not, for this check: `his_words` is the raw paste from raw_inputs,
+ * whatever he put there — and on 21 October what he put there was a strategy document. So including
+ * it reopens the exact hole. A test asserts the live shape of that failure, and it is what caught
+ * the first version.
+ *
+ * This is stricter than it looks and it is meant to be. A genuine quote has a home: the extraction
+ * step records what somebody said in `their_actual_words`, verbatim by schema. If a quote is in the
+ * paste and not in that field, the answer is to put it in that field, not to widen this list. And a
+ * sentence that is a conclusion rather than something said has an easier fix still — drop the
+ * quotation marks. The failure message says both.
+ *
+ * This narrows the quote check only. Numbers and every other claim still read the full entry.
+ */
+export const QUOTE_SOURCE_FIELDS = ["their_actual_words"] as const;
+
 export type ExtraSources = Partial<Record<(typeof EXTRA_SOURCES)[number], string | null>>;
 
 /**

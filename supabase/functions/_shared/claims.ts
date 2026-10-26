@@ -21,6 +21,8 @@
  */
 
 import { borrowedRuns } from "./shingles.ts";
+// Which fields record speech. A quote may only rest on one of them — see the note there.
+import { QUOTE_SOURCE_FIELDS } from "./entry.ts";
 
 export type ClaimKind = "quote" | "number" | "name" | "event" | "detail";
 
@@ -293,8 +295,22 @@ export function verifyDraft(
 
   const unsourcedNumbers = extractNumbers(draftBody).filter((n) => !sourceNumbers.has(n));
 
+  /*
+   * A QUOTE IS CHECKED AGAINST SPEECH, NOT AGAINST THE WHOLE ENTRY.
+   *
+   * This used to search `haystack`, the union of all twelve fields. So a quoted sentence verified
+   * if it appeared anywhere — including inside a persona or strategy document pasted into
+   * raw_inputs, which arrives as `his_words`. That is how the "$40K a year for ZoomInfo" quote
+   * reached a TAM draft on 21 October, and it is why Josh filed "Real quotes only. A quote needs a
+   * confirmed speaker who actually said it" the same day.
+   *
+   * See QUOTE_SOURCE_FIELDS. Everything else still reads the full entry.
+   */
+  const speechOnly = normalise(
+    QUOTE_SOURCE_FIELDS.map((f) => entry[f] ?? "").filter((s) => s.trim().length > 0).join("\n\n"),
+  );
   const unsourcedQuotes = extractQuotedStrings(draftBody).filter(
-    (q) => !haystack.includes(quoteKey(q)),
+    (q) => !speechOnly.includes(quoteKey(q)),
   );
 
   const draftNormalised = normalise(draftBody);
@@ -317,9 +333,15 @@ export function verifyDraft(
     );
   }
   if (unsourcedQuotes.length > 0) {
+    // Names which fields a quote may rest on, because the commonest cause is a real sentence from
+    // the wrong field — a line out of the_lesson in quotation marks has no speaker.
     failures.push(
-      `The draft quotes ${unsourcedQuotes.map((q) => `"${q}"`).join(", ")}, which was never said ` +
-        `in the source material.`,
+      `The draft quotes ${unsourcedQuotes.map((q) => `"${q}"`).join(", ")}, and nobody is ` +
+        `recorded as saying it. A quote needs a confirmed speaker who actually said it — never a ` +
+        `persona or a strategy document (Josh, 21 October) — so it must appear in ` +
+        `${QUOTE_SOURCE_FIELDS.join(" or ")}. Two fixes, both fine: if somebody did say it, put ` +
+        `their words in that field and call this again. If it is a conclusion rather than ` +
+        `something said, drop the quotation marks and state it.`,
     );
   }
   if (unclearedNames.length > 0) {
