@@ -110,6 +110,39 @@ test("create_draft refuses the tells where the construction is simply wrong", ()
   );
 });
 
+test("the shape targets are paged, because the row ceiling is the server's", () => {
+  /*
+   * PostgREST returns at most 1,000 rows however many are asked for, silently. Measured 26 October:
+   * limit 2000 and limit 5000 both returned exactly 1,000 against 1,839 stored.
+   *
+   * The ninth gate check was asking for 500, so every shape verdict it recorded was judged against
+   * per-writer medians built from about 43 of Matt Barker's 241 measurable posts — and the band
+   * across the eight read 7 to 23 where the truth is 8 to 21. Wider than real, so more permissive
+   * than written. A bigger limit is not the fix; nothing in a response says it was truncated.
+   *
+   * Asserted by source because the alternative is a live database with 1,839 rows in it.
+   */
+  for (const [name, file] of [
+    ["get_gate_brief", "./tools/brief.mjs"],
+    ["the drafting target", "./tools/voice.mjs"],
+  ]) {
+    const src = readFileSync(new URL(file, import.meta.url), "utf8");
+    assert.match(src, /shapedWriterRows\(/, `${name} loads the shape rows its own way`);
+    assert.doesNotMatch(
+      src,
+      /select: "handle,paragraphs,above_fold_words"/,
+      `${name} still has its own unpaged query for the shape rows`,
+    );
+  }
+
+  const deno = readFileSync(
+    new URL("../supabase/functions/_shared/handlers/gate.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(deno, /SHAPE_ROWS_PAGE/, "the server gate does not page the shape rows");
+  assert.doesNotMatch(deno, /\.limit\(500\)/, "the server gate still truncates at 500");
+});
+
 test("the free look predicts the refusal, rather than merely resembling it", () => {
   /*
    * measure_draft and scrub_draft are both free and both get skipped, because for a year neither

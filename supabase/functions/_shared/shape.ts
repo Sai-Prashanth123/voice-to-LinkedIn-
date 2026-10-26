@@ -56,6 +56,29 @@ function words(s: string): number {
  */
 export const BULLET_MARKER = /^(?:[-*•‣▪·>→➔»›]|\d+[.)])\s+/;
 
+/**
+ * WHICH ROWS THE SHAPE TARGETS REST ON. Spelled here because three callers load them.
+ *
+ * The two runtimes genuinely need separate loaders — Deno reaches the database through
+ * SupabaseClient and Node through its own wrapper — so what they must not disagree on is WHICH ROWS
+ * they load. That is the same reasoning as the note on HIS_WORDS_TABLE in entry.ts, and the same bug
+ * class it was written for.
+ *
+ * MEASURED 26 OCTOBER, and the reason this exists: PostgREST caps a response at 1,000 rows whatever
+ * limit is asked for. `limit: "2000"` and `limit: "5000"` both return exactly 1,000. There are 1,839
+ * posts with their line breaks intact, and the gate was asking for 500 — so every `shape` verdict
+ * was judged against per-writer medians computed from about 43 of Matt Barker's 241 measurable
+ * posts, and the band across the eight came out 7 to 23 where the truth is 8 to 21. Wider than real,
+ * which makes the check more permissive than it was written to be.
+ *
+ * The ninth check was added on 14 October to answer Josh's "wall of text" complaint. It has been
+ * answering it against a sample nobody chose.
+ *
+ * So: page. A single large limit cannot work, because the ceiling is the server's and it is silent.
+ */
+export const SHAPE_ROWS_SELECT = "handle,paragraphs,above_fold_words";
+export const SHAPE_ROWS_PAGE = 1000;
+
 export interface Shape {
   /**
    * Counted here so no caller writes the split itself.

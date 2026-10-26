@@ -28,6 +28,10 @@
 import { z } from "zod";
 
 import { renderLibrary } from "../../supabase/functions/_shared/views.ts";
+// The ninth gate check's own target function. Imported rather than reimplemented so the number a
+// draft is written to and the number it is judged against cannot differ.
+import { writerShapeTargets } from "../../supabase/functions/_shared/shape.ts";
+import { shapedWriterRows } from "../shape-rows.mjs";
 import voiceprint from "../../data/josh/law/voiceprint.json" with { type: "json" };
 import sentinels from "../../data/josh/sentinels/latest.json" with { type: "json" };
 import law from "../../data/josh/law/law.json" with { type: "json" };
@@ -359,10 +363,27 @@ export const referencePostTools = [
     },
 
     async handler(args, { db }) {
+      return await writerShapeFor(db, args.handle);
+    },
+  },
+];
+
+/**
+ * The structural read of one writer, extracted so more than one caller can have it.
+ *
+ * It was the body of `analyse_reference_writer` and nothing else could reach it. On 26 October Josh
+ * wrote: "I keep asking for a specific writer's shape, usually Matt Barker, and the draft uses the
+ * default framework instead. This is the one place I'd call out a specific fix." The numbers he
+ * wanted the drafter to aim at were computed here, behind a tool a drafter was never told to call.
+ *
+ * Still returns exactly what the tool returned. `writerShapeBlock` below turns it into the handful
+ * of lines a drafting brief can carry.
+ */
+export async function writerShapeFor(db, handle) {
       const posts = await db.select("reference_writer_posts", {
         select: "posted_at,words,paragraphs,above_fold_words,opening_words,opening_shape," +
           "close_shape,uses_list,sentence_words_sd,has_line_breaks,reaction_count",
-        handle: `eq.${args.handle}`,
+        handle: `eq.${handle}`,
         order: "posted_at.desc",
         /*
          * 200 was above every writer's count until 20 October, when the Apify backend first ran and
@@ -374,7 +395,7 @@ export const referencePostTools = [
       });
 
       if (posts.length === 0) {
-        return { handle: args.handle, note: `Nothing stored for "${args.handle}".` };
+        return { handle: handle, note: `Nothing stored for "${handle}".` };
       }
 
       // Shape figures come only from posts that kept their line breaks. Averaging in a post that
@@ -409,7 +430,7 @@ export const referencePostTools = [
       const thin = shaped.length < 12 || shaped.length / posts.length < 0.6;
 
       return {
-        handle: args.handle,
+        handle: handle,
         posts_read: posts.length,
         shape_basis: {
           posts: shaped.length,
@@ -441,7 +462,7 @@ export const referencePostTools = [
         },
         next: "get_reference_posts with this handle to read them. Take the shape and name which post " +
           "it came from; never the words.",
-        if_this_is_matt_barker: args.handle === "mattjbarker1"
+        if_this_is_matt_barker: handle === "mattjbarker1"
           ? {
             transfers: [
               "Open on someone else's situation with their number in it — it anonymises, which " +
@@ -468,9 +489,122 @@ export const referencePostTools = [
           }
           : undefined,
       };
-    },
-  },
-];
+}
+
+/**
+ * The same read, reduced to what a drafting brief can carry.
+ *
+ * WHY THE NUMBERS COME FROM writerShapeTargets AND NOT FROM THE READ ABOVE
+ *
+ * `paragraphs` and `above_fold_words` are handed to the drafter through the SAME function the ninth
+ * gate check is handed them through (`shape.ts:writerShapeTargets`), filtered to one writer. So the
+ * target a draft is written to and the target it is judged against are the same number, computed
+ * once. A target the gate cannot see is advice, and advice is what Josh has been overruling by hand.
+ *
+ * WHAT IT WILL NOT DO
+ *
+ * Carry a single word of their prose. Everything here is a count or a median, which is what keeps
+ * `reference-split.test.ts` true and 8.3 mechanical rather than aspirational.
+ *
+ * And it will not hand back a target without its exclusions — see the note on `excludes`.
+ */
+export async function writerShapeBlock(db, handle) {
+  const read = await writerShapeFor(db, handle);
+  if (read.note) return { handle, refused: read.note };
+
+  const name = (sentinels.report ?? []).find((r) => r.handle === handle)?.name ?? handle;
+
+  /*
+   * REFUSE RATHER THAN DEGRADE.
+   *
+   * `thin` is already computed above: under 12 measurable posts, or under 60% of the writer's
+   * corpus. A confident median off eight posts, handed to a drafter as "this is what he does", is
+   * the quiet overclaim the caution in writerShapeFor exists to flag — and a caution a model reads
+   * past is not a safeguard. So there is no target at all, and the reason is said out loud.
+   *
+   * For mattjbarker1 this never fires: 241 of 250. That is the honest reason this is safe to ship,
+   * and it is also why it must stay — the seven others are not all in that position.
+   */
+  if (read.shape_basis?.caution) {
+    return {
+      handle,
+      name,
+      refused: `${read.shape_basis.posts} of ${read.shape_basis.of} of ${name}'s stored posts can ` +
+        "be read for shape, which is not enough to call any of it his habit. No target was given " +
+        "for this draft. Read his posts with get_reference_posts instead.",
+    };
+  }
+
+  // The gate's own numbers, from the gate's own loader, for this writer and for the eight together.
+  // Paged, because a single limit cannot reach past PostgREST's silent 1,000-row ceiling — see the
+  // note in shape-rows.mjs. Asking for 2,000 here returned 1,000 and put Barker's median paragraphs
+  // at 10.5 off 44 posts, against 13 off all 241.
+  const rows = await shapedWriterRows(db);
+  const mine = writerShapeTargets(rows.filter((r) => r.handle === handle));
+  const all = writerShapeTargets(rows);
+  const band = (xs) => (xs?.length ? `${Math.min(...xs)} to ${Math.max(...xs)}` : "not measured");
+  const one = (xs) => (xs?.length ? String(xs[0]) : "not measured");
+
+  const opens = read.getting_in?.opening_shapes ?? [];
+  const closes = read.getting_out?.close_shapes ?? [];
+  const basisPosts = read.shape_basis?.posts ?? 0;
+  const pct = (n) => (basisPosts ? `${Math.round((100 * n) / basisPosts)}%` : "—");
+
+  const lines = [];
+  if (opens.length) {
+    const [shape, n] = opens[0];
+    lines.push(
+      `HOW HE GETS IN: his commonest opening is ${shape.replace(/_/g, " ")} — ${n} of ` +
+        `${basisPosts} posts (${pct(n)}). The next is ${opens[1]?.[0]?.replace(/_/g, " ") ?? "—"}.`,
+    );
+  }
+  lines.push(
+    `ABOVE THE FOLD: ${one(mine.aboveFold)} words, where the eight run ${band(all.aboveFold)}. ` +
+      "That is the number the shape check will measure this draft against.",
+  );
+  lines.push(
+    `PARAGRAPHS: ${one(mine.paragraphs)}, where the eight run ${band(all.paragraphs)}.`,
+  );
+  if (closes.length) {
+    const [shape, n] = closes[0];
+    lines.push(
+      `HOW HE LANDS: most often ${shape.replace(/_/g, " ")} — ${n} of ${basisPosts} (${pct(n)}).`,
+    );
+  }
+  if (typeof read.body?.list_rate === "number") {
+    lines.push(
+      `LISTS: ${Math.round(read.body.list_rate * 100)}% of his posts use one. A list is a choice ` +
+        "he makes some of the time, not his default shape.",
+    );
+  }
+  if (typeof read.length?.median_words === "number") {
+    lines.push(`LENGTH: his median post is ${read.length.median_words} words. Not a target.`);
+  }
+
+  /*
+   * THE EXCLUSIONS TRAVEL WITH THE TARGET, IN THE SAME OBJECT.
+   *
+   * The failure mode is a refactor that keeps the shape and drops the thing the shape is not
+   * allowed to include — which for Matt Barker is the one construction Josh's banned-phrases
+   * section forbids outright. So this is never a separate optional field, and where a writer has no
+   * exclusions recorded it says so rather than returning nothing, following shape.ts's "not
+   * measured" rather than silence. A test asserts both halves.
+   */
+  const excludes = read.if_this_is_matt_barker?.does_not_transfer ?? [];
+
+  return {
+    handle,
+    name,
+    lines,
+    excludes: excludes.length
+      ? excludes
+      : [`No exclusions are recorded for ${name}. That is not the same as "nothing to avoid" — it ` +
+        "means nobody has read him structurally yet. The banned-phrases section still applies in " +
+        "full."],
+    basis: `Measured across ${basisPosts} of ${read.posts_read} stored posts of his — the ones ` +
+      `that kept their line breaks${read.window ? `, ${read.window.from} to ${read.window.to}` : ""}.`,
+  };
+}
 
 export const sentinelTools = [
   {

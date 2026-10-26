@@ -35,6 +35,7 @@ import {
 } from "../../supabase/functions/_shared/prompts.ts";
 import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
 import { writingSources } from "../sources.mjs";
+import { shapedWriterRows } from "../shape-rows.mjs";
 import { WRITTEN_UP } from "../../supabase/functions/_shared/extraction.ts";
 import { parsePillars } from "../../supabase/functions/_shared/library.ts";
 import { renderTranscript } from "../../supabase/functions/_shared/session.ts";
@@ -281,11 +282,7 @@ export const briefTools = [
        * writer. If nothing measurable is stored the targets come back empty and the check says so
        * rather than inventing a range.
        */
-      const writerRows = await db.select("reference_writer_posts", {
-        select: "handle,paragraphs,above_fold_words",
-        has_line_breaks: "is.true",
-        limit: "500",
-      });
+      const writerRows = await shapedWriterRows(db);
       const targets = writerShapeTargets(writerRows);
       const shapeLines = shapeAgainst(measureShape(draft.body), targets);
 

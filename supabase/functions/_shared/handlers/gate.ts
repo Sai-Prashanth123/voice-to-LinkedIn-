@@ -25,7 +25,36 @@ import { clearedNames, unclearedNames } from "../names.ts";
 import { enqueue } from "../jobs.ts";
 import { loadLibrary } from "../library.ts";
 import { gateInputsFor, CHECK_NEEDS_SECTION, notJudged, unjudgeableChecks } from "../views.ts";
-import { measureShape, shapeAgainst, writerShapeTargets } from "../shape.ts";
+import {
+  measureShape,
+  shapeAgainst,
+  SHAPE_ROWS_PAGE,
+  SHAPE_ROWS_SELECT,
+  writerShapeTargets,
+} from "../shape.ts";
+
+/**
+ * Every post that kept its line breaks, in pages, because PostgREST stops at 1,000 however many are
+ * asked for. The Node side has its own copy of this in mcp-server/tools/brief.mjs for the reason
+ * given on SHAPE_ROWS_SELECT: two clients, one definition of which rows.
+ */
+async function shapedWriterRows(
+  db: SupabaseClient,
+): Promise<{ handle: string; paragraphs: number; above_fold_words: number }[]> {
+  const out = [];
+  for (let from = 0;; from += SHAPE_ROWS_PAGE) {
+    const { data, error } = await db
+      .from("reference_writer_posts")
+      .select(SHAPE_ROWS_SELECT)
+      .eq("has_line_breaks", true)
+      .order("activity_id")
+      .range(from, from + SHAPE_ROWS_PAGE - 1);
+    if (error) throw new Error(`shape targets: ${error.message}`);
+    out.push(...(data ?? []));
+    if (!data || data.length < SHAPE_ROWS_PAGE) break;
+  }
+  return out as { handle: string; paragraphs: number; above_fold_words: number }[];
+}
 import { notice } from "../notices.ts";
 import { oneStepMode } from "../mode.ts";
 // Re-exported because gate-basis.test.ts imports them from here, and because this is where a
@@ -103,11 +132,7 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
    * count — most of what the console returns is one unbroken line, and averaging those in would
    * report the scraper as a habit of the writer.
    */
-  const { data: writerRows } = await db
-    .from("reference_writer_posts")
-    .select("handle,paragraphs,above_fold_words")
-    .eq("has_line_breaks", true)
-    .limit(500);
+  const writerRows = await shapedWriterRows(db);
   const shapeLines = shapeAgainst(
     measureShape(draft.body),
     writerShapeTargets(writerRows ?? []),
