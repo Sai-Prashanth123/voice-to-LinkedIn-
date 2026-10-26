@@ -25,6 +25,32 @@ import { measureShape } from "../../supabase/functions/_shared/shape.ts";
 
 export const words = (s) => (s ?? "").trim().split(/\s+/).filter(Boolean).length;
 
+/*
+ * WHERE THE TURN LANDS — moved here on 26 October so a DRAFT can be measured for it.
+ *
+ * It lived in scripts/measure-structure.mjs, a one-off CLI that measures the reference writers and
+ * writes nothing. So the one structural fact about reading order this system can compute had never
+ * once been applied to a post of Josh's. He wrote: "The posts jump around and don't tie the points
+ * together. One paragraph rarely leads into the next."
+ *
+ * A turn is where a post stops describing and reverses, and in practice it is marked, because a
+ * writer who reverses without a marker loses the reader.
+ *
+ * Reported as a fraction through the post by sentence index, so 0.6 means three fifths of the way
+ * in. NO MARKER RETURNS NULL rather than 1.0: "no turn" is a real shape — 56% of the reference
+ * corpus has none — and averaging it in as "a turn at the very end" would be a lie. There is
+ * deliberately no threshold on it anywhere.
+ */
+export const TURN =
+  /^(but|and yet|yet|then|turns out|it turned out|except|until|instead|the problem|here is|here's|what i found|what actually|so i|that is when|that's when|two weeks later|a month later)\b/i;
+
+export function turnAt(sents) {
+  for (let i = 0; i < sents.length; i++) {
+    if (TURN.test(sents[i])) return sents.length > 1 ? i / (sents.length - 1) : 0;
+  }
+  return null;
+}
+
 /** Sentence split that tolerates the way people actually punctuate, including not at all. */
 export const sentences = (text) =>
   (text ?? "").split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);

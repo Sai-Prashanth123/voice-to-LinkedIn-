@@ -146,6 +146,35 @@ test("the review list shows the verdict, and shows it before the post", () => {
   );
 });
 
+test("the turn detector is spelled once, and a draft can reach it", () => {
+  /*
+   * It lived only in scripts/measure-structure.mjs — a CLI that measures the eight writers and
+   * writes nothing — so the one fact about reading order this system can compute had never been
+   * applied to a post of Josh's. He asked for exactly that on 26 October.
+   *
+   * It moved to scripts/lib/prose.mjs, whose header exists so two readers of one definition cannot
+   * disagree. A second copy would make every comparison between a draft and the corpus an artefact
+   * of which copy ran.
+   */
+  const prose = readFileSync(
+    new URL("../scripts/lib/prose.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(prose, /export function turnAt/, "the shared definition is gone");
+
+  const cli = readFileSync(
+    new URL("../scripts/measure-structure.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(cli, /^function turnAt/m, "measure-structure has its own copy again");
+  assert.match(cli, /turnAt.*from "\.\/lib\/prose\.mjs"/, "it does not import the shared one");
+
+  const measure = readFileSync(new URL("./tools/measure.mjs", import.meta.url), "utf8");
+  assert.match(measure, /turnAt\(sentences\(body\)\)/, "measure_draft cannot see the turn");
+  // No threshold, ever: 56% of the corpus has no marked turn and that is a real shape.
+  assert.doesNotMatch(measure, /turn\s*[<>]=?\s*0\.\d/, "a threshold has been put on the turn");
+});
+
 test("the gate is described as nine checks, because it is nine", () => {
   // A ninth was added on 14 October. Every surface that still said eight was telling a reader —
   // and a model — to stop at eight, which is how gate_passed stayed null for five days.

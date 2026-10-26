@@ -10,6 +10,13 @@ export interface PostMeasurement {
   paragraphs: number;
   lines: number;
   above_fold_words: number;
+  // The rendered cut, added 26 October. Not comparable with above_fold_words above — that counts
+  // words in the first three authored lines, these count the first three lines a phone draws.
+  rendered_lines: number;
+  above_fold_rendered: string;
+  above_fold_rendered_words: number;
+  hook_above_fold: boolean;
+  cut_mid_sentence: boolean;
   opening_words: number;
   opening_shape: string;
   close_shape: string;

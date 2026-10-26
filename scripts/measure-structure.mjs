@@ -40,7 +40,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { openingShape, closeShape, words } from "./lib/prose.mjs";
+import { closeShape, openingShape, turnAt, words } from "./lib/prose.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
@@ -67,24 +67,13 @@ function sentences(text) {
 }
 
 /*
- * WHERE THE TURN LANDS.
+ * WHERE THE TURN LANDS — now imported, not defined here.
  *
- * The one structural fact Josh named that nothing in this system has ever measured: "the underlying
- * framework, the underlying structures". A turn is where a post stops describing and reverses — and
- * in practice it is marked, because a writer who reverses without a marker loses the reader.
- *
- * Reported as a fraction through the post by sentence index, so 0.6 means the turn lands three
- * fifths of the way in. A post with no marker is counted separately rather than scored as 1.0:
- * "no turn" is a real shape and averaging it in as "a turn at the very end" would be a lie.
+ * This was the only turn detector in the repo and it lived in a CLI that measures the writers and
+ * writes nothing, so it had never been applied to a draft of Josh's. It moved to scripts/lib/prose.mjs,
+ * whose header exists precisely so two readers of one definition cannot disagree. Asserted by a
+ * guard, because a second copy here would make every comparison an artefact of which one ran.
  */
-const TURN = /^(but|and yet|yet|then|turns out|it turned out|except|until|instead|the problem|here is|here's|what i found|what actually|so i|that is when|that's when|two weeks later|a month later)\b/i;
-
-function turnAt(sents) {
-  for (let i = 0; i < sents.length; i++) {
-    if (TURN.test(sents[i])) return sents.length > 1 ? i / (sents.length - 1) : 0;
-  }
-  return null;
-}
 
 /*
  * DOES THE POST ENUMERATE — ANSWERED WITHOUT LINE BREAKS.

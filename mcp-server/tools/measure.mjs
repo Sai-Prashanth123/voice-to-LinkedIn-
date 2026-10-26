@@ -32,9 +32,14 @@
 
 import { z } from "zod";
 
-import { measurePost, per1k, tokens } from "../../scripts/lib/prose.mjs";
+import { measurePost, per1k, sentences, tokens, turnAt } from "../../scripts/lib/prose.mjs";
 import { scan, HIGH_CONFIDENCE } from "../aitells.mjs";
 import { willRefuse } from "../prefile.mjs";
+import {
+  FOLD_BLANK_COST,
+  FOLD_CHARS_PER_LINE,
+  FOLD_LINES,
+} from "../../supabase/functions/_shared/shape.ts";
 import { medianWordRange } from "./voice.mjs";
 import voiceprint from "../../data/josh/law/voiceprint.json" with { type: "json" };
 import sentinels from "../../data/josh/sentinels/latest.json" with { type: "json" };
@@ -183,6 +188,21 @@ export const measureTools = [
           `about on 14 October, and the ninth gate check judges it.`,
         );
       }
+      /*
+       * The one new flag, and it is a boolean rather than a threshold.
+       *
+       * Josh's actual question — does the hook finish before the cut — needs no calibrated number
+       * beyond the position of the cut itself, which is why it is safe to surface while the
+       * constants are provisional. A word-count threshold is not, and is deliberately absent.
+       */
+      if (!m.hook_above_fold && m.words >= 25) {
+        flags.push(
+          `The hook does not finish above the fold. On a phone a reader sees about ` +
+          `"${m.above_fold_rendered.replace(/\n/g, " / ")}" and then "see more" — the first ` +
+          `sentence runs past it. Shorten the opening or break it earlier. (Simulated cut, ` +
+          `uncalibrated: act on this, but do not quote the number to Josh.)`,
+        );
+      }
       if (m.above_fold_words >= 90) {
         flags.push(
           `${m.above_fold_words} words above the fold. The writers run to 74.5 at the most, and a ` +
@@ -190,6 +210,7 @@ export const measureTools = [
         );
       }
 
+      const turn = turnAt(sentences(body));
       const tells = scan(body);
       const loud = tells.findings.filter((f) => HIGH_CONFIDENCE.has(f.rule));
       for (const f of loud) {
@@ -269,6 +290,66 @@ export const measureTools = [
          * The ninth gate check judges this properly, against the writers' measured range. This is
          * the free look beforehand, so a wall of text is caught before a gate run is spent on it.
          */
+        /*
+         * THE FOLD AS A PHONE DRAWS IT, which is the thing Josh asked for on 26 October: "in phone
+         * lines, not just word count."
+         *
+         * Reported separately from `shape.above_fold_words` below, and deliberately not merged with
+         * it. That number counts words in the first three AUTHORED lines; this one counts the first
+         * three lines a narrow screen renders, gaps included. They are different quantities and the
+         * old one is the one every stored median and the ninth check's targets rest on.
+         *
+         * `hook_above_fold` is the only thing here to act on while the constants are provisional. It
+         * only flips when the error is bigger than the gap between the end of the first sentence and
+         * the cut, and usually it is not. There is deliberately NO threshold on the word count — a
+         * drafter that can see the cut would pad to it.
+         */
+        fold: {
+          hook_lands_above_it: m.hook_above_fold,
+          rendered_lines: m.rendered_lines,
+          words_above_it: m.above_fold_rendered_words,
+          what_he_would_see: m.above_fold_rendered,
+          cuts_mid_sentence: m.cut_mid_sentence,
+          measured_with: `${FOLD_CHARS_PER_LINE} characters a line, a blank line costing ` +
+            `${FOLD_BLANK_COST}, cut after ${FOLD_LINES} lines`,
+          how_much_to_trust_it: "PROVISIONAL. LinkedIn does not publish where the cut falls and it " +
+            "moves with the phone, the text size and the app version, so this is a simulation " +
+            "with uncalibrated constants. Act on hook_lands_above_it; treat the word count as " +
+            "indicative and do not quote it to Josh as a measurement.",
+          not_the_same_as: "shape.above_fold_words below. That counts the first three lines as " +
+            "written; this counts the first three as drawn. Never average or swap them.",
+        },
+
+        /*
+         * WHERE THE POST REVERSES. Reported, never scored.
+         *
+         * Josh, 26 October: "The posts jump around and don't tie the points together. One paragraph
+         * rarely leads into the next. This feels like it needs a judgement on reading order rather
+         * than a word-level check."
+         *
+         * He is right that it is a judgement, and `scrub_draft` is where that judgement now gets
+         * asked. This is the one piece of reading order that IS computable: a post that reverses
+         * early and spends the rest on the consequence has a spine, and a post that explains for
+         * four fifths and then turns reads as a list of observations.
+         *
+         * NO THRESHOLD, and none is coming. 56% of the reference corpus has no marked turn at all,
+         * so "no turn" is a real shape rather than a fault. The per-writer comparison lives in the
+         * barker-audit skill, which reads the live measurements; this tool makes no database call
+         * and will not carry a hardcoded corpus median that can go stale without saying so.
+         */
+        reading_order: {
+          turn_marker_found: turn !== null,
+          turn_at: turn === null ? null : +turn.toFixed(2),
+          means: turn === null
+            ? "No marked reversal. That is a real shape — most of the reference corpus has none — " +
+              "and it is not a fault. It does mean nothing in the post changes direction, so if it " +
+              "reads flat, this is where to look."
+            : `The post reverses ${Math.round(turn * 100)}% of the way through by sentence. ` +
+              "Early means the turn buys the rest of the post; late means most of it was setup.",
+          not_a_target: "Ask barker-audit for a named writer's turn position. Nothing here judges " +
+            "this number, and it is not in the gate.",
+        },
+
         shape: {
           paragraphs: m.paragraphs,
           lines: m.lines,

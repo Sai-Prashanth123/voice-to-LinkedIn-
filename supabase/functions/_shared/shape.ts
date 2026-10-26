@@ -79,6 +79,103 @@ export const BULLET_MARKER = /^(?:[-*•‣▪·>→➔»›]|\d+[.)])\s+/;
 export const SHAPE_ROWS_SELECT = "handle,paragraphs,above_fold_words";
 export const SHAPE_ROWS_PAGE = 1000;
 
+/* ── The fold, as a phone actually renders it ─────────────────────────────────
+ *
+ * Josh, 26 October: "If the hook doesn't sit above the 'see more' line on mobile, it doesn't do its
+ * job. I'd like the system to actually measure that, in phone lines, not just word count."
+ *
+ * `above_fold_words` below is not that number and never was. It takes the first three entries of
+ * `lines`, which has blank lines FILTERED OUT, so it is wrong in both directions:
+ *
+ *   - three one-word paragraphs measure 3 words, while occupying five rendered lines on a phone
+ *     once the gaps between them are counted;
+ *   - a single 60-word opening paragraph is ONE entry, so slice(0, 3) hands back the whole
+ *     paragraph as "above the fold". That is why measure_draft can ever see 90 words up there.
+ *     Ninety words do not fit above any fold on any phone.
+ *
+ * So this is a second, differently-named measurement rather than a correction of that one.
+ * `above_fold_words` keeps its meaning exactly, because the writers' stored medians, the ninth
+ * check's targets and compare_to_references all rest on it. The two must never be averaged or
+ * compared — they count different things.
+ *
+ * THE CONSTANTS ARE PROVISIONAL AND MUST BE CALIBRATED.
+ *
+ * LinkedIn does not publish where the cut falls, and it moves with the device, the OS text size and
+ * the app version. These are a starting point, not a measurement. The precedent for fixing that is
+ * in this repo: the list detector in scripts/measure-structure.mjs published its confusion matrix,
+ * was re-tested at scale, and turned out to have been flattering — 90% became 83.8%. Until the same
+ * is done here with real posts read off a real phone, `hook_above_fold` is the only signal worth
+ * acting on, because it only flips when the error is bigger than the gap, and it is kept out of the
+ * gate rubric entirely.
+ */
+export const FOLD_LINES = 3;
+/** PROVISIONAL. Fit against posts read off a phone before anyone trusts a number derived from it. */
+export const FOLD_CHARS_PER_LINE = 42;
+/**
+ * PROVISIONAL, and a fitted parameter rather than a fact — how many rendered lines a blank line
+ * costs. It is the single assumption most likely to be wrong, and it moves the answer by one or two
+ * lines out of three, which is decisive.
+ */
+export const FOLD_BLANK_COST = 1;
+
+/** Graphemes, not UTF-16 units, or every emoji costs two characters of line width. */
+function widthOf(s: string): number {
+  try {
+    const seg = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+    let n = 0;
+    for (const _ of seg.segment(s)) n++;
+    return n;
+  } catch {
+    return [...s].length;
+  }
+}
+
+/**
+ * The post as a narrow screen lays it out: one entry per rendered line, blank lines included.
+ *
+ * Greedy word wrap rather than ceil(chars / perLine). The arithmetic version undercounts a line of
+ * long words, and the opening line is exactly where long words live — which is the line this whole
+ * measurement exists to judge.
+ */
+export function renderedLines(
+  text: string | null | undefined,
+  { charsPerLine = FOLD_CHARS_PER_LINE, blankCost = FOLD_BLANK_COST } = {},
+): string[] {
+  const out: string[] = [];
+  const source = (text ?? "").replace(/\r/g, "").split("\n");
+  let lastWasBlank = false;
+
+  for (const raw of source) {
+    const line = raw.trim();
+    if (!line) {
+      // Consecutive blanks collapse: a reader sees one gap however many newlines produced it.
+      if (!lastWasBlank) for (let i = 0; i < blankCost; i++) out.push("");
+      lastWasBlank = true;
+      continue;
+    }
+    lastWasBlank = false;
+
+    let current = "";
+    for (const word of line.split(/\s+/)) {
+      if (!current) {
+        current = word;
+      } else if (widthOf(`${current} ${word}`) <= charsPerLine) {
+        current = `${current} ${word}`;
+      } else {
+        out.push(current);
+        current = word;
+      }
+    }
+    // A word longer than the line still occupies one, so never push nothing.
+    out.push(current);
+  }
+
+  // Leading and trailing gaps are not lines a reader sees.
+  while (out.length && out[0] === "") out.shift();
+  while (out.length && out.at(-1) === "") out.pop();
+  return out;
+}
+
 export interface Shape {
   /**
    * Counted here so no caller writes the split itself.
@@ -99,6 +196,26 @@ export interface Shape {
    * dropped on the floor, never surfaced by measure_draft to the writer who needed it.
    */
   above_fold_words: number;
+  /**
+   * The same cut, measured as a phone renders it. Blank lines counted, long paragraphs wrapped.
+   *
+   * These are NOT comparable with above_fold_words above and must never be averaged with it or
+   * swapped for it — see the note on FOLD_CHARS_PER_LINE. The constants behind them are provisional
+   * until calibrated against posts read off a real phone.
+   */
+  rendered_lines: number;
+  above_fold_rendered: string;
+  above_fold_rendered_words: number;
+  /**
+   * The question Josh actually asked: does his hook finish before the "see more" cut?
+   *
+   * A boolean rather than a word count, and the only signal here worth acting on while the
+   * constants are provisional — it only flips when the error is larger than the gap between the end
+   * of the first sentence and the cut, and usually it is not.
+   */
+  hook_above_fold: boolean;
+  /** The cut lands inside a sentence rather than between two. Reported, never judged. */
+  cut_mid_sentence: boolean;
   opening_words: number;
   bullet_lines: number;
   /** Two or more. One stray dash is a sentence, not a list. */
@@ -113,11 +230,31 @@ export function measureShape(text: string | null | undefined): Shape {
   const lines = body.split("\n").map((l) => l.trim()).filter(Boolean);
   const bullets = lines.filter((l) => BULLET_MARKER.test(l));
 
+  /*
+   * The rendered cut, alongside the old measurement rather than replacing it.
+   *
+   * `fold` is what a reader sees before "see more"; `firstSentence` is where the hook ends. The
+   * hook clears the fold when every word of it is inside that text — compared on collapsed
+   * whitespace, because the wrap inserts breaks where the source had spaces.
+   */
+  const rendered = renderedLines(body);
+  const fold = rendered.slice(0, FOLD_LINES).join("\n");
+  const foldFlat = fold.replace(/\s+/g, " ").trim();
+  const firstSentence = (body.split(/(?<=[.!?])\s/)[0] ?? "").replace(/\s+/g, " ").trim();
+  const hookFits = firstSentence.length > 0 && foldFlat.includes(firstSentence);
+
   return {
     words: words(body),
     paragraphs: paras.length,
     lines: lines.length,
     above_fold_words: words(lines.slice(0, 3).join(" ")),
+    rendered_lines: rendered.length,
+    above_fold_rendered: fold,
+    above_fold_rendered_words: words(foldFlat),
+    hook_above_fold: hookFits,
+    // Only meaningful when there is more post after the cut.
+    cut_mid_sentence: rendered.length > FOLD_LINES &&
+      !/[.!?:"”]\s*$/.test(rendered[FOLD_LINES - 1] ?? ""),
     opening_words: words(lines[0] ?? ""),
     bullet_lines: bullets.length,
     uses_list: bullets.length >= 2,

@@ -15,7 +15,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { measureShape, shapeAgainst, writerShapeTargets } from "./shape.ts";
+import { measureShape, renderedLines, shapeAgainst, writerShapeTargets } from "./shape.ts";
 
 const WALL =
   "Every tool I run is on trial. Including the ones I'd defend. Claude Code and Deepline CLI. " +
@@ -96,4 +96,75 @@ test("the measured block names both the post and the range", () => {
 test("no targets produces an honest blank rather than an invented range", () => {
   const text = shapeAgainst(measureShape(WALL), { paragraphs: [], aboveFold: [] }).join(" ");
   assert.match(text, /not measured/);
+});
+
+/* ── The fold, as a phone renders it ───────────────────────────────────────────
+ *
+ * Josh, 26 October: "If the hook doesn't sit above the 'see more' line on mobile, it doesn't do its
+ * job. I'd like the system to actually measure that, in phone lines, not just word count."
+ *
+ * These assert the two directions the old measurement was wrong in, and that it still means what it
+ * always meant — every stored median and the ninth check's targets rest on it.
+ */
+
+test("blank lines cost a line, which the old measure could not see", () => {
+  // Three one-word paragraphs: three authored lines, five rendered, because the gaps are real.
+  const m = measureShape("Late.\n\nAgain.\n\nSorry.");
+  assert.equal(m.above_fold_words, 3, "the old measure must keep its meaning exactly");
+  assert.ok(m.rendered_lines >= 5, `three one-word paragraphs render as ${m.rendered_lines} lines`);
+});
+
+test("a long opening paragraph no longer reports more words than fit on a screen", () => {
+  /*
+   * The worse direction, and the one nobody noticed. `lines` filters blanks out, so a single long
+   * paragraph is ONE entry and slice(0, 3) returns the whole thing. That is how measure_draft could
+   * ever flag "90 words above the fold" — ninety words do not fit above any fold on any phone.
+   */
+  const body = "I sat down on the Tuesday after the quarter closed and worked out that the number " +
+    "we had been reporting for eleven weeks was the number nobody in the room had actually agreed " +
+    "to, which meant every forecast built on it was wrong in the same direction.";
+  const m = measureShape(body);
+  assert.ok(m.above_fold_words > 40, "the fixture is not long enough to show the fault");
+  assert.ok(
+    m.above_fold_rendered_words < m.above_fold_words / 2,
+    `${m.above_fold_rendered_words} rendered against ${m.above_fold_words} claimed`,
+  );
+  assert.equal(m.hook_above_fold, false, "a sentence this long cannot clear the cut");
+});
+
+test("the hook clears the fold when it is short enough to", () => {
+  const m = measureShape("The AI made the quotes up.\n\nAll four of them.\n\nI only caught one.");
+  assert.equal(m.hook_above_fold, true);
+});
+
+test("the two above-fold numbers are never the same measurement", () => {
+  // If these ever converge, something has started using one where the other belongs.
+  const m = measureShape("Late.\n\nAgain.\n\nSorry.\n\nThe call had already started without me.");
+  assert.ok(
+    m.above_fold_words !== m.above_fold_rendered_words || m.rendered_lines > m.lines,
+    "the rendered fold is indistinguishable from the authored one on a case built to separate them",
+  );
+});
+
+test("an empty or tiny post does not throw and claims no hook", () => {
+  for (const body of ["", "   ", "\n\n\n"]) {
+    const m = measureShape(body);
+    assert.equal(m.rendered_lines, 0);
+    assert.equal(m.hook_above_fold, false);
+    assert.equal(m.cut_mid_sentence, false);
+  }
+});
+
+test("a word longer than the line still occupies one", () => {
+  const long = "a".repeat(200);
+  assert.ok(renderedLines(long).length >= 1);
+  assert.equal(renderedLines(long)[0], long);
+});
+
+test("the wrap is greedy, not arithmetic", () => {
+  // ceil(chars / perLine) undercounts a line of long words, and the opening line is where long
+  // words live — which is the line this measurement exists to judge.
+  const words = ["alphabetical", "considerations", "notwithstanding", "implementation"];
+  const lines = renderedLines(words.join(" "), { charsPerLine: 20 });
+  for (const l of lines) assert(l.length <= 20 || !l.includes(" "), `"${l}" exceeds the width`);
 });

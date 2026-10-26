@@ -73,6 +73,29 @@ function rubric(measured, findings, body) {
       trust: "Is there a specific detail, number or moment a reader can picture — or generic claims "
         + "with no anchor?",
       authenticity: "Does the post admit a limit, a tradeoff or a place he was wrong?",
+      /*
+       * READING ORDER, added 26 October. Josh: "The posts jump around and don't tie the points
+       * together. One paragraph rarely leads into the next. This feels like it needs a judgement on
+       * reading order rather than a word-level check."
+       *
+       * He named the right home for it. It is here rather than in the gate because no number
+       * decides it, and scoring it would produce something that looks like a measurement and is a
+       * guess — which is what this block's own header says `to_judge` exists to avoid.
+       *
+       * THE LAST SENTENCE IS THE LOAD-BEARING ONE. The obvious reading of "it doesn't flow" is "add
+       * connectives", and that would fight a rule this same tool enforces: the AI-trait reference
+       * lists a sentence announcing what comes next as removable filler, and rule 2A flags
+       * "consequently", "moreover" and "ultimately" by name. So the only remedies offered are move
+       * and cut.
+       *
+       * Four questions is the ceiling. A writer shown fifteen lines reads none of them.
+       */
+      order: "Take the paragraphs in the order they stand. For each one, what does the reader know "
+        + "at the end that they did not know at the start? If two next to each other answer that "
+        + "the same way, one is not earning its place. If a paragraph depends on something that "
+        + "only arrives later, it is in the wrong place. The fix is to MOVE it or CUT it — never to "
+        + "write a sentence joining them: a sentence whose only job is to announce what comes next "
+        + "is 2A filler, and this same tool flags it.",
     },
   };
 }
