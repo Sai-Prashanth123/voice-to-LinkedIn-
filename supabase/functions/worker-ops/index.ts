@@ -464,6 +464,9 @@ async function monthly(db: SupabaseClient): Promise<Response> {
     .eq("status", "published")
     .eq("moments.killed", false)
     .gte("published_at", since)
+    // Newest first. This is the operator report of what went out; unordered, it would show an
+    // arbitrary 40 of the period and read as the whole of it.
+    .order("published_at", { ascending: false })
     .limit(40);
 
   if (posts && posts.length >= 3) {

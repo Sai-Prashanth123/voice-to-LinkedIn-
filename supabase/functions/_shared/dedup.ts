@@ -266,6 +266,9 @@ async function byModel(
       .in("status", ["queued", "drafted", "gated", "scheduled"])
       .eq("killed", false)
       .neq("id", momentId)
+      // Newest first — a retelling is likeliest to repeat something recent, and an arbitrary 25
+      // would make the retelling check depend on row order.
+      .order("id", { ascending: false })
       .limit(25),
   ]);
 

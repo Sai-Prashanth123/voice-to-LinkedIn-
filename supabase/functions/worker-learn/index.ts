@@ -65,6 +65,7 @@ Deno.serve(async () => {
     .from("drafts")
     .select("moment_id, framework, hook, library_version, gate_passed")
     .eq("gate_passed", true)
+    .order("id", { ascending: false })
     .limit(200);
   const byMoment = new Map<
     number,
@@ -103,6 +104,9 @@ Deno.serve(async () => {
     .select("check_key, reason")
     .eq("passed", false)
     .gte("created_at", since)
+    // Newest first. These counts are handed to the model as "gate rejections by check", so an
+    // arbitrary 200 would misreport which checks actually fire.
+    .order("created_at", { ascending: false })
     .limit(200);
   const failureCounts = new Map<string, number>();
   for (const g of gateFailures ?? []) {

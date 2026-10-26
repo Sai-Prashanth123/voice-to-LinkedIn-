@@ -31,6 +31,9 @@ Deno.serve(async () => {
     .eq("status", "scheduled")
     .not("marked_ready_at", "is", null)
     .lte("scheduled_for", new Date().toISOString())
+    // Longest overdue first. Unordered, a post whose date has passed could be jumped by a newer
+    // one on every run and never go out at all.
+    .order("scheduled_for", { ascending: true })
     .limit(5);
 
   if (!due || due.length === 0) return json({ ok: true, published: 0 });

@@ -23,6 +23,8 @@ Deno.serve(async () => {
     .select("id, published_at")
     .eq("status", "published")
     .lte("published_at", new Date(Date.now() - 7 * 86_400_000).toISOString())
+    // Oldest first, so a backlog drains instead of the same recent 50 being re-read.
+    .order("published_at", { ascending: true })
     .limit(50);
 
   for (const p of stale ?? []) {

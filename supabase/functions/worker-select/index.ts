@@ -40,6 +40,74 @@ import {
 /** How many of the ranked shortlist to run the expensive checks on. */
 const SHORTLIST = 20;
 
+/*
+ * EVERY MOMENT IN A STATUS, NOT AN ARBITRARY PAGE OF THEM.
+ *
+ * Three reads in this file asked for moments with `.limit(200)` or `.limit(100)` and **no
+ * `.order()`**. PostgREST makes no promise about which rows an unordered limited select returns, so
+ * each of them took an arbitrary subset and every decision downstream treated it as the whole set:
+ *
+ *   - `shortlist` scores, balances pillars and ranks — it decides what Josh writes about next;
+ *   - the interview roundup decides which waiting ideas he is reminded of;
+ *   - `closeStaleConversations` decides which get closed.
+ *
+ * Latent rather than live today: there is 1 mined moment and 1 open one, against ceilings of 200 and
+ * 100. It becomes wrong silently, at a threshold nobody is watching, and the symptom would be the
+ * one he reported on 5 October about a different query of the same shape — "I tried testing with
+ * Matt Barker and it returned nothing", which was an unordered `limit: 500` over 2,000 rows.
+ *
+ * So: ordered, paged, counted, and said. A single bigger limit cannot work — PostgREST caps a
+ * response at 1,000 whatever is asked for, and says nothing about it (see SHAPE_ROWS_PAGE).
+ *
+ * Above the ceiling it proceeds with what it has AND logs that it did. Refusing outright is the
+ * right call for a measurement reported as a whole (see refreshSentinels, which does refuse), but
+ * selection running on the first 10,000 moments beats selection not running at all. What must never
+ * happen again is it being arbitrary and unremarked.
+ */
+const MOMENT_PAGE = 1000;
+const MOMENT_CEILING = 10000;
+
+async function momentsInStatus<T>(
+  db: SupabaseClient,
+  select: string,
+  statuses: string[],
+): Promise<T[]> {
+  const { count } = await db
+    .from("moments")
+    .select("id", { count: "exact", head: true })
+    .in("status", statuses)
+    .eq("killed", false);
+
+  const out: T[] = [];
+  for (let from = 0; from < MOMENT_CEILING; from += MOMENT_PAGE) {
+    const { data, error } = await db
+      .from("moments")
+      .select(select)
+      // Ordered, or the pages overlap and skip and we are back where we started.
+      .order("id", { ascending: true })
+      .in("status", statuses)
+      .eq("killed", false)
+      .range(from, from + MOMENT_PAGE - 1);
+    if (error) throw new Error(`could not load moments (${statuses.join(",")}): ${error.message}`);
+    // Through unknown: the row shape is decided by the caller's select string, which the client
+    // cannot know. The select and the type parameter are the same claim, made twice.
+    out.push(...((data ?? []) as unknown as T[]));
+    if (!data || data.length < MOMENT_PAGE) break;
+  }
+
+  if ((count ?? 0) > MOMENT_CEILING) {
+    await logEvent(db, "moment_scan_capped", "warn", {
+      statuses,
+      total: count,
+      read: out.length,
+      ceiling: MOMENT_CEILING,
+      means: "Selection ran on the oldest 10,000 by id. Raise MOMENT_CEILING deliberately.",
+    });
+  }
+
+  return out;
+}
+
 Deno.serve(async () => {
   const db = admin();
   await loadSecrets(db);
@@ -303,20 +371,17 @@ interface Candidate extends Scored {
 async function shortlist(
   db: SupabaseClient,
 ): Promise<{ ranked: Candidate[]; context: ScoringContext }> {
-  const { data: moments } = await db
-    .from("moments")
-    .select(
-      "id, ref, pillar, audience, strength, pinned, killed, time_sensitive, decays_at, not_before, captured_at, depth_reached",
-    )
-    .eq("status", "mined")
-    .eq("killed", false)
-    .limit(200);
+  const moments = await momentsInStatus<ScorableMoment>(
+    db,
+    "id, ref, pillar, audience, strength, pinned, killed, time_sensitive, decays_at, not_before, captured_at, depth_reached",
+    ["mined"],
+  );
 
   const context = await buildContext(db);
   if (!moments || moments.length === 0) return { ranked: [], context };
 
   const scored: Scored[] = [];
-  for (const raw of moments as ScorableMoment[]) {
+  for (const raw of moments) {
     const why = ineligible(raw, context);
     if (why) continue;
     scored.push(scoreMoment(raw, context));
@@ -467,7 +532,8 @@ function shortReason(
  */
 async function rescueStranded(db: SupabaseClient): Promise<void> {
   const { data: queued } = await db
-    .from("moments").select("id, ref").eq("status", "queued").eq("killed", false).limit(50);
+    .from("moments").select("id, ref").eq("status", "queued").eq("killed", false)
+    .order("id", { ascending: true }).limit(50);
   if (!queued || queued.length === 0) return;
 
   for (const m of queued) {
@@ -606,12 +672,7 @@ async function remindStalledInterviews(db: SupabaseClient): Promise<void> {
     .gte("created_at", dayAgo);
   if ((alreadySent ?? 0) > 0) return;
 
-  const { data: open } = await db
-    .from("moments")
-    .select("id, ref, title, status")
-    .in("status", ["captured", "half_mined"])
-    .eq("killed", false)
-    .limit(100);
+  const open = await momentsInStatus<{ id: number; ref: string; title: string | null; status: string }>(db, "id, ref, title, status", ["captured", "half_mined"]);
 
   const waiting: {
     id: number;
@@ -735,12 +796,7 @@ async function closeStaleConversations(db: SupabaseClient): Promise<void> {
   const ownDays = await getSetting(db, "stale_own_days", 14);
   const candidateDays = await getSetting(db, "stale_candidate_days", 7);
 
-  const { data: open } = await db
-    .from("moments")
-    .select("id, ref, source, status")
-    .in("status", ["captured", "half_mined"])
-    .eq("killed", false)
-    .limit(100);
+  const open = await momentsInStatus<{ id: number; ref: string; source: string | null; status: string }>(db, "id, ref, source, status", ["captured", "half_mined"]);
 
   for (const m of open ?? []) {
     // A moment with work already queued is not abandoned, whatever its turns look like.
@@ -818,6 +874,8 @@ async function resumeDeferredVisuals(db: SupabaseClient): Promise<void> {
     .select("id, ref, visual_pending")
     .not("visual_pending", "is", null)
     .eq("killed", false)
+    // Oldest first, so a deferred visual cannot be skipped on every sweep forever.
+    .order("id", { ascending: true })
     .limit(20);
 
   if (!waiting || waiting.length === 0) return;

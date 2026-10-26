@@ -201,6 +201,8 @@ export async function rephraseDeadQuestions(db: SupabaseClient): Promise<number>
     .select("*")
     .gte("asked", REPHRASE_AFTER)
     .eq("produced_material", 0)
+    // Most-asked first: those are the ones costing him the most turns for nothing.
+    .order("asked", { ascending: false })
     .limit(5);
 
   if (!dead || dead.length === 0) return 0;

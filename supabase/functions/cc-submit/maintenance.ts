@@ -119,11 +119,42 @@ export async function refreshSentinels(db: SupabaseClient, _body: Body): Promise
     }, 409);
   }
 
-  const { data: posts } = await db
-    .from("reference_writer_posts")
-    .select("handle, author_name, posted_at, text, has_line_breaks")
-    .order("posted_at", { ascending: false })
-    .limit(CEILING);
+  /*
+   * PAGED, because the ceiling above does not do what it looks like it does.
+   *
+   * Counting first and refusing above CEILING is right, and it was hiding a second fault: PostgREST
+   * caps a RESPONSE at 1,000 rows however many are asked for. So `.limit(20000)` returned 1,000, and
+   * between 1,000 and the ceiling this measured a fifth of the corpus and reported it as the whole
+   * thing — exactly what the refusal above exists to prevent, one order of magnitude lower down.
+   *
+   * Live when found, 26 October: 1,900 posts stored, 1,000 read. The measurements Josh's library
+   * quotes were not computed here — scripts/sentinel-refresh.mjs reads a file and was what produced
+   * them — so nothing wrong reached him. The `refresh_sentinels` tool would have been the first
+   * caller to produce them from the database, and it would have been wrong.
+   *
+   * Ordered by the primary key rather than by posted_at: paging needs a total order and posted_at is
+   * null on some rows.
+   */
+  const posts: {
+    handle: string;
+    author_name: string | null;
+    posted_at: string | null;
+    text: string;
+    has_line_breaks: boolean;
+  }[] = [];
+  const PAGE = 1000;
+  for (let from = 0; from < CEILING; from += PAGE) {
+    const { data, error: pageError } = await db
+      .from("reference_writer_posts")
+      .select("handle, author_name, posted_at, text, has_line_breaks")
+      .order("activity_id", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (pageError) {
+      return json({ error: `could not read the reference posts: ${pageError.message}` }, 502);
+    }
+    posts.push(...(data ?? []));
+    if (!data || data.length < PAGE) break;
+  }
 
   if (!posts || posts.length === 0) {
     return json({

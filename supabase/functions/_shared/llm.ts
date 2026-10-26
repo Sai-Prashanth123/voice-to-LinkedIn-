@@ -970,6 +970,9 @@ export async function budgetRemaining(db: SupabaseClient): Promise<number | null
     .from("llm_calls")
     .select("input_tokens, output_tokens")
     .gte("created_at", since)
+    // Most recent first. Above 500 calls in the window this still under-counts spend — the right
+    // fix is a server-side sum — but it under-counts the OLDEST calls rather than an arbitrary set.
+    .order("created_at", { ascending: false })
     .limit(500);
 
   const spent = (data ?? []).reduce(
