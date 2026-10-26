@@ -23,6 +23,10 @@
  *   node index.mjs --capabilities  # tools, prompts and resources; proves it all registers
  */
 
+// FIRST, and it has to be first. Imports are hoisted and evaluated in order, and everything below
+// reaches TypeScript that only a recent Node can read. See node-floor.mjs.
+import "./node-floor.mjs";
+
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import { loadEnv, note } from "./env.mjs";

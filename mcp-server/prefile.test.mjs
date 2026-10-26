@@ -150,3 +150,51 @@ test("willRefuse says exactly what prefileVerdict blocks on", () => {
   const opts = { sections: LIVE };
   assert.equal(willRefuse(body, opts).length, prefileVerdict(body, opts).blocking.length);
 });
+
+/* ── An empty index is not a clean draft ────────────────────────────────────── */
+
+test("an empty reference index reports 'not checked', never 'nothing found'", async () => {
+  /*
+   * borrowedIndexFor's own comment has promised since it was written: "Returns null when the index
+   * is empty — not an empty set. 'We could not check' and 'nothing borrowed' are different answers
+   * and the caller is told which one it got."
+   *
+   * It never returned null. It returned `new Set()` for an empty table and for a clean draft alike,
+   * so a draft came back `borrowed_phrases: { checked: "N runs", found: 0 }` with 8.3 unenforced —
+   * sitting directly beneath a second comment saying a check must report that it ran "or nobody can
+   * tell the difference between 'nothing borrowed' and 'nothing looked'". The mechanism written to
+   * close that gap contained it.
+   *
+   * reference_shingles is populated by a script run by hand, so an empty one is a real state: a
+   * fresh project, a restored database, or a clone pointed somewhere the script never ran.
+   *
+   * Asserted by source, because the alternative is emptying a 398,803-row table on the live project.
+   */
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("./tools/write.mjs", import.meta.url), "utf8");
+
+  assert.match(
+    src,
+    /if \(any\.length === 0\) return null;/,
+    "borrowedIndexFor still cannot distinguish an empty index from a clean draft",
+  );
+  assert.match(
+    src,
+    /borrowedIndex === null/,
+    "the reply does not branch on an unchecked index, so it reads as clean",
+  );
+  // Scoped to the reply block. A bare indexOf compares against the word "found: 0" sitting in the
+  // explanatory comment ninety lines earlier — which is the mistake this very test is about, made
+  // while writing the test for it.
+  const reply = src.slice(src.indexOf("borrowed_phrases:"));
+  assert.ok(
+    reply.indexOf("checked: false") < reply.indexOf("found: 0"),
+    "the unchecked case must be answered before the clean case",
+  );
+
+  // And the promise in the comment must still be the promise. Matched on a fragment that does not
+  // wrap: the full sentence spans two comment lines, and a regex over raw source cannot see across
+  // the " * " between them — the same thing reference-split.test.ts needed its assembled() helper
+  // for.
+  assert.match(src, /Returns null when the index is empty/);
+});

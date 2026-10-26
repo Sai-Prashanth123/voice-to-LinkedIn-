@@ -33,7 +33,7 @@ on 9 October 2026 because they were two more places for things to go wrong.
 
 | | |
 |---|---|
-| **Node.js 20 or newer** | `node --version`. If it is missing: <https://nodejs.org> |
+| **Node.js 22.18 or newer** | `node --version`. If it is missing or older: <https://nodejs.org>. The server reads its rules from the same TypeScript files the server-side code uses, and Node strips those types itself only from 22.18 |
 | **Git** | `git --version`. If it is missing: <https://git-scm.com> |
 | **A Claude subscription** | Any paid plan. Claude Code is included. |
 | **Two values from us** | A project URL and a key. We send these separately, never in the same message as the repo link. |

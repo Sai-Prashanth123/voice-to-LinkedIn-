@@ -34,7 +34,7 @@ import { z } from "zod";
 
 import { measurePost, per1k, sentences, tokens, turnAt } from "../../scripts/lib/prose.mjs";
 import { scan, HIGH_CONFIDENCE } from "../aitells.mjs";
-import { willRefuse } from "../prefile.mjs";
+import { prefileVerdict } from "../prefile.mjs";
 import {
   FOLD_BLANK_COST,
   FOLD_CHARS_PER_LINE,
@@ -227,8 +227,28 @@ export const measureTools = [
        * No library is loaded here — this tool deliberately makes no database call (see the header)
        * — so the library-derived checks come back advisory rather than blocking. The AI tells, which
        * are the ones that actually refuse today, need no library and are exact.
+       *
+       * SO BOTH LISTS ARE REPORTED, and this is a correction made the same day.
+       *
+       * The first version called `willRefuse(body)` and printed "Nothing here would stop
+       * create_draft filing it" whenever the blocking list was empty. For a draft closing on an
+       * engagement ask that was false: the refusal is gated on the live `banned_phrases` text, so
+       * with no library in hand it lands in `advisory` and the headline claimed the opposite of what
+       * create_draft would do. scrub_draft, which does load the library, disagreed with this tool.
+       *
+       * That broke the contract in prefile.mjs's own header — "the free look has to predict the
+       * refusal exactly" — on the day it was written. And the guard for it tested only bullet soup,
+       * which needs no library, so it passed straight over the hole. Reporting what was seen but
+       * could not be decided is the honest answer; claiming nothing was found is not.
        */
-      const willNotFile = willRefuse(body);
+      const prefile = prefileVerdict(body);
+      const willNotFile = prefile.blocking.map(
+        (f) => `${f.source} — "${f.matched}"${f.line ? ` (line ${f.line})` : ""}. ${f.fix}`,
+      );
+      // Seen here, decidable only against the live library — so create_draft may still refuse them.
+      const undecided = prefile.advisory
+        .filter((f) => f.note)
+        .map((f) => `${f.source} — "${f.matched}". ${f.fix}`);
 
       return {
         words: m.words,
@@ -242,13 +262,24 @@ export const measureTools = [
           ? {
             count: willNotFile.length,
             why: willNotFile,
+            ...(undecided.length > 0 && { and_probably: undecided }),
             note: "create_draft will refuse this draft and store nothing. Fix these first — the "
               + "rest of this report is measurement, not a verdict.",
           }
+          : undecided.length > 0
+          ? {
+            count: 0,
+            probably: undecided,
+            note: "Nothing AI-tell-shaped would stop it, but the above breaks a rule that lives in "
+              + "the library, and this tool makes no database call so it cannot read the live text "
+              + "to be sure. create_draft will read it and will almost certainly refuse. Treat the "
+              + "list above as a refusal, or call scrub_draft, which does read the library.",
+          }
           : {
             count: 0,
-            note: "Nothing here would stop create_draft filing it. The library-derived rules are "
-              + "checked again at filing against the live library, which this tool does not read.",
+            note: "Nothing found here would stop create_draft filing it. The library-derived rules "
+              + "are checked again at filing against the live library, which this tool does not "
+              + "read.",
           },
 
         rhythm: {

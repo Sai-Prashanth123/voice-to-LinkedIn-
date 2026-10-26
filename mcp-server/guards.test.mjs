@@ -8,7 +8,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 /** Repo-relative, because two of these assert about files outside mcp-server. */
 const readFile = async (rel) =>
@@ -17,7 +17,7 @@ const readFile = async (rel) =>
 import { unknownArgumentMessage, unknownArguments, wrap } from "./server.mjs";
 import { tools } from "./tools/index.mjs";
 import { HIGH_CONFIDENCE, scan } from "./aitells.mjs";
-import { willRefuse } from "./prefile.mjs";
+import { prefileVerdict, willRefuse } from "./prefile.mjs";
 
 const call = async (tool, args) => {
   const result = await wrap(tool, {})(args);
@@ -146,6 +146,44 @@ test("the review list shows the verdict, and shows it before the post", () => {
   );
 });
 
+test("every write door works from a clone, not only from the connector", () => {
+  /*
+   * THE FAULT THIS IS FOR, measured 26 October.
+   *
+   * `index.mjs` builds the context for a local stdio run as `{ db, url: env.url }` — no `key`. The
+   * hosted connector adds one. `onestep.mjs` did `const { url, key } = context` and put `key`
+   * straight into an Authorization header, so from a cloned repo `start_post` sent
+   * `Bearer undefined` and got HTTP 401 UNAUTHORIZED_INVALID_JWT_FORMAT.
+   *
+   * start_post is the first tool in one-step mode, the mode Josh is in. So the clone could not
+   * begin. Nothing caught it because `system_events` holds 396 `mcp_http_call` rows and no local
+   * equivalent: every session had gone through the connector. The clone path had never been run.
+   *
+   * The invariant, rather than the instance: any file that posts to the write door must be able to
+   * get a key without one being handed to it. Checked by source because the alternative is two
+   * live runs, one per transport.
+   */
+  const dir = new URL("./tools/", import.meta.url);
+  const files = readdirSync(dir)
+    .filter((f) => f.endsWith(".mjs") && !f.includes(".test."))
+    .map((f) => [`tools/${f}`, new URL(f, dir)])
+    .concat([["brief-read.mjs", new URL("./brief-read.mjs", import.meta.url)]]);
+
+  let checked = 0;
+  for (const [name, url] of files) {
+    const src = readFileSync(url, "utf8");
+    if (!src.includes("functions/v1/cc-submit")) continue;
+    checked++;
+    assert.match(
+      src,
+      /process\.env\.CONTENT_MCP_KEY/,
+      `${name} posts to cc-submit with whatever key the context happened to carry. Over stdio ` +
+        `there is none, so this sends "Bearer undefined" and 401s in a clone.`,
+    );
+  }
+  assert.ok(checked >= 4, `only ${checked} write doors found — the scan is not finding them`);
+});
+
 test("the turn detector is spelled once, and a draft can reach it", () => {
   /*
    * It lived only in scripts/measure-structure.mjs — a CLI that measures the eight writers and
@@ -251,6 +289,32 @@ test("the free look predicts the refusal, rather than merely resembling it", () 
     `${n}. Method ${n}\n→ Pro: this is the reason it is worth the effort for case ${n}.`
   ).join("\n\n");
   assert.ok(willRefuse(soup).length > 0, "the free look does not see what create_draft refuses");
+
+  /*
+   * THE CASE THIS TEST ORIGINALLY MISSED, which is the whole reason it is being widened.
+   *
+   * Bullet soup is an AI tell. It needs no library, so it lands in `blocking` whether or not a
+   * caller passes `sections` — which means the assertion above passed while measure_draft was
+   * calling `willRefuse(body)` with no sections and printing "Nothing here would stop create_draft
+   * filing it" for a draft closing on an engagement ask. The guard tested the one class that could
+   * not expose the gap.
+   *
+   * So: a library-derived refusal must never read as silence. With the library it blocks; without
+   * it, it must still be reported, and the word "Nothing" must not be what a caller sees.
+   */
+  const asking = "I spent a morning on it.\n\nIt was in the DNS records.\n\nWhich ones have I missed?";
+  const rule = { banned_phrases: 'Never end by asking for engagement ("Agree?", "Thoughts?").' };
+
+  assert.ok(
+    willRefuse(asking, { sections: rule }).length > 0,
+    "with the live rule in hand this must refuse",
+  );
+  const blind = prefileVerdict(asking);
+  assert.equal(blind.blocking.length, 0, "without the library it cannot claim to refuse");
+  assert.ok(
+    blind.advisory.some((f) => f.source === "engagement_ask"),
+    "without the library it must still REPORT it — reporting nothing is the fault",
+  );
 });
 
 test("it refuses only the mechanical ones, and reports the arguable ones", () => {
@@ -543,4 +607,39 @@ test("a zero-argument tool survives being handed the SDK's own context", async (
     );
     assert.ok(called.yes, `${tool.name} never reached its handler`);
   }
+});
+
+test("an old Node is refused with a sentence, not a riddle", async () => {
+  /*
+   * This server imports TypeScript from supabase/functions/_shared/ on the startup path, so it
+   * needs Node's native type stripping — default from 22.18. Below that the first import throws
+   * ERR_UNKNOWN_FILE_EXTENSION before a single tool registers, which names neither Node nor a
+   * version. package.json said ">=20" and the README said "Node.js 20 or newer"; CI pins 22, so
+   * nothing was ever going to catch it.
+   *
+   * Tested against versions this machine does not run, because a guard only exercised by the
+   * passing case is the fault it was written to stop.
+   */
+  const { meetsFloor, NODE_FLOOR } = await import("./node-floor.mjs");
+
+  for (const bad of ["20.0.0", "20.19.5", "21.7.3", "22.0.0", "22.17.9", "18.20.4"]) {
+    assert.equal(meetsFloor(bad), false, `${bad} cannot strip types and must be refused`);
+  }
+  for (const good of ["22.18.0", "22.20.1", "23.6.0", "24.0.0", "25.4.0"]) {
+    assert.equal(meetsFloor(good), true, `${good} is fine and must not be refused`);
+  }
+  assert.equal(meetsFloor(undefined), false, "an unreadable version is not a pass");
+
+  // The floor, package.json and the README must agree. Three places said three things before.
+  const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
+  assert.equal(pkg.engines.node, `>=${NODE_FLOOR[0]}.${NODE_FLOOR[1]}`);
+  const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+  assert.match(readme, new RegExp(`Node\.js ${NODE_FLOOR[0]}\.${NODE_FLOOR[1]} or newer`));
+
+  // And it must run before anything that reaches a .ts file.
+  const index = readFileSync(new URL("./index.mjs", import.meta.url), "utf8");
+  assert.ok(
+    index.indexOf("./node-floor.mjs") < index.indexOf("./tools/index.mjs"),
+    "the floor check is imported after the registry, so the .ts import fails first",
+  );
 });

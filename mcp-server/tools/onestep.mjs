@@ -67,7 +67,26 @@ export const oneStepTools = [
     },
 
     async handler(args, context) {
-      const { url, key } = context;
+      /*
+       * THE KEY FALLS BACK TO THE ENVIRONMENT, BECAUSE OVER STDIO THERE IS NO KEY IN THE CONTEXT.
+       *
+       * `index.mjs` builds `{ db, url: env.url }` for a local run — no `key`. The hosted connector
+       * adds one (`http.mjs`), so `const { url, key } = context` worked on every path we ever ran
+       * and failed on the one Josh is moving to. Measured 26 October: this request returns
+       * HTTP 401 UNAUTHORIZED_INVALID_JWT_FORMAT, because `Bearer undefined` is not a JWT.
+       *
+       * start_post is the FIRST tool in one-step mode — the mode he asked for on 13 October and the
+       * one he is in. So a clone could not begin. `system_events` shows 396 mcp_http_call rows and
+       * no local equivalent: every session has gone through the connector, which is why nothing
+       * caught it.
+       *
+       * Every sibling already does this — josh.mjs, interview.mjs, visual.mjs and four sites in
+       * write.mjs. This file was the only one that did not, and `loadEnv()` has already populated
+       * process.env by the time any handler runs (env.mjs).
+       */
+      const { url } = context;
+      const key = context.key ?? process.env.CONTENT_MCP_KEY;
+      if (!key) throw new Error("CONTENT_MCP_KEY is not set, so nothing can be submitted.");
 
       // interview: false explicitly, so this tool behaves the same whether or not the mode is on.
       // He asked for one-step writing; a tool named start_post should not depend on a setting to

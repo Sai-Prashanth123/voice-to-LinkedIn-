@@ -362,14 +362,52 @@ export async function exportBank(db: SupabaseClient, _body: Body): Promise<Respo
   const out: Record<string, unknown[]> = {};
   const counts: Record<string, number> = {};
 
+  /*
+   * PAGED, because `.limit(5000)` returned 1,000 rows and called it everything.
+   *
+   * PostgREST caps a response at 1,000 however many are asked for. This repository has measured and
+   * written that down twice already — `_shared/shape.ts` on SHAPE_ROWS_PAGE, and
+   * `mcp-server/shape-rows.mjs` — and this is clause 6.2, the "exports in full" path. So
+   * `reference_writer_posts` (about 2,000 rows) and `reference_shingles` (about 400,000) were
+   * silently cut to 1,000 and the reply said `ok: true`.
+   *
+   * 0022_exportable_tables.sql, which created this path, names the failure mode in its own words:
+   * "the failure is invisible: a missing table in a JSON file looks exactly like a table with no
+   * rows." That was fixed for a missing table and left open for a truncated one.
+   *
+   * Ordered by primary key so the pages cannot overlap or skip — without an order PostgREST makes
+   * no promise about which rows a given offset returns, which is how a paged read loses some
+   * quietly.
+   */
+  const PAGE = 1000;
+  const unpageable: string[] = [];
+
   for (const t of included) {
     const name = String(t.table_name);
-    const { data, error: readError } = await db.from(name).select("*").limit(5000);
-    if (readError) {
-      return json({ error: `could not read ${name}: ${readError.message}` }, 502);
+    const pk = (t.pk_columns ?? []) as string[];
+    const rows: unknown[] = [];
+
+    for (let from = 0;; from += PAGE) {
+      let q = db.from(name).select("*");
+      // Every key column, because one column of a composite key is not a total order and pages
+      // would then overlap or skip at the boundary.
+      for (const col of pk) q = q.order(col, { ascending: true });
+      const { data, error: readError } = await q.range(from, from + PAGE - 1);
+      if (readError) {
+        return json({ error: `could not read ${name}: ${readError.message}` }, 502);
+      }
+      rows.push(...(data ?? []));
+      if (!data || data.length < PAGE) break;
+      // No key to order by means no safe paging. Take the first page and say so rather than
+      // looping over an order the database never promised.
+      if (pk.length === 0) {
+        unpageable.push(name);
+        break;
+      }
     }
-    out[name] = data ?? [];
-    counts[name] = (data ?? []).length;
+
+    out[name] = rows;
+    counts[name] = rows.length;
   }
 
   await logEvent(db, "bank_exported", "info", { tables: included.length, rows: Object.values(counts).reduce((a, b) => a + b, 0) });
@@ -384,6 +422,15 @@ export async function exportBank(db: SupabaseClient, _body: Body): Promise<Respo
       table: t.table_name,
       why: t.excluded_reason,
     })),
+    // Said rather than silently done, for the same reason `left_out` is. A table with no primary key
+    // cannot be paged safely, so it is capped at the first 1,000 rows and named here. Nothing in
+    // the schema is in that position today; this exists so it cannot become true quietly.
+    ...(unpageable.length > 0 && {
+      capped_at_1000: unpageable,
+      capped_why: "These tables have no primary key, so there is no stable order to page by and " +
+        "PostgREST will not return more than 1,000 rows at a time. What you have for them is the " +
+        "first 1,000, not all of them. Tell us and we will give them a key.",
+    }),
     data: out,
     next: "Everything you have said and everything made from it. Credentials are deliberately left " +
       "out — they are ours to reissue, not yours to carry around in a file.",

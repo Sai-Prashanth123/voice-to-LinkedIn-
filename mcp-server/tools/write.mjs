@@ -81,6 +81,23 @@ async function borrowedIndexFor(db, body) {
   const wanted = [...new Set(shinglesOf(body).map(hashRun))];
   if (wanted.length === 0) return new Set();
 
+  /*
+   * IS THERE AN INDEX AT ALL? Added 26 October, because the contract above was a lie.
+   *
+   * Everything below asks "which of THIS draft's runs are in the index". An empty answer means
+   * either nothing was borrowed or the index is empty, and those are different facts. The comment
+   * above has promised to tell them apart since the day it was written, and the code returned an
+   * empty Set in both cases — so a draft came back `found: 0` with the index missing, directly
+   * under another comment saying a check must report that it ran "or nobody can tell the difference
+   * between 'nothing borrowed' and 'nothing looked'".
+   *
+   * `reference_shingles` is populated only by scripts/build-reference-shingles.mjs, run by hand. A
+   * fresh project, a restored database, or a clone pointed at a project where that was never run all
+   * produce the same silence. One cheap row settles it.
+   */
+  const any = await db.select("reference_shingles", { select: "hash", limit: "1" });
+  if (any.length === 0) return null;
+
   const known = new Set();
   // PostgREST puts the filter in the URL, so this goes in chunks a URL can hold.
   for (let i = 0; i < wanted.length; i += 150) {
@@ -499,10 +516,18 @@ export const writeTools = [
          * the retelling check went 49 drafts without running and the gate went five days without
          * closing.
          */
-        borrowed_phrases: {
-          checked: `${shingleRuns} seven-word run(s) of this draft, against the reference index (8.3)`,
-          found: 0,
-        },
+        borrowed_phrases: borrowedIndex === null
+          ? {
+            checked: false,
+            why: "The reference index is empty, so 8.3 was NOT enforced on this draft. It is built " +
+              "by scripts/build-reference-shingles.mjs and that has not been run against this " +
+              "project. Nothing is wrong with the draft — nothing looked at it. Say so rather " +
+              "than letting it read as clean.",
+          }
+          : {
+            checked: `${shingleRuns} seven-word run(s) of this draft, against the reference index (8.3)`,
+            found: 0,
+          },
         /*
          * Same discipline, for the same reason. Josh wrote on 26 October that he gives the same
          * notes every time; two of the things he was re-raising were checks that had run and found
