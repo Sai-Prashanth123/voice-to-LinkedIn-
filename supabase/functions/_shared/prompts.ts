@@ -213,6 +213,12 @@ TWO SECTIONS OF THE LIBRARY HAVE NARROWER USES THAN THE REST
   near-quoted, not paraphrased. If a run of words from one could be recognised in your draft, you
   have used it wrongly. Josh's voice comes from the voice guide and nowhere else.
 
+  When the brief below names one of those writers and gives you their measured shape, that shape IS
+  the target for this post — not a caution to read past. The bar on their words is unchanged, and it
+  is checked mechanically: every seven-word run of your draft is compared against every stored post
+  by those eight writers before anything is filed, and a borrowed run is refused outright rather
+  than warned about. Take the shape. Write the words yourself.
+
 THE CLAIM LEDGER
 
 Alongside the post you return a ledger: every factual claim you made, and the verbatim span of the
@@ -224,7 +230,8 @@ reaches Josh, and he audits for exactly that.
 
 HOW TO WRITE IT
 
-  - Pick a body framework from the library and name which one you used.
+  - Pick a body framework from the library and name which one you used — and if the brief gives you
+    a writer's shape, build inside that shape.
   - Write for the specific audience recorded against the moment, in language that audience uses.
   - Open a loop with the first line. Do not resolve it there.
   - It should sound like Josh talking, not like Josh writing for LinkedIn.
@@ -241,6 +248,29 @@ export const DRAFT_USER = (opts: {
   previousAttempt?: { body: string; failures: string[] };
   /* 7.2 — what this moment sits close to, when it is close but not a retelling. */
   nearMiss?: string | null;
+  /*
+   * ONE OF THE EIGHT, WHEN THE CALLER ASKED FOR ONE. 8.3.
+   *
+   * Josh, 26 October: "I keep asking for a specific writer's shape, usually Matt Barker, and the
+   * draft uses the default framework instead. This is the one place I'd call out a specific fix."
+   *
+   * It belongs here rather than in DRAFTER_SYSTEM because it is a per-post instruction from the
+   * caller, exactly like nearMiss and previousAttempt below. The standing standard does not change
+   * because one post is being written after Matt.
+   *
+   * `lines` arrives PRE-RENDERED as strings, so this module never goes near the table their posts
+   * are stored in — reference-split.test.ts greps for exactly that and this file is on its banned
+   * list. Numbers only; no prose of theirs reaches here, which is what keeps 8.3 mechanical.
+   *
+   * (An earlier version of this comment named that table while explaining that it never touches it,
+   * and the grep caught it. The grep was right: it cannot read intent, which is the point of it.)
+   */
+  writerShape?: {
+    name: string;
+    lines: string[];
+    excludes: string[];
+    basis: string;
+  } | null;
 }) => {
   const lines: string[] = [];
   lines.push("THE MOMENT (this is everything you are allowed to draw on):\n");
@@ -271,6 +301,26 @@ export const DRAFT_USER = (opts: {
         `reaching a different conclusion, is fine and normal. What is not fine is retelling that ` +
         `anecdote — the same incident, the same beats, the same ending. If the only post this ` +
         `moment supports is that one, say so rather than writing it.`,
+    );
+  }
+
+  if (opts.writerShape) {
+    const w = opts.writerShape;
+    lines.push(
+      `\n---\n\nBUILD THIS ONE IN ${w.name.toUpperCase()}'S SHAPE.\n\n` +
+        `${w.basis}\n\n` +
+        `${w.lines.map((l) => `  - ${l}`).join("\n")}\n\n` +
+        `NOT FROM HIM, whatever the shape suggests:\n` +
+        `${w.excludes.map((e) => `  - ${e}`).join("\n")}\n\n` +
+        // The precedence sentence. This is what actually overrides the frameworks section's "the
+        // right default when nothing else obviously fits" for this one post, without editing a
+        // section Josh has not approved a change to (12.10).
+        `The framework still names what the body argues, and it is still recorded (9.3). This shape ` +
+        `decides how the post gets in, where it turns, how much sits above the fold, and how it ` +
+        `lands. Where the two disagree about structure, the measured shape wins for this post.\n\n` +
+        `His sentences are not available to you and never will be. Every seven-word run of your ` +
+        `draft is checked against every stored post of his before this draft is filed, and a ` +
+        `borrowed run is refused. Take the shape; write the words yourself.`,
     );
   }
 

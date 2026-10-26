@@ -72,6 +72,31 @@ The brief says this too, and it is the instruction most easily lost:
   where the turn lands. Never their words, cadence or phrasing. If a run of words from one could be
   recognised in your draft, you have used it wrongly.
 
+## When he names one of his writers
+
+If he says to write it like Matt Barker would — or like any of the eight — pass `writer_handle` to
+`start_post` or `get_drafting_brief`, and **keep passing it**: `write_post` takes it, and so does
+`get_rewrite_brief` if the draft comes back. A handle dropped between steps means the default
+framework gets used anyway, which is the exact thing he wrote in about on 26 October.
+
+The brief then carries that writer's **measured** shape — where he opens, how much sits above the
+fold, how many paragraphs, how he lands — as the target for that post, with the corpus range beside
+each number so none of it reads as a law. Two things to hold onto:
+
+- **The shape outranks the frameworks section for that post, and only for structure.** You still
+  pick one of Josh's three frameworks and still name it; 9.3 records it either way. The framework
+  says what the body argues. The shape says how it gets in and how it lands.
+- **The exclusions come with it and are not optional.** Matt Barker's turn that renames the reader's
+  problem is the construction Josh's banned-phrases list forbids outright. The brief prints it in the
+  same block as the targets for that reason.
+
+His sentences are never in the brief, and that is checked rather than trusted: every seven-word run
+of the draft is compared against every stored post by those eight before anything is filed, and a
+borrowed run is refused rather than flagged. Take the shape; write the words yourself.
+
+If the brief comes back saying `no_target`, that writer's stored posts are too thin to read for
+shape. Say so in one line rather than guessing at a shape — and do not substitute a different writer.
+
 ## What the gate has actually been rejecting
 
 Measured across every real draft judged so far, not guessed. In order of how often it bites:

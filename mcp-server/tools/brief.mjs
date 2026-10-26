@@ -36,6 +36,9 @@ import {
 import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
 import { writingSources } from "../sources.mjs";
 import { shapedWriterRows } from "../shape-rows.mjs";
+// Module-level, not via the tool registry: voice.mjs does not import this file, so there is no
+// cycle, and tools/index.mjs warns that a registry lookup needs the tool imported last.
+import { writerShapeBlock } from "./voice.mjs";
 import { WRITTEN_UP } from "../../supabase/functions/_shared/extraction.ts";
 import { parsePillars } from "../../supabase/functions/_shared/library.ts";
 import { renderTranscript } from "../../supabase/functions/_shared/session.ts";
@@ -106,9 +109,19 @@ export const briefTools = [
         "library, the moment's material, the audience, and which names may and may not be used. " +
         "This is the same brief the system's own drafter is given — follow it exactly rather than " +
         "writing from your own sense of what a good post is. Returns everything needed; you should " +
-        "not need any other source. When done, call create_draft.",
+        "not need any other source. When done, call create_draft.\n\n" +
+        "Pass writer_handle when Josh asks for a post in one of his reference writers' shapes — " +
+        "\"write this one like Matt Barker would\" — and the brief carries that writer's measured " +
+        "structure as the target for this post, plus what must not be taken from them. Their words " +
+        "are never included and are refused mechanically at filing.",
       inputSchema: {
         moment_id: z.number().int().describe("Which moment to draft, from list_moments"),
+        writer_handle: z.string().optional().describe(
+          "One of: mattjbarker1 (Matt Barker), demandjen1 (Jen Allen-Knuth), outboundphd " +
+          "(Eric Nowoslawski), juliacarter98 (Julia Carter), ryanscarlin (Ryan Carlin), " +
+          "curtishowland (Curtis Howland), amangrowth (Aman Ghataura), adam-treboutat " +
+          "(Adam Treboutat). Only when Josh named a writer — never chosen for him.",
+        ),
       },
     },
     async handler(args, context) {
@@ -132,6 +145,14 @@ export const briefTools = [
       // still be draftable — a topic he typed with a receipts file behind it is not nothing.
       const extra = await writingSources(db, id);
       const entry = sourceEntry(material, extra);
+      /*
+       * The writer's measured shape, when Josh named one. Loaded here so the targets reach the
+       * prompt rather than sitting behind analyse_reference_writer, which nothing told the drafter
+       * to call — the gap Josh described on 26 October.
+       */
+      const writerShape = args.writer_handle
+        ? await writerShapeBlock(db, args.writer_handle)
+        : null;
       if (Object.keys(entry).length === 0) {
         throw new Error(
           `Moment ${id} has nothing to write from: no material, nothing he typed against it, and ` +
@@ -209,6 +230,24 @@ export const briefTools = [
           clearedNames: cleared,
           unclearedNames: uncleared,
           previousAttempt,
+          writerShape: writerShape?.lines ? writerShape : null,
+        }),
+        /*
+         * Said outside the prose as well, for the same reason must_not_name is: if the writer was
+         * named and no target could be given, the caller has to know that rather than assume the
+         * shape is in there somewhere. writerShapeBlock refuses rather than degrading when a
+         * writer's measurable corpus is too thin to call anything his habit.
+         */
+        ...(writerShape && {
+          writer_shape: writerShape.refused
+            ? { handle: writerShape.handle, no_target: writerShape.refused }
+            : {
+              handle: writerShape.handle,
+              name: writerShape.name,
+              basis: writerShape.basis,
+              targets: writerShape.lines,
+              not_from_him: writerShape.excludes,
+            },
         }),
         // Repeated outside the prose because it is the one instruction that must not be missed,
         // and because create_draft refuses on it anyway — better to know before writing.

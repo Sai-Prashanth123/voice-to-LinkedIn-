@@ -59,6 +59,10 @@ export const oneStepTools = [
         text: z.string().min(1).describe("What he said, verbatim"),
         name: z.string().max(80).optional()
           .describe("Only if he said what to call it. Never invent one and never ask"),
+        writer_handle: z.string().optional().describe(
+          "Only if he named one of his reference writers to build this post after — \"write this " +
+          "one like Matt Barker would\". e.g. mattjbarker1. Never chosen for him.",
+        ),
       },
     },
 
@@ -95,7 +99,18 @@ export const oneStepTools = [
           "Do not ask him anything. If the material genuinely will not carry a post, say which one " +
             "thing is missing and stop — that is one sentence, not an interview.",
         ],
-        then: "write_post with moment_id and the extracted fields.",
+        /*
+         * Echoed back rather than stored, because he names the writer in the same breath as the
+         * material — "write this one like Matt Barker would, here's what happened" — and the
+         * parameter it belongs to is two calls away. A handle that arrives at start_post and is
+         * not carried forward is the default framework getting used anyway, which is the thing
+         * he wrote in about.
+         */
+        ...(args.writer_handle && { writer_handle: args.writer_handle }),
+        then: args.writer_handle
+          ? `write_post with moment_id, the extracted fields, and writer_handle: ` +
+            `"${args.writer_handle}" — pass it on or the shape is lost.`
+          : "write_post with moment_id and the extracted fields.",
       };
     },
   },
@@ -114,6 +129,10 @@ export const oneStepTools = [
         moment_id: z.number().int().describe("From start_post"),
         extracted: z.record(z.string()).describe(
           "The ten fields, each a verbatim span of his text. Empty ones may be left out",
+        ),
+        writer_handle: z.string().optional().describe(
+          "Pass it on from start_post, or set it here if he named a reference writer whose shape " +
+          "he wants this post built in. e.g. mattjbarker1",
         ),
       },
     },
@@ -157,7 +176,19 @@ export const oneStepTools = [
         };
       }
 
-      const brief = await viaTool("get_drafting_brief", { moment_id: args.moment_id }, context);
+      /*
+       * The writer target travels with the brief, because in one_step mode the caller never
+       * calls get_drafting_brief itself — this is the only place it can be handed over. A handle
+       * dropped here is the complaint Josh made on 26 October arriving one step later.
+       */
+      const brief = await viaTool(
+        "get_drafting_brief",
+        {
+          moment_id: args.moment_id,
+          ...(args.writer_handle && { writer_handle: args.writer_handle }),
+        },
+        context,
+      );
 
       return {
         moment_id: args.moment_id,

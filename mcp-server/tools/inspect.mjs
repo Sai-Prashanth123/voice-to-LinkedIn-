@@ -39,6 +39,7 @@ import { isSupplied } from "../../supabase/functions/_shared/views.ts";
 // 9.3 — the recorded framework, compared on a key so one structure spelled two ways counts once.
 import { frameworkMix } from "../frameworks.mjs";
 import { modeName, oneStepMode } from "../mode.mjs";
+import { writerShapeBlock } from "./voice.mjs";
 
 /** PostgREST returns rows; a missing table returns a permission error, which is the useful answer. */
 const rows = (db, path) => db.request("/" + path);
@@ -117,6 +118,10 @@ export const inspectTools = [
         "something new. Fix what was named. Keep what passed.",
       inputSchema: {
         draft_id: z.number().int().describe("The draft to rewrite"),
+        writer_handle: z.string().optional().describe(
+          "If the first attempt was built in one of his reference writers' shapes, pass the same " +
+          "handle so the rewrite keeps it. e.g. mattjbarker1",
+        ),
       },
     },
 
@@ -128,6 +133,10 @@ export const inspectTools = [
         limit: 1,
       });
       if (!draft) throw new Error(`No draft with id ${args.draft_id}.`);
+
+      const writerShape = args.writer_handle
+        ? await writerShapeBlock(db, args.writer_handle)
+        : null;
 
       const runs = await db.select("gate_runs", {
         select: "check_key,passed,reason",
@@ -182,6 +191,22 @@ export const inspectTools = [
 
         material: sourceEntry(material),
         must_not_name: uncleared,
+        /*
+         * A rewrite that loses the writer target reverts to the default framework, which is the
+         * complaint Josh made on 26 October arriving one attempt later rather than being fixed.
+         * Refused rather than degraded when the corpus is too thin — see writerShapeBlock.
+         */
+        ...(writerShape && {
+          writer_shape: writerShape.refused
+            ? { handle: writerShape.handle, no_target: writerShape.refused }
+            : {
+              handle: writerShape.handle,
+              name: writerShape.name,
+              basis: writerShape.basis,
+              targets: writerShape.lines,
+              not_from_him: writerShape.excludes,
+            },
+        }),
 
         how_to_rewrite: [
           "Fix what was named, sentence by sentence. Do not start from scratch if the moment and " +
