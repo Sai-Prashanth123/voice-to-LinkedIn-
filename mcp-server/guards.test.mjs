@@ -110,6 +110,59 @@ test("create_draft refuses the tells where the construction is simply wrong", ()
   );
 });
 
+test("the review list shows the verdict, and shows it before the post", () => {
+  /*
+   * Josh gave the same editorial notes every week because the list he reviews on could not show
+   * him a verdict: gate_passed, gate_advisory and gate_reason live on `drafts` and list_calendar
+   * selects from `posts`. On draft 90 the gate had already named four of his six notes in its own
+   * words, and he never saw them.
+   *
+   * Order is load-bearing rather than cosmetic. A model reads an object top-down and reads it out
+   * in roughly that order, so the body first is how the verdicts kept getting skipped. `gate` is
+   * spread in ahead of the rest of the post for that reason.
+   */
+  const src = readFileSync(new URL("./tools/inspect.mjs", import.meta.url), "utf8");
+  assert.match(
+    src,
+    /drafts\(gate_passed,gate_advisory,gate_reason\)/,
+    "list_calendar does not join the draft's verdict, so /review cannot show one",
+  );
+  assert.match(src, /gate:\s*\{/, "the verdict is not reshaped into a gate block");
+  // Scoped to the rewrite itself: `...p,` appears elsewhere in this file, so a bare indexOf
+  // compares the wrong two positions and passes or fails for the wrong reason.
+  const reshape = src.slice(src.indexOf("data[i] = {"));
+  assert.ok(
+    reshape.indexOf("gate: {") < reshape.indexOf("...p,"),
+    "the post's fields come before its verdict, which is how the verdict gets skipped",
+  );
+
+  const review = readFileSync(
+    new URL("../.claude/commands/review.md", import.meta.url),
+    "utf8",
+  );
+  assert.ok(
+    review.indexOf("gate.flagged") < review.indexOf("Read it to him in full"),
+    "/review still reads the post before saying what the checks caught",
+  );
+});
+
+test("the gate is described as nine checks, because it is nine", () => {
+  // A ninth was added on 14 October. Every surface that still said eight was telling a reader —
+  // and a model — to stop at eight, which is how gate_passed stayed null for five days.
+  for (const file of [
+    "./instructions.mjs",
+    "./tools/brief.mjs",
+    "../README.md",
+  ]) {
+    const src = readFileSync(new URL(file, import.meta.url), "utf8");
+    assert.doesNotMatch(
+      src,
+      /eight (?:ways|independent checks)|the eight checks for/i,
+      `${file} still describes the gate as eight checks`,
+    );
+  }
+});
+
 test("the shape targets are paged, because the row ceiling is the server's", () => {
   /*
    * PostgREST returns at most 1,000 rows however many are asked for, silently. Measured 26 October:

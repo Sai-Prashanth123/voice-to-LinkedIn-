@@ -1,7 +1,7 @@
 # Your content system
 
 Josh — this turns things that actually happened to you at work into LinkedIn posts that sound like
-you. You talk, it asks a few questions, it writes, it checks the draft eight ways, and then you
+you. You talk, it asks a few questions, it writes, it checks the draft nine ways, and then you
 decide. **It never publishes anything you have not approved with a date.**
 
 **The test every post has to pass:** could anyone else have written this? If yes, it fails. A post
@@ -264,7 +264,7 @@ Nothing below happens unless you say so:
 3. **It writes the post** from your answers and the reference library, and nothing else. Every fact
    traces back to something you said. Where a detail is missing it writes around the gap rather than
    inventing one.
-4. **It checks the draft eight ways** before you see it: could anyone else have written this, does
+4. **It checks the draft nine ways** before you see it: could anyone else have written this, does
    every claim trace to your material, does the hook open a loop, is it aimed at a specific reader,
    does it sound like you, are the names cleared, is anyone identifiable, and are there any AI tells.
    A draft that fails comes back with the reasons. Three failures and the idea parks itself.

@@ -266,9 +266,9 @@ export const briefTools = [
   {
     name: "get_gate_brief",
     config: {
-      title: "Get the eight checks for a draft",
+      title: "Get the nine checks for a draft",
       description:
-        "The eight independent checks a draft must clear, each with its own rubric, the post, and " +
+        "The nine independent checks a draft must clear, each with its own rubric, the post, and " +
         "the source material it was built from. Judge each one separately and record it with " +
         "record_gate_verdict — one call per check. Do not average across them and do not stop at " +
         "the first failure: Josh should see everything wrong with a draft at once. Checks already " +

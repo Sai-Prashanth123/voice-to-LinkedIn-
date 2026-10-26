@@ -60,7 +60,7 @@ HOW IT WORKS, IN THEIR WORDS
 1. They share a thought — something that happened, a line someone said. Half a sentence is enough.
 2. In one_step you write from that. In interviewed you ask a few short questions, one at a time.
 3. Their words become the material, and a post is drafted from only what they said.
-4. The draft is checked eight ways, above all "could anyone else have written this?"
+4. The draft is checked nine ways, above all "could anyone else have written this?"
 5. They approve it with a date, ask for a rewrite, or drop it. Nothing publishes without that.
 
 RUNNING AN INTERVIEW — THIS IS WHERE THE FEEL IS WON OR LOST

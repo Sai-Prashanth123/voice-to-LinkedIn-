@@ -565,7 +565,25 @@ export const inspectTools = [
        */
       const reviewing = args.status === "draft";
       if (reviewing) {
-        q.set("select", q.get("select") + ",moments!inner(killed,status)");
+        /*
+         * THE VERDICTS, ON THE SURFACE HE ACTUALLY READS.
+         *
+         * Josh, 26 October: "I noticed I give more or less the same editorial notes every time."
+         * He was giving notes the gate had already given — on draft 90 it named four of his six in
+         * its own words — and then one_step mode pushed the post to his calendar regardless.
+         *
+         * He was not ignoring them. gate_passed, gate_advisory and gate_reason live on `drafts`,
+         * and this tool selects from `posts`, so `/review` has never been able to show him a
+         * verdict at all. The only thing it could show was the body, so he read the body and
+         * worked the rest out by eye, every week.
+         *
+         * Embedded the same way `moments!inner` already is, through posts.draft_id.
+         */
+        q.set(
+          "select",
+          q.get("select") + ",moments!inner(killed,status)" +
+            ",drafts(gate_passed,gate_advisory,gate_reason)",
+        );
         q.set("moments.killed", "is.false");
         q.set("moments.status", "neq.parked");
       }
@@ -582,6 +600,48 @@ export const inspectTools = [
         const all = await rows(db, "posts?select=id&status=eq.draft&limit=100");
         withheld = Math.max(0, all.length - data.length);
         for (const p of data) delete p.moments;
+
+        /*
+         * Reshaped into the order it should be read in, and put BEFORE the body.
+         *
+         * Key order is not decoration here: a model reads an object top-down and reads it out to
+         * Josh in roughly that order. The body first is how the verdicts got skipped. So each
+         * post becomes { gate, ...the rest }, and gate_reason — stored as one string joined on
+         * " | ", each part prefixed with its check key — is split back into the checks that
+         * actually failed.
+         */
+        for (let i = 0; i < data.length; i++) {
+          const p = data[i];
+          const d = p.drafts ?? null;
+          delete p.drafts;
+          if (!d) continue;
+
+          const why = {};
+          for (const part of (d.gate_reason ?? "").split(" | ").filter(Boolean)) {
+            const at = part.indexOf(": ");
+            if (at > 0) why[part.slice(0, at)] = part.slice(at + 2);
+            else why._ = part;
+          }
+          const flagged = Object.keys(why);
+
+          data[i] = {
+            gate: {
+              passed: d.gate_passed,
+              advisory: d.gate_advisory === true,
+              flagged,
+              why,
+              read_first: d.gate_passed === null
+                ? "Not judged yet. Nothing has looked at this one."
+                : d.gate_passed
+                ? "Passed every check."
+                : `${flagged.length} of 9 check(s) flagged this, and it reached your calendar ` +
+                  `anyway because one-step mode makes the gate advisory. Read him these before ` +
+                  `the post, in the check's own words — they are usually the note he was about ` +
+                  `to give.`,
+            },
+            ...p,
+          };
+        }
       }
 
       const unauthorised = data.filter(
