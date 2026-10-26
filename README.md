@@ -47,7 +47,7 @@ on 9 October 2026 because they were two more places for things to go wrong.
 
 ## 2. Setup — Claude Code (recommended)
 
-This is the one to use. It gives you every tool, the three writing skills, the shortcut commands, and
+This is the one to use. It gives you every tool, the four writing skills, the shortcut commands, and
 the ability to run the maintenance scripts. The others are for when you are away from your laptop.
 
 ### Step 1 — get the code
@@ -65,7 +65,9 @@ npm install
 cd ..
 ```
 
-This installs the MCP server's packages. Nothing else in the project needs installing.
+This installs the MCP server's packages — all it needs. (The only other folder with its own
+dependencies is `eval/`, the end-to-end test harness. You never need it; `cd eval && npm install`
+if you ever want to run it.)
 
 ### Step 3 — create your environment file
 
@@ -88,7 +90,15 @@ Save it. That file is already excluded from git, so it cannot be committed by ac
 node mcp-server/index.mjs --check
 ```
 
-You want `ok`. If you get an error, jump to [section 10](#10-when-something-looks-wrong) — it
+You want `Ready.` on the last line. Then run the one that checks the half `--check` cannot:
+
+```bash
+node scripts/doctor.mjs
+```
+
+`--check` only reads, and reading works even when writing does not — which is how a clone sat
+unable to file a post for weeks without anyone noticing. `doctor.mjs` touches the write door too,
+and prints a fix for anything that fails. If something looks wrong, [section 10](#10-when-something-looks-wrong)
 distinguishes three failures that look identical and are not.
 
 ### Step 5 — open Claude Code and approve the server
@@ -192,7 +202,7 @@ for dialogs with nowhere to put one.
 | | Claude Code | Desktop / claude.ai | Local MCP client | Remote MCP client |
 |---|---|---|---|---|
 | All the tools | yes | yes | yes | yes |
-| The three writing skills | yes | no | depends on the client | no |
+| The four writing skills (josh-voice, draft-post, gate-check, barker-audit) | yes | no | depends on the client | no |
 | `/waiting`, `/write`, `/review` shortcuts | yes | no | no | no |
 | Prompts and resources | yes | no | yes | no |
 | Reading your Claude Code sessions for ideas | yes | no | yes | no |
@@ -209,7 +219,7 @@ Three things, in order of how much they tell you.
 
 ```bash
 node mcp-server/index.mjs --check      # can it reach the database, is the key accepted
-node scripts/smoke.mjs                 # thirty seconds, reads only, changes nothing
+node scripts/doctor.mjs                # everything a clone needs, including the write door
 ```
 
 And in a session, just ask: **"is it working?"** — that calls `health` and then `system_status`, and
@@ -266,7 +276,8 @@ Nothing below happens unless you say so:
    inventing one.
 4. **It checks the draft nine ways** before you see it: could anyone else have written this, does
    every claim trace to your material, does the hook open a loop, is it aimed at a specific reader,
-   does it sound like you, are the names cleared, is anyone identifiable, and are there any AI tells.
+   does it sound like you, are the names cleared, is anyone identifiable, are there any AI tells, and
+   does it read as a post or as a wall of text.
    A draft that fails comes back with the reasons. Three failures and the idea parks itself.
 5. **You decide.** Approve with a date, ask for a rewrite, edit a line, or drop it.
 6. **On the date, it publishes** — and seven days later it collects what happened, so the system
@@ -342,12 +353,12 @@ Ask: **"is it working?"**. If you want to check yourself:
 
 ```bash
 node mcp-server/index.mjs --check
-node scripts/smoke.mjs
+node scripts/doctor.mjs
 ```
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
-| `CONTENT_MCP_KEY is not set` | `mcp-server/.env` missing or empty | Redo [step 3](#step-3--create-your-environment-file) |
+| `Missing CONTENT_MCP_KEY.` or `Missing SUPABASE_URL and CONTENT_MCP_KEY.` | `mcp-server/.env` missing or empty | Redo [step 3](#step-3--create-your-environment-file) |
 | `401` or `invalid token` | The key is wrong or has been rotated | Ask us for a new one |
 | Connects, but every list is empty | The key is valid but has no grants | Tell us — that is ours to fix |
 | Claude Code does not see the tools | Not opened in the project folder | `cd josh-content-system` first, then `claude` |

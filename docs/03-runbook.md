@@ -375,7 +375,7 @@ deno check supabase/functions/*/index.ts              # every function type-chec
 node eval/syntax-check.mjs                            # fallback parse check if Deno is absent
 node eval/calibrate-cc.mjs                            # Claude Code filter rates
 node eval/regression.mjs --compare                    # re-draft the golden set, diff vs last run
-cd app && npx tsc --noEmit && npx next build          # the web app
+node scripts/doctor.mjs                               # does this clone actually work
 ```
 
 Run the regression harness before and after any library change. If claim verification gets worse, the

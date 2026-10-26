@@ -97,7 +97,14 @@ async function main() {
 
   if (args.has("--check")) {
     note(`Project   ${env.url}`);
-    note(`Key       ${env.key.slice(0, 8)}… (${env.key.length} chars)`);
+    /*
+     * The length and the shape, never the key. This printed the first eight characters, during the
+     * step the README tells you to paste the output of — so `--check` output was not safe to put in
+     * a ticket or a screenshot. The length and whether it is a JWT are enough to tell "wrong key"
+     * from "no key", which is all this line was ever for.
+     */
+    const looksJwt = env.key.split(".").length === 3;
+    note(`Key       present, ${env.key.length} chars, ${looksJwt ? "JWT-shaped" : "not a JWT"}`);
     let granted = false;
     try {
       const started = Date.now();

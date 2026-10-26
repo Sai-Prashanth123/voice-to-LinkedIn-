@@ -1,5 +1,5 @@
 /**
- * The only thing between 24 tools and the internet.
+ * The only thing between 64 tools and the internet.
  *
  * Over stdio there was no auth question at all — the server ran as a child process of the person
  * who started it. These tests exist because that stopped being true the moment there was a URL.

@@ -4,7 +4,7 @@
  * WHY THIS EXISTS AT ALL
  *
  * Over stdio there is no auth question: the server runs as a child process of the person who
- * started it, on their machine, reachable by nothing. Put the same 24 tools on a URL and the only
+ * started it, on their machine, reachable by nothing. Put the same 64 tools on a URL and the only
  * thing between them and the internet is this file.
  *
  * TWO TOKENS, NOT ONE

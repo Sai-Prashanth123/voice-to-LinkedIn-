@@ -118,13 +118,25 @@ he can give this system.
 mcp-server/            the tools, prompts and resources. node mcp-server/index.mjs --check
 supabase/functions/    the server: the write door (cc-submit), the workers, the connector
 supabase/migrations/   schema. Applied in order; never edit one that has shipped
-scripts/               scrape, refresh measurements, rebuild the law set, smoke test
+scripts/               doctor.mjs first — does this clone work. Then scrape, refresh
+                       measurements, rebuild the law set
 data/josh/             the law set and the measured voiceprint
-docs/                  runbook, handover, the spec as we read it
+docs/                  runbook, handover, the cost model, and his own material in from-josh/
 ```
 
 Before committing: `npx deno test --allow-all supabase/functions/_shared/` and
 `cd mcp-server && node --test`. Both must be green.
+
+Two things will make that suite fail for reasons that are not regressions, and both have wasted time:
+
+- **Several of those suites read the live project**, so in a clone with only the scoped key they
+  fail for want of credentials. CI excludes `capabilities.test.mjs`, `index.test.mjs` and
+  `tools.test.mjs` by name for that reason (`.github/workflows/checks.yml`).
+- **They interfere with each other when run in parallel**, which is the default. Two of them failed
+  on 26 October in a full run and passed on their own and under
+  `node --test --test-concurrency=1`. If something fails, re-run it serially before believing it.
+
+If you are not sure whether a failure is yours, run `node scripts/doctor.mjs` first.
 
 Two conventions worth knowing because they will bite otherwise:
 

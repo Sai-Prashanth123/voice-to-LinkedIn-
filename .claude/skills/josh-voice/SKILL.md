@@ -117,16 +117,29 @@ outcome, not a failure.
 
 ## After writing
 
-Run the `gate-check` skill. Eight checks, any one failing fails the draft. Do not run the gate in
-the same session that wrote the draft.
+Run the `gate-check` skill, in the same session, before you stop. Nine checks, any one failing fails
+the draft.
+
+**As a separate pass, not interleaved with the writing.** Finish the draft, file it, then come to the
+checks fresh and fetch the rubrics again — judging a sentence you are still mid-way through
+rewriting is how a draft gets graded on intent rather than on what is on the page. That is what
+CLAUDE.md means by "a fresh breath".
+
+This line used to say *"do not run the gate in the same session that wrote the draft"*, which was
+wrong and contradicted the thing enforcing it: `.claude/hooks/writing-order.mjs` is a `Stop` hook
+that **blocks the session** if a draft was written and no verdict was recorded. So the instruction
+told you to defer and the hook would not let you. A draft left unjudged is the 14 October failure —
+five days in which nothing could be approved — so the hook is right and this sentence was the fault.
 
 ## Keeping the law set current
 
 - `node scripts/build-voiceprint.mjs --sentinels <posts.json> --apply` — recompute the fingerprint.
 - `node scripts/sentinel-refresh.mjs --apply` — refresh the reference-writer measurements and
   propose a library change.
-- `node scripts/build-law.mjs --apply` — rebuild all five files. **Overwrites hand edits.** Read
-  the diff first.
+- `node scripts/build-law.mjs --apply` — rebuild five of the six: identity, voice, receipts,
+  content-plan, quality-bar. **Overwrites hand edits.** Read the diff first. `voiceprint.md` is the
+  sixth and is carried through untouched, because `build-voiceprint.mjs` is what makes it — which is
+  why five and six both appear on this page and are both right.
 
 Nothing here writes to the library. Automated changes go to `library_proposals` and wait for Josh
 (clause 12.10). If you want a library section changed, use `propose_library_change` and say so.

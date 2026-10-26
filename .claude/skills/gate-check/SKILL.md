@@ -5,7 +5,7 @@ description: Use when judging a draft against the content system's quality check
 
 # Run the gate
 
-Eight independent checks. **The rubrics are not in this file** — they live in the system and you
+Nine independent checks. **The rubrics are not in this file** — they live in the system and you
 fetch them, so this and the system's own gate judge by exactly the same words.
 
 ## The stance

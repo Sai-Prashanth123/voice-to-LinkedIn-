@@ -32,8 +32,18 @@ What transfers: opening on someone else's situation with their number in it; anc
 something mundane and specific; one mechanism per post; naming the audience once, in the middle.
 
 What does not: his turn that renames the reader's problem — state it, deny it, substitute another —
-which is the exact construction Josh's banned-phrases list forbids. And his close: he asks in nearly
-every post, where Josh's rule rations a direct ask to one in five.
+which is the exact construction Josh's banned-phrases list forbids. That is **one** thing, and it is
+a reading of the construction rather than a count.
+
+There used to be a second — that he closes on an ask in nearly every post — and it was wrong. It was
+read off six posts collected on 5 October whose line breaks the scrape had stripped. Measured across
+241 he closes on an ask **9%** of the time, against 17% for the other seven and the 20% Josh's own
+rule allows: he is the most restrained closer of the eight, not the outlier. **Do not tell Josh his
+closing habit is one to avoid.** What those six actually showed was his postscript habit — one post
+in five, where nobody else passes 4%.
+
+Corrected on 20 October in the library, the README, CLAUDE.md and the barker-audit skill. This file
+was the one that kept saying it, which matters because `/sentinels` is how he reaches any of this.
 
 ## To refresh them
 

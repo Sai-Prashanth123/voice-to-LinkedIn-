@@ -63,18 +63,28 @@ The habit those six actually showed was a postscript, on one post in five.
 5. **Say which of the five the draft is furthest from, and stop.** One line. Do not produce a
    revised draft unless asked.
 
-## The snapshot these numbers came from
+## The snapshot these numbers came from — and it is a twelfth of the corpus
 
-Measured 14 October 2026 by `scripts/measure-structure.mjs`, across all 156 stored posts by the
-eight writers. Sentence-wise and marker-wise, so no figure depends on a line break surviving the
-scrape.
+**Stale, deliberately left here, and not to be quoted.** Measured 14 October 2026 across **156**
+stored posts, Matt Barker **21** of them. The corpus is now **1,900** posts and **250** of his, so
+every figure below rests on roughly a twelfth of what is stored. Step 1 above says to take the
+numbers from `analyse_reference_writer` instead; this section is what "will drift" looks like once
+it has.
 
-Matt Barker, 21 posts: opens on a number about himself more often than any other shape and is the
-only one of the eight who does; turns at 0.10 in 18 of 21; lands short; enumerates in 52%.
+What the 14 October snapshot said: Matt Barker, 21 posts — opens on a number about himself more
+often than any other shape and is the only one of the eight who does; turns at 0.10 in 18 of 21;
+lands short; enumerates in 52%.
 
-**One figure here is inferred, not counted.** 105 of the 156 posts arrive with their line breaks
-stripped, so lists are detected from surviving markers — right 46 times out of 51 where the truth
-is known. Treat 55% as roughly half. Say so if you quote it.
+What 241 measurable posts say: he opens on a number in **120 of 241 (50%)**, still the only one of
+the eight; **39** words above the fold, second fewest; **13** paragraphs; lands short in **41%** of
+closes, the highest here; uses a list in **65%**. The direction of every claim held. The figures
+moved.
+
+**One figure in the old snapshot was inferred, not counted** — 105 of those 156 posts arrived with
+their line breaks stripped, so lists were detected from surviving markers, right 46 times out of 51
+against known truth. Re-measured at scale that detector came out at **83.8%**, not 90%: the small
+sample had been flattering it. Which is the reason this section carries a warning rather than a
+correction — a number read off a twelfth of a corpus can be wrong in a direction nobody predicted.
 
 ## When the course material arrives
 

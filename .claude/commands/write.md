@@ -23,7 +23,7 @@ Three things that cause most rejections:
   that reader uses.
 - **A hook that closes its own loop.** The first line opens something; it does not resolve it.
 
-Call `measure_draft` and `scrub_draft` before filing. Both are free and both catch things the eight
+Call `measure_draft` and `scrub_draft` before filing. Both are free and both catch things the nine
 checks would otherwise reject.
 
 File it with `create_draft`, every claim carrying the verbatim span it rests on.
