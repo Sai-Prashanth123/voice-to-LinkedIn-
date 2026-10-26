@@ -123,6 +123,24 @@ export async function checkRetelling(
     await logEvent(db, "dedup_embeddings_failed", "warn", {
       moment_id: momentId,
       error: err instanceof Error ? err.message : String(err),
+      /*
+       * STANDING, not a blip — and that word is what gets it in front of Josh.
+       *
+       * `worker-ops` surfaces `error` and never `warn`, deliberately: a warning that repeats daily
+       * is a channel he learns to ignore, and its own comment records 1,581 stale events that
+       * taught exactly that lesson. But this one is not an event, it is a CONDITION: the fast
+       * embedding path is gone and every check since has run on the slower, dearer model fallback.
+       *
+       * It ran for six days unnoticed. The check itself kept working — clause 7.2 allows either
+       * method and the fallback is real — so nothing broke. It just quietly started costing more,
+       * and the only trace was a warn row nobody reads.
+       *
+       * Opt-in rather than opt-out, so widening this can never sweep in per-call noise: a
+       * `mcp_http_call` warn is one refused call and belongs to whoever made it, not to Josh.
+       */
+      standing: true,
+      means: "The fast embedding path is unavailable, so the retelling check is running on the " +
+        "slower LLM comparison. It still works. It costs more per moment.",
     });
   }
 

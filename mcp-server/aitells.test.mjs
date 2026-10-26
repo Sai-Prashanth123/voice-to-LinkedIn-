@@ -378,3 +378,47 @@ test("the scanner separates the good draft from the generic ones", () => {
     );
   }
 });
+
+test("a hashtag is caught, and a number reference is not", () => {
+  // "No hashtags" sat in the banned-phrases section with no detector anywhere in the repo until
+  // 26 October — the most trivially mechanical rule in the library and the one nothing enforced.
+  for (const body of ["Worth a read. #B2BSales", "Closing thought.\n\n#outbound #gtm"]) {
+    assert.ok(hits(body, "2C-32").length > 0, `missed a hashtag in: ${body}`);
+  }
+
+  // A hash is only a hashtag at the start of a word. Flagging these is how a check gets switched off.
+  for (const body of [
+    "That was my #1 priority last quarter.",
+    "It was issue #42 in the tracker.",
+    "She asked who owned the number after we left.",
+  ]) {
+    assert.equal(hits(body, "2C-32").length, 0, `false positive on: ${body}`);
+  }
+});
+
+test("a dash is a dash in all four forms, and a hyphen is not", () => {
+  /*
+   * 2C-1 tested em and en only, while claims.ts and frameworks.mjs each treated a wider set as
+   * dashes — so the check that REFUSES a draft was the narrowest of the three. Same shape as the
+   * bullet-marker bug, different character class. PUNCTUATION_DASH is now shared.
+   *
+   * The exclusions are as load-bearing as the inclusions: a hyphen in "go-to-market" is not a tell,
+   * and a minus in "−5" is arithmetic.
+   */
+  for (const [what, body] of [
+    ["em dash", "We shipped it — and then it broke."],
+    ["en dash", "We shipped it – and then it broke."],
+    ["horizontal bar", "We shipped it ― and then it broke."],
+    ["figure dash", "We shipped it ‒ and then it broke."],
+  ]) {
+    assert.ok(hits(body, "2C-1").length > 0, `${what} was not caught`);
+  }
+
+  for (const [what, body] of [
+    ["hyphen", "Our go-to-market motion was fine."],
+    ["non-breaking hyphen", "Our go\u2011to\u2011market motion was fine."],
+    ["minus", "The number came back as \u22125 last week."],
+  ]) {
+    assert.equal(hits(body, "2C-1").length, 0, `${what} was flagged as a dash`);
+  }
+});

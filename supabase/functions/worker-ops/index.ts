@@ -177,6 +177,59 @@ async function daily(db: SupabaseClient): Promise<Response> {
       .is("notified_at", null);
   }
 
+  /*
+   * STANDING WARNINGS — a capability that degraded and stayed degraded.
+   *
+   * `warn` is deliberately not surfaced above, and the comment there earns that decision: 1,581
+   * stale events once queued up at ten a day, which is how a person learns to ignore the channel
+   * meant to tell them something broke.
+   *
+   * But some warnings are not events, they are conditions. The embedding provider ran out of credit
+   * on 20 October and every retelling check since has run on the slower, dearer LLM fallback. The
+   * check kept working — 7.2 allows either method — so nothing failed, and nobody knew for six
+   * days. There was no severity for "working, but not the way you are paying for".
+   *
+   * OPT-IN, by `standing: true` in the detail, declared where the condition is known. Not a rule
+   * about which kinds matter: of 117 unsurfaced warnings on 26 October, 41 were individual refused
+   * tool calls that belong to the caller, and most of the rest were historical. A broad "surface
+   * warnings" rule would have buried the one that mattered in the noise that does not.
+   *
+   * Told once, and the count and the drain cover the same set — the fault the block above records.
+   */
+  const { count: standingCount } = await db
+    .from("system_events")
+    .select("*", { count: "exact", head: true })
+    .eq("severity", "warn")
+    .eq("detail->>standing", "true")
+    .is("notified_at", null);
+
+  if ((standingCount ?? 0) > 0) {
+    const { data: standing } = await db
+      .from("system_events")
+      .select("kind, detail")
+      .eq("severity", "warn")
+      .eq("detail->>standing", "true")
+      .is("notified_at", null)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    // One line per condition, not per occurrence: nine identical rows are one thing to tell him.
+    const byKind = new Map<string, string>();
+    for (const row of standing ?? []) {
+      const means = (row.detail as { means?: string } | null)?.means;
+      if (!byKind.has(row.kind)) byKind.set(row.kind, means ?? "no explanation recorded");
+    }
+    for (const [kind, means] of byKind) {
+      alerts.push(`Still degraded — ${kind}: ${means}`);
+    }
+
+    await db.from("system_events")
+      .update({ notified_at: new Date().toISOString() })
+      .eq("severity", "warn")
+      .eq("detail->>standing", "true")
+      .is("notified_at", null);
+  }
+
   // 15.3 — "Where a new tool is added later, Josh should be told AT THE TIME rather than finding it
   // on a statement."
   //

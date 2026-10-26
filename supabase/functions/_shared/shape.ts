@@ -57,6 +57,30 @@ function words(s: string): number {
 export const BULLET_MARKER = /^(?:[-*•‣▪·>→➔»›]|\d+[.)])\s+/;
 
 /**
+ * A DASH USED AS PUNCTUATION — the AI tell. Not a normaliser, and that distinction is the point.
+ *
+ * `aitells.mjs` rule 2C-1 tested `/[—–]/`: em dash and en dash, nothing else. Two other places in
+ * this repo also decide what a dash is, and both are WIDER:
+ *
+ *   - `claims.ts` and `shingles.ts` fold `[‐-―−]` (U+2010..U+2015 plus minus) down to "-", so that
+ *     "well-known" and "well‑known" are the same words to the claim ledger;
+ *   - `frameworks.mjs` folds `[‐-―_]`, underscore included, because `Problem_Agitate_Solve` is the
+ *     same framework as `Problem-Agitate-Solve`.
+ *
+ * Those two are right as they are and must NOT be made identical to this one: they are normalisers
+ * answering "are these the same string", and a normaliser wants to be greedy. This answers "did the
+ * writer reach for a dash instead of a full stop", and the one that refuses a draft was the
+ * narrowest of the three. A horizontal bar or a figure dash passed 2C-1 while being a dash to
+ * everything else — the `→` bug in a different character class.
+ *
+ * Deliberately EXCLUDED, with reasons, because a detector's false positives cost more than its
+ * misses here:
+ *   - U+2010 hyphen and U+2011 non-breaking hyphen: those are hyphens. "Go-to-market" is not a tell.
+ *   - U+2212 minus: "the number was −5" is arithmetic, not punctuation.
+ */
+export const PUNCTUATION_DASH = /[—–―‒]/g;
+
+/**
  * WHICH ROWS THE SHAPE TARGETS REST ON. Spelled here because three callers load them.
  *
  * The two runtimes genuinely need separate loaders — Deno reaches the database through

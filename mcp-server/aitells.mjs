@@ -42,7 +42,7 @@
 import { sentences, tokens } from "../scripts/lib/prose.mjs";
 // What a bullet is, spelled once. See the note on BULLET_MARKER: this file and shape.ts each had
 // their own answer, the two disagreed, and neither could see the marker Josh's drafts use.
-import { BULLET_MARKER } from "../supabase/functions/_shared/shape.ts";
+import { BULLET_MARKER, PUNCTUATION_DASH } from "../supabase/functions/_shared/shape.ts";
 
 /* ── What the voiceprint proves he actually says ──────────────────────────────────────────────
  *
@@ -410,12 +410,33 @@ export const RULES = [
   },
 
   {
+    /*
+     * "No hashtags" has been in the banned-phrases section since it was written, and until
+     * 26 October nothing in this repository looked for a `#`. It was the most trivially mechanical
+     * rule in the whole library and the one with no detector at all — which is the clearest single
+     * example of a rule being filed, reported as done, and enforced by nobody.
+     *
+     * A hash only counts as a hashtag at the start of a word: "#1 priority", "issue #42" and a
+     * channel name mid-sentence are not hashtags, and flagging them would be the kind of false
+     * positive that gets a check switched off.
+     */
+    id: "2C-32",
+    name: "Hashtag",
+    why: "His banned-phrases section says no hashtags. They mark a post as written for an "
+      + "algorithm rather than for the person reading it.",
+    fix: "Delete it. If the word matters, put it in a sentence.",
+    detect: (body) => matches(body, /(?:^|\s)#[A-Za-z][\w-]{1,}/g),
+  },
+
+  {
     id: "2C-1",
     name: "Em dash",
     why: "The single most recognisable AI punctuation tell. Josh's count across 11,022 words of "
       + "recorded speech is zero.",
     fix: "Replace with a full stop or a new line.",
-    detect: (body) => matches(body, /[—–]/g),
+    // PUNCTUATION_DASH, not a local class. This tested em and en only while two other places in
+    // the repo treated four more characters as dashes — see the note on it in shape.ts.
+    detect: (body) => matches(body, new RegExp(PUNCTUATION_DASH.source, "g")),
   },
 
   {

@@ -123,8 +123,9 @@ Four examples, all real:
 
 - The rule against repeated bullet blocks works. It looks for `-`, `*` and `•`. Your drafts use `→`,
   so it has never once fired.
-- I told you on the 19th that it now checks whether you've already told a story. That check has been
-  returning a billing error since the 22nd, on both of your last two posts. Nothing surfaced it.
+- The retelling check I told you about on the 19th has been running on a paid-out fallback since the
+  22nd — its fast path hit a billing limit and it quietly switched to the slower, dearer one. It
+  still works. Nobody knew it had switched, which is the same blindness as the rest of this list.
 - The structure check added on the 14th was reading 500 of 1,839 reference posts, because the
   database quietly caps a read at 1,000 and doesn't say so.
 - And the gate told you that you'd invented "915 booking systems across 1,933 sites." You wrote that
