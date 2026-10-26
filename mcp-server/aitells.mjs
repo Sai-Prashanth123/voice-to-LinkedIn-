@@ -40,6 +40,9 @@
  */
 
 import { sentences, tokens } from "../scripts/lib/prose.mjs";
+// What a bullet is, spelled once. See the note on BULLET_MARKER: this file and shape.ts each had
+// their own answer, the two disagreed, and neither could see the marker Josh's drafts use.
+import { BULLET_MARKER } from "../supabase/functions/_shared/shape.ts";
 
 /* ── What the voiceprint proves he actually says ──────────────────────────────────────────────
  *
@@ -232,8 +235,8 @@ export const RULES = [
     detect: (body) => {
       const bullets = lines(body)
         .map((text, i) => ({ text: text.trim(), line: i + 1 }))
-        .filter((l) => /^(?:[-*•‣]|\d+[.)])\s+/.test(l.text))
-        .map((l) => ({ ...l, content: l.text.replace(/^(?:[-*•‣]|\d+[.)])\s+/, "") }));
+        .filter((l) => BULLET_MARKER.test(l.text))
+        .map((l) => ({ ...l, content: l.text.replace(BULLET_MARKER, "") }));
 
       if (bullets.length < 3) return [];
       const out = [];
@@ -246,11 +249,27 @@ export const RULES = [
         if (!byFirst.has(first)) byFirst.set(first, []);
         byFirst.get(first).push(b);
       }
+      /*
+       * THREE REPORTS, FOUR REFUSES — and this is a deliberate loosening of the rule as written.
+       *
+       * The rule above says three. It is kept at three for reporting, because three identical
+       * openings is the pattern and the rule is right about that. But this rule is in
+       * HIGH_CONFIDENCE, so from 26 October it can actually refuse a draft before filing (the
+       * marker fix in shape.ts is what unblocked it), and Josh's own formatting section asks for
+       * the shape it would now refuse: "System and how-to posts: sub-headers with bullets under
+       * each", added by him on 21 October. A pros-and-cons list is parallel because the thing being
+       * compared is parallel.
+       *
+       * So three is reported and four refuses. Draft 90 had eight bullets opening on "Pro", which
+       * is not a three-item list being unlucky. If he wants the line drawn elsewhere it moves
+       * through propose_library_change on banned_phrases, never a code edit (12.10).
+       */
       for (const [first, group] of byFirst) {
         if (group.length >= 3) {
           out.push({
             matched: `${group.length} bullets all open with "${first}"`,
             line: group[0].line,
+            ...(group.length < 4 && { blocking: false }),
           });
         }
       }
@@ -265,6 +284,9 @@ export const RULES = [
             out.push({
               matched: `${run} consecutive bullets of near-identical length (${lengths.slice(i - 2, i + 1).join(", ")} words)`,
               line: bullets[i - 2].line,
+              // Reported, never refused. Three short items of similar length is what a real short
+              // list looks like; "vary the length" is advice, not a wrong construction.
+              blocking: false,
             });
           }
         } else {
@@ -620,6 +642,11 @@ export function scan(body) {
         matched: hit.matched,
         why: rule.why,
         fix: rule.fix,
+        // Severity is per FINDING, not per rule, and only ever downwards. HIGH_CONFIDENCE decides
+        // which rules may refuse a draft; a detector that knows one of its own arms is weaker than
+        // the others says so here. Absent means "whatever the rule says", so every existing rule
+        // behaves exactly as it did.
+        ...(hit.blocking === false && { blocking: false }),
       });
     }
   }

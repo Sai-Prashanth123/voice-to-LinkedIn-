@@ -255,7 +255,10 @@ export const briefTools = [
         moment_id: `eq.${draft.moment_id}`,
         limit: 1,
       });
-      const entry = sourceEntry(material);
+      // The same twelve fields the drafter and the ledger get. A judge asked whether a figure
+      // traces to the source has to be shown the source — see the note in handlers/gate.ts.
+      const gateExtra = await writingSources(db, draft.moment_id);
+      const entry = sourceEntry(material, gateExtra);
 
       const cleared = (await db.select("moment_names", {
         select: "name,kind,cleared",

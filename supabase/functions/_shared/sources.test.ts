@@ -196,3 +196,38 @@ test("the function that verifies a draft is the one that gets the wider source",
     "draft.ts should widen the source in both handleDraft and applyDraft",
   );
 });
+
+test("the judge is shown the same source the ledger verifies against", async () => {
+  /*
+   * The third time this was missed, and the only one that produced wrong answers rather than a
+   * missing input.
+   *
+   * claims_trace asks whether a figure in the draft traces to the source. Handed the ten fields it
+   * cannot see his_words — what Josh actually typed — so on 26 October it failed draft 90 with
+   * "'One build found 915 booking systems across 1,933 sites.' Neither number appears anywhere in
+   * his notes", while both numbers sat in raw_inputs row 92 twenty-seven characters apart. The
+   * draft was carrying claims_verified true at the time, because verifyDraft had checked the same
+   * figures against the same words and found them. Then anyone_else discounted the post's only
+   * concrete detail BECAUSE claims_trace had called it invented.
+   *
+   * gate_runs has no UPDATE. A verdict that is wrong is wrong permanently, and Josh is the one
+   * asked to read it. So a judging path on the narrow entry is a worse fault than a drafting path
+   * on it, and it is the one asserted hardest.
+   */
+  for (const [name, url] of [
+    ["handlers/gate.ts", new URL("./handlers/gate.ts", import.meta.url)],
+    ["get_gate_brief", new URL("../../../mcp-server/tools/brief.mjs", import.meta.url)],
+  ] as const) {
+    const src = await Deno.readTextFile(url);
+    assert.doesNotMatch(
+      src,
+      /sourceEntry\(material\)/,
+      `${name} judges a draft against an entry built from the ten fields alone`,
+    );
+    assert.match(
+      src,
+      /writingSources\(/,
+      `${name} does not load his_words and receipts, so a figure he typed reads as invented`,
+    );
+  }
+});

@@ -34,7 +34,7 @@ export { notJudged, unjudgeableChecks };
 import { GATE_CHECKS, GATE_SYSTEM, GATE_USER, PROMPT_VERSION } from "../prompts.ts";
 import { GateVerdictSchema } from "../schemas.ts";
 import type { Job } from "../types.ts";
-import { retryOrPark } from "./draft.ts";
+import { retryOrPark, writingSources } from "./draft.ts";
 
 // What each check may be shown lives in views.ts, because get_gate_brief needs the same answer
 // and, while this was declared here, it had no way to ask. See the note there.
@@ -78,7 +78,25 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
 
   const moment = await getMoment(db, momentId);
   const material = await getMaterial(db, momentId);
-  const entry = sourceEntry(material);
+  /*
+   * THE JUDGE SEES WHAT THE VERIFIER SEES. The third time this was missed.
+   *
+   * applyDraft's note says the wider entry "was missed on the first attempt: the patch landed on
+   * handleDraft above". It was missed here too, and here it does not merely withhold a source — it
+   * produces WRONG VERDICTS, because claims_trace is asked whether a figure appears in the source
+   * and was handed a source with his own words taken out of it.
+   *
+   * Measured on draft 90, 26 October. It failed with "'One build found 915 booking systems across
+   * 1,933 sites.' Neither number appears anywhere in his notes." Both numbers are in his notes:
+   * raw_inputs row 92, 27 characters apart. The draft carried claims_verified true, because
+   * verifyDraft — which gets the twelve fields — had already checked every figure against them.
+   * Then anyone_else discounted the only concrete detail in the post because claims_trace had just
+   * called it invented, and gate_runs has no UPDATE, so both verdicts are permanent.
+   *
+   * This widens where a fact may come from. It does not widen whether it is checked.
+   */
+  const extra = await writingSources(db, momentId);
+  const entry = sourceEntry(material, extra);
 
   /*
    * The shape numbers, for the one check that judges shape. Only posts that kept their line breaks

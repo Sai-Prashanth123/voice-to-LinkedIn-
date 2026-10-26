@@ -36,6 +36,26 @@ function words(s: string): number {
   return (s ?? "").trim().split(/\s+/).filter(Boolean).length;
 }
 
+/**
+ * WHAT A BULLET IS. Spelled once, because it was spelled twice and the two disagreed.
+ *
+ * This file said `/^[-*•]\s+/` and aitells.mjs said `/^(?:[-*•‣]|\d+[.)])\s+/`. Neither included
+ * `→`, which is the marker Josh's drafter actually reaches for. The cost, measured on drafts 89 and
+ * 90 on 26 October: eight blocks of four arrow bullets each, the same scaffold stamped on every one
+ * ("Pro:", "Con:", "Effort to use:", "Used in GTM:"), and
+ *
+ *   - rule 2C-17 is in HIGH_CONFIDENCE, so create_draft was supposed to refuse the draft before
+ *     filing it. It found nothing, because it was looking for a dash.
+ *   - the ninth gate check reported "no list" about a post that is nothing but lists, because
+ *     uses_list below was looking for the same dash.
+ *
+ * Josh then read the post and told us it was bullet soup. He was the third reader, and the only one
+ * that could see the bullets.
+ *
+ * Anchored, no `g` flag: a global regex carries lastIndex between calls and these are shared.
+ */
+export const BULLET_MARKER = /^(?:[-*•‣▪·>→➔»›]|\d+[.)])\s+/;
+
 export interface Shape {
   /**
    * Counted here so no caller writes the split itself.
@@ -68,7 +88,7 @@ export function measureShape(text: string | null | undefined): Shape {
   const body = (text ?? "").replace(/\r/g, "");
   const paras = body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
   const lines = body.split("\n").map((l) => l.trim()).filter(Boolean);
-  const bullets = lines.filter((l) => /^[-*•]\s+/.test(l) || /^\d+[.)]\s+/.test(l));
+  const bullets = lines.filter((l) => BULLET_MARKER.test(l));
 
   return {
     words: words(body),

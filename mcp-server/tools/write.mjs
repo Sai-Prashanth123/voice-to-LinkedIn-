@@ -363,7 +363,10 @@ export const writeTools = [
        * will eventually be wrong with no way back.
        */
       const tells = scan(args.body);
-      const blocking = tells.findings.filter((f) => HIGH_CONFIDENCE.has(f.rule));
+      // `blocking: false` on a finding is a detector saying one of its own arms is weaker than the
+      // rest of its rule — see the note in scan(). Absent means the rule decides, so this is the
+      // same filter it has always been for every rule that does not set it.
+      const blocking = tells.findings.filter((f) => HIGH_CONFIDENCE.has(f.rule) && f.blocking !== false);
       if (blocking.length > 0) {
         throw new Error(
           `The draft uses ${blocking.length} construction(s) the library rules out, so nothing was ` +

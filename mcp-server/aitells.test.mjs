@@ -125,6 +125,63 @@ test("uneven bullets are left alone", () => {
     "- Nobody asked her what changed.",
   ].join("\n");
   assert.equal(hits(real, "2C-17").length, 0, "flagged a genuinely uneven list");
+
+  // The same list with the marker Josh's drafter uses. Widening the marker class must not have
+  // turned the rule into a blanket on anything indented.
+  const arrows = real.replace(/^- /gm, "→ ");
+  assert.equal(hits(arrows, "2C-17").length, 0, "the wider marker class flagged an uneven list");
+});
+
+test("a bullet is a bullet whichever marker it carries", () => {
+  /*
+   * Draft 90, 26 October. Eight blocks, each four bullets, every one opening "→ Pro:", "→ Con:",
+   * "→ Effort to use:". 2C-17 is in HIGH_CONFIDENCE and create_draft refuses on it, so the draft
+   * should never have been stored — and it was, because the marker class covered `- * • ‣` and a
+   * numbered list, and he uses `→`. The ninth gate check reported "no list" about the same post
+   * for the same reason. Josh was the third reader and the only one that could see the bullets.
+   */
+  const section = (n) => [
+    `${n}. Method ${n}`,
+    `→ A tool leaves a trace somewhere in the stack, and this is where method ${n} looks for it.`,
+    "→ Pro: cheap, and quick to run against a long list of domains.",
+    "→ Con: it misses the back-office tools entirely, which is most of them.",
+    "→ Effort to use: easy.",
+  ].join("\n");
+
+  for (const marker of ["→", "➔", "»", "›", "▪", "·", "-", "*", "•"]) {
+    const body = [1, 2, 3, 4].map((n) => section(n).replaceAll("→", marker)).join("\n\n");
+    assert.ok(hits(body, "2C-17").length > 0, `the scanner cannot see "${marker}" as a bullet`);
+  }
+});
+
+test("three repeated bullets report, four refuse", () => {
+  // A deliberate loosening, because Josh's own formatting section asks for "sub-headers with
+  // bullets under each" and a pros-and-cons list is parallel by nature. Three is still a finding;
+  // only four or more may stop a draft being filed. See the note in aitells.mjs.
+  const bullets = (n) =>
+    Array.from({ length: n }, (_, i) => `→ Pro: reason number ${i + 1} that this one is worth it.`)
+      .join("\n");
+
+  const three = hits(bullets(3), "2C-17").filter((f) => /open with/.test(f.matched));
+  const four = hits(bullets(4), "2C-17").filter((f) => /open with/.test(f.matched));
+
+  assert.ok(three.length > 0, "three bullets opening on the same word should still be reported");
+  assert.equal(three[0].blocking, false, "three should not be able to refuse a draft");
+  assert.ok(four.length > 0, "four bullets opening on the same word should be caught");
+  assert.notEqual(four[0].blocking, false, "four opening on the same word should refuse");
+});
+
+test("the bullet marker is spelled once", async () => {
+  // shape.ts and aitells.mjs each had their own answer to "what is a bullet", the two disagreed,
+  // and neither could see the marker that mattered. One definition now; assert there is no second.
+  const { readFile } = await import("node:fs/promises");
+  const src = await readFile(new URL("./aitells.mjs", import.meta.url), "utf8");
+  assert.match(src, /BULLET_MARKER/, "aitells.mjs no longer uses the shared marker");
+  assert.doesNotMatch(
+    src,
+    /\[-\*•/,
+    "aitells.mjs has grown its own bullet character class again",
+  );
 });
 
 /* ── The voice exemptions ────────────────────────────────────────────────────────────────────
