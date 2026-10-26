@@ -180,3 +180,48 @@ test("the handle is carried, not dropped, at every step that has one", () => {
   const inspect = readFileSync(new URL("./tools/inspect.mjs", import.meta.url), "utf8");
   assert.match(inspect, /writerShapeBlock\(db, args\.writer_handle\)/, "a rewrite loses the shape");
 });
+
+/* ── What he has said, which the drafter had never seen ─────────────────────── */
+
+test("the brief carries his own notes about drafts, and frames them as notes", async () => {
+  /*
+   * The standing assumption was that the system has nothing positive to aim at, because he has
+   * never approved a post. That was wrong, and this is the correction: five pushback notes in his
+   * own words, three verdicts, and three before-and-after pairs — all of it unread until 26 October.
+   *
+   * push_back_on_draft carried his note into the next draft of THAT moment via the job payload and
+   * nowhere else, so a preference he stated on Monday was invisible to Tuesday's post.
+   *
+   * The 26 October note is the proof it matters: "go look at the Sentinel accounts to see how
+   * others who have done lists like this would write it" — he asked for reference-writer targeting
+   * in a pushback, and nothing read it.
+   */
+  const brief = await tools.find((t) => t.name === "get_drafting_brief")
+    .handler({ moment_id: 111 }, { db, url: creds.url });
+
+  assert.match(brief.user, /WHAT JOSH HAS SAID ABOUT PREVIOUS DRAFTS/);
+
+  // Framed as instructions, not as prose to imitate. These are dictated and carry spoken filler,
+  // which the voice guide is explicit does not belong in a post.
+  assert.match(brief.user, /Take the\s+INSTRUCTION from them and ignore the delivery/);
+
+  // And it must not be mistakable for a rule: only he changes the library (12.10).
+  assert.match(brief.user, /None of this is a rule/);
+  assert.match(brief.user, /12\.10/);
+});
+
+test("a line he changed is shown as a pair, because that is the only positive example there is", async () => {
+  // He was given "My holidays used to have client meetings in them. Now I say no." and cut the
+  // second sentence — the one that answered his own hook, which is exactly what hook_opens_loop
+  // had flagged on that draft. A verdict says what was wrong; a change says what better was.
+  const notes = await db.rpc("joshs_notes", { p_limit: 12 });
+  const pairs = (notes ?? []).filter(
+    (n) => n.before_text && n.after_text && n.before_text !== n.after_text,
+  );
+  assert.ok(pairs.length > 0, "no before/after pair survived the read");
+
+  const brief = await tools.find((t) => t.name === "get_drafting_brief")
+    .handler({ moment_id: 111 }, { db, url: creds.url });
+  assert.match(brief.user, /He was given:/);
+  assert.match(brief.user, /He changed it to:/);
+});

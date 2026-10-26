@@ -153,6 +153,30 @@ export const briefTools = [
       const writerShape = args.writer_handle
         ? await writerShapeBlock(db, args.writer_handle)
         : null;
+
+      /*
+       * WHAT HE HAS ALREADY SAID ABOUT DRAFTS — the one thing this brief never carried.
+       *
+       * The standing assumption was that the system has nothing positive to aim at, because it has
+       * never been shown a post he approved. That was wrong. It holds five pushback notes in his own
+       * words, three verdicts, and three before-and-after pairs — and the drafter had seen none of
+       * them. `push_back_on_draft` carries his note into the next draft of THAT moment through the
+       * job payload and nowhere else, so a preference he stated on Monday was invisible to Tuesday's
+       * post about something different.
+       *
+       * Read through an RPC rather than a grant: the notes live in system_events, where this role
+       * holds no privilege at all and should not. See migration 0054.
+       *
+       * Never allowed to fail a draft: if the read errors, the brief is built without it. A new
+       * input is not worth making the write path fragile for.
+       */
+      const taste = await (async () => {
+        try {
+          return await db.rpc("joshs_notes", { p_limit: 10 });
+        } catch {
+          return [];
+        }
+      })();
       if (Object.keys(entry).length === 0) {
         throw new Error(
           `Moment ${id} has nothing to write from: no material, nothing he typed against it, and ` +
@@ -231,6 +255,21 @@ export const briefTools = [
           unclearedNames: uncleared,
           previousAttempt,
           writerShape: writerShape?.lines ? writerShape : null,
+          /*
+           * Pre-rendered here, so prompts.ts stays a pure string module with no database shape in
+           * it. Two kinds: what he said, and what he changed — and the second is the stronger of
+           * the two, because a verdict says what was wrong while a diff says what right looked
+           * like.
+           */
+          tasteNotes: (taste ?? []).map((n) => {
+            const when = (n.said_at ?? "").slice(0, 10);
+            const said = `${when} — "${String(n.note ?? "").trim()}"`;
+            if (!n.before_text || !n.after_text || n.before_text === n.after_text) return said;
+            const first = (s) => String(s).split("\n")[0].trim();
+            if (first(n.before_text) === first(n.after_text)) return said;
+            return `${said}\n      He was given:   "${first(n.before_text)}"\n` +
+              `      He changed it to: "${first(n.after_text)}"`;
+          }),
         }),
         /*
          * Said outside the prose as well, for the same reason must_not_name is: if the writer was

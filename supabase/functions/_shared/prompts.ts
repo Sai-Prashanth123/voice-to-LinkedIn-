@@ -271,6 +271,20 @@ export const DRAFT_USER = (opts: {
     excludes: string[];
     basis: string;
   } | null;
+  /*
+   * WHAT JOSH HAS SAID ABOUT DRAFTS, and what he changed. Pre-rendered strings, newest first.
+   *
+   * This brief carried nine checks' worth of things to avoid and not one example of what he wants.
+   * `banned_phrases` is 8,936 characters of "never"; `frameworks`, which is how to build a post, is
+   * 664. You cannot subtract your way to somebody's voice — strip every tell and what is left is
+   * competent, neutral prose, which is exactly the note he keeps giving: "reads like a neutral
+   * explainer anyone could have written".
+   *
+   * He has never approved a post, so there is no corpus of him writing well. But there IS evidence
+   * of his taste, and it was going unread: his own pushback notes, his verdicts, and the lines he
+   * changed by hand. See migration 0054.
+   */
+  tasteNotes?: string[];
 }) => {
   const lines: string[] = [];
   lines.push("THE MOMENT (this is everything you are allowed to draw on):\n");
@@ -301,6 +315,27 @@ export const DRAFT_USER = (opts: {
         `reaching a different conclusion, is fine and normal. What is not fine is retelling that ` +
         `anecdote — the same incident, the same beats, the same ending. If the only post this ` +
         `moment supports is that one, say so rather than writing it.`,
+    );
+  }
+
+  if (opts.tasteNotes && opts.tasteNotes.length > 0) {
+    lines.push(
+      `\n---\n\nWHAT JOSH HAS SAID ABOUT PREVIOUS DRAFTS, in his words, newest first.\n\n` +
+        `${opts.tasteNotes.map((n) => `  - ${n}`).join("\n")}\n\n` +
+        // The framing is the load-bearing part. These are dictated, so they carry the spoken filler
+        // the voice guide is explicit about — "none of that belongs in a post". Take the
+        // instruction, not the cadence.
+        `These are notes he dictated about drafts, not examples of his writing. Take the ` +
+        `INSTRUCTION from them and ignore the delivery: the voice guide is clear that his spoken ` +
+        `filler is not his written voice.\n\n` +
+        `Where a line shows what he was given and what he changed it to, that pair is the most ` +
+        `useful thing on this page. It is the only direct evidence in the system of what he thinks ` +
+        `right looks like — he has never approved a post, so there is nothing else. A verdict says ` +
+        `what was wrong; a change says what better was.\n\n` +
+        `None of this is a rule. It does not override the library, and a note he gave once about ` +
+        `one post is not a standing instruction. If something here reads like a rule he would want ` +
+        `applied every time, say so to him rather than acting on it — only he changes the library ` +
+        `(12.10).`,
     );
   }
 
