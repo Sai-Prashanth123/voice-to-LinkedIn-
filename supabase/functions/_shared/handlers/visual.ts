@@ -128,61 +128,16 @@ export async function handleVisual(db: SupabaseClient, job: Job): Promise<void> 
     promptVersion: PROMPT_VERSION,
   }, { db });
 
-  const version = await nextVersion(db, momentId);
-  const svgPath = `${momentId}/v${version}.svg`;
-  await db.storage.from("renders").upload(svgPath, new Blob([result.svg], { type: "image/svg+xml" }), {
-    upsert: true,
-  });
-
-  let renderedPath: string | null = null;
-  let png: Uint8Array<ArrayBuffer> | null = null;
-  try {
-    await ensureWasm();
-    const resvg = new Resvg(result.svg, { fitTo: { mode: "width", value: 1200 } });
-    // Copied into a fresh Uint8Array: resvg returns one backed by ArrayBufferLike, which neither
-    // Blob nor a fetch body will accept.
-    const rendered = new Uint8Array(resvg.render().asPng());
-    png = rendered;
-    renderedPath = `${momentId}/v${version}.png`;
-    await db.storage.from("renders").upload(
-      renderedPath,
-      new Blob([rendered], { type: "image/png" }),
-      { upsert: true },
-    );
-  } catch (err) {
-    // Keep the SVG. A failed raster is recoverable; a lost generation is not.
-    await logEvent(db, "visual_render_failed", "warn", { moment_id: momentId, error: String(err) });
-  }
-
-  await db.from("visuals").insert({
-    moment_id: momentId,
-    version,
-    source_path: sourcePath,
+  const stored = await storeVisual(db, {
+    momentId,
+    svg: result.svg,
+    sourcePath,
     taking,
-    post_doing: postDoing || null,
-    svg_body: result.svg,
-    rendered_path: renderedPath,
+    postDoing,
   });
-
-  // 10.5 — attach to the calendar entry alongside the post, where one exists.
-  const { data: post } = await db
-    .from("posts")
-    .select("id")
-    .eq("moment_id", momentId)
-    .in("status", ["draft", "ready"])
-    .order("id", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (post) {
-    const { data: visual } = await db
-      .from("visuals")
-      .select("id")
-      .eq("moment_id", momentId)
-      .eq("version", version)
-      .single();
-    if (visual) await db.from("posts").update({ visual_id: visual.id }).eq("id", post.id);
-  }
+  const version = stored.version;
+  const png = stored.png;
+  /* storeVisual is below — extracted so the MCP path reaches the SAME rasteriser. */
 
   // Done, so it is no longer waiting on anything. Left set, the sweep in `worker-select` would
   // rebuild this same image every four hours forever.
@@ -214,6 +169,117 @@ export async function handleVisual(db: SupabaseClient, job: Job): Promise<void> 
    * visual brief is fetched again. The state was the awkward half of a conversation the surface now
    * has for free.
    */
+}
+
+/**
+ * Store an SVG, rasterise it, and attach it to the waiting post. ONE rasteriser, two callers.
+ *
+ * WHY THIS WAS EXTRACTED, 26 October
+ *
+ * There were two ways a visual could be created and only one of them produced something publishable.
+ * `handleVisual` above generates an SVG from a source image and runs this whole sequence.
+ * `create_visual` in the MCP server took an SVG the calling model had already written and inserted
+ * the row directly — with no `rendered_path`, and without touching `posts.visual_id`.
+ *
+ * `worker-publish` attaches an image only when `rendered_path` is set. So every visual made the
+ * second way could never reach a post, however good it was. Josh, 26 October: "Every visual so far
+ * has been built outside the system." That is the reason why — the in-system path produced rows
+ * nothing could publish.
+ *
+ * It could not be fixed on the MCP side either: `content_mcp` has insert-only rights on `visuals`
+ * (migration 0031), so it cannot set `rendered_path` after the fact. Rasterising has to happen
+ * server-side, which is what "write through cc-submit" means in CLAUDE.md.
+ *
+ * A failed raster keeps the SVG and says so. A lost generation is not recoverable; a missing PNG is.
+ */
+export async function storeVisual(
+  db: SupabaseClient,
+  opts: {
+    momentId: number;
+    svg: string;
+    sourcePath: string;
+    taking: string;
+    postDoing?: string | null;
+  },
+): Promise<{
+  visualId: number | null;
+  version: number;
+  renderedPath: string | null;
+  png: Uint8Array<ArrayBuffer> | null;
+  attachedToPost: number | null;
+  renderError: string | null;
+}> {
+  const { momentId, svg, sourcePath, taking, postDoing } = opts;
+  const version = await nextVersion(db, momentId);
+
+  const svgPath = `${momentId}/v${version}.svg`;
+  await db.storage.from("renders").upload(svgPath, new Blob([svg], { type: "image/svg+xml" }), {
+    upsert: true,
+  });
+
+  let renderedPath: string | null = null;
+  let png: Uint8Array<ArrayBuffer> | null = null;
+  let renderError: string | null = null;
+  try {
+    await ensureWasm();
+    const resvg = new Resvg(svg, { fitTo: { mode: "width", value: 1200 } });
+    // Copied into a fresh Uint8Array: resvg returns one backed by ArrayBufferLike, which neither
+    // Blob nor a fetch body will accept.
+    const rendered = new Uint8Array(resvg.render().asPng());
+    png = rendered;
+    renderedPath = `${momentId}/v${version}.png`;
+    await db.storage.from("renders").upload(
+      renderedPath,
+      new Blob([rendered], { type: "image/png" }),
+      { upsert: true },
+    );
+  } catch (err) {
+    // Keep the SVG. A failed raster is recoverable; a lost generation is not.
+    renderError = String(err);
+    await logEvent(db, "visual_render_failed", "warn", { moment_id: momentId, error: renderError });
+  }
+
+  await db.from("visuals").insert({
+    moment_id: momentId,
+    version,
+    source_path: sourcePath,
+    taking,
+    post_doing: postDoing || null,
+    svg_body: svg,
+    rendered_path: renderedPath,
+  });
+
+  const { data: visual } = await db
+    .from("visuals")
+    .select("id")
+    .eq("moment_id", momentId)
+    .eq("version", version)
+    .single();
+
+  // 10.5 — attach to the calendar entry alongside the post, where one exists.
+  const { data: post } = await db
+    .from("posts")
+    .select("id")
+    .eq("moment_id", momentId)
+    .in("status", ["draft", "ready"])
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let attachedToPost: number | null = null;
+  if (post && visual) {
+    await db.from("posts").update({ visual_id: visual.id }).eq("id", post.id);
+    attachedToPost = post.id;
+  }
+
+  return {
+    visualId: visual?.id ?? null,
+    version,
+    renderedPath,
+    png,
+    attachedToPost,
+    renderError,
+  };
 }
 
 async function nextVersion(db: SupabaseClient, momentId: number): Promise<number> {

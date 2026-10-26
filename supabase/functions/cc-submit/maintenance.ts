@@ -18,6 +18,8 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { json } from "../_shared/jobs.ts";
 import { logEvent } from "../_shared/db.ts";
+// The one rasteriser. See the note on storeVisual for why this is shared rather than copied.
+import { storeVisual } from "../_shared/handlers/visual.ts";
 // The same measurement functions the sentinel scripts use, imported rather than reimplemented: two
 // definitions of "what counts as a sentence" would make any comparison an artefact of the code.
 // Deno reads this Node module as-is, the way the mcp function reads mcp-server/.
@@ -385,5 +387,85 @@ export async function exportBank(db: SupabaseClient, _body: Body): Promise<Respo
     data: out,
     next: "Everything you have said and everything made from it. Credentials are deliberately left " +
       "out — they are ours to reissue, not yours to carry around in a file.",
+  });
+}
+
+/**
+ * Store an SVG a session wrote, rasterise it, and attach it to the waiting post.
+ *
+ * WHY THIS ROUTE EXISTS, 26 October
+ *
+ * `create_visual` used to insert into `visuals` directly. It set no `rendered_path`, because the
+ * MCP role cannot — migration 0031 grants it insert and nothing else. `worker-publish` attaches an
+ * image only when `rendered_path` is set, so every visual made that way was unpublishable from the
+ * moment it was stored, and nothing said so.
+ *
+ * Josh, 26 October: "Every visual so far has been built outside the system." This is why. The
+ * in-system path produced rows that could never reach a post.
+ *
+ * It runs the same `storeVisual` the generated path runs, so there is one rasteriser, one version
+ * sequence and one attach rule rather than two that drift. CLAUDE.md's "write through cc-submit" is
+ * exactly this case: the tool that wrote directly appeared to work and did not.
+ */
+export async function fileVisual(db: SupabaseClient, body: Body): Promise<Response> {
+  const momentId = Number(body.moment_id);
+  const svg = String(body.svg ?? "");
+  const taking = String(body.taking ?? "");
+
+  if (!Number.isFinite(momentId) || momentId <= 0) {
+    return json({ error: "moment_id is required." }, 400);
+  }
+  if (!svg.trim().startsWith("<svg")) {
+    return json({ error: "svg must be an SVG document." }, 400);
+  }
+  if (!["idea", "structure", "look"].includes(taking)) {
+    return json({ error: `taking must be idea, structure or look — got "${taking}".` }, 400);
+  }
+
+  const { data: moment } = await db
+    .from("moments")
+    .select("id,killed")
+    .eq("id", momentId)
+    .maybeSingle();
+  if (!moment) return json({ error: `No moment with id ${momentId}.` }, 404);
+  if (moment.killed) {
+    return json({ error: `Moment ${momentId} has been killed, so nothing is built for it.` }, 409);
+  }
+
+  const stored = await storeVisual(db, {
+    momentId,
+    svg,
+    sourcePath: String(body.source_path ?? "session:svg-written-in-claude"),
+    taking,
+    postDoing: body.post_doing ? String(body.post_doing) : null,
+  });
+
+  await logEvent(db, "visual_filed_from_session", "info", {
+    moment_id: momentId,
+    visual_id: stored.visualId,
+    rendered: Boolean(stored.renderedPath),
+  });
+
+  return json({
+    ok: true,
+    visual_id: stored.visualId,
+    version: stored.version,
+    rendered: Boolean(stored.renderedPath),
+    attached_to_post: stored.attachedToPost,
+    /*
+     * Say which of the two happened, because they are different facts and the difference decides
+     * whether the image can go out with the post. A row with no PNG used to be the only outcome
+     * and read as success.
+     */
+    note: stored.renderedPath
+      ? stored.attachedToPost
+        ? `Rendered to PNG and attached to post ${stored.attachedToPost}. It goes out with the ` +
+          `post when Josh approves it — his approval is still the only thing that publishes.`
+        : "Rendered to PNG. No draft or ready post is waiting on this moment yet, so nothing is " +
+          "attached — it attaches itself when one is written."
+      : `Stored as SVG, but it could not be rasterised${
+        stored.renderError ? `: ${stored.renderError}` : ""
+      }. LinkedIn needs a PNG, so this one cannot go out with a post until it renders. The SVG is ` +
+        `kept rather than discarded.`,
   });
 }

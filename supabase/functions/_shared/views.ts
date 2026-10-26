@@ -68,7 +68,27 @@ export const GATING_SECTIONS = [
 
 export const INTERVIEW_SECTIONS = ["core_rules", "pillars", "audience", "prompt_set"] as const;
 
-export const VISUAL_SECTIONS = ["core_rules", "visual_brand", "audience"] as const;
+/**
+ * `gate_rules` added 26 October — the one-line fix scripts/load-visual-brand.mjs has described since
+ * it was written and nobody made.
+ *
+ * Its note: "today a rebuilt diagram could carry a client's name straight out of the source image
+ * and every check in the system would pass." Three things compose into that. The never-name-a-client
+ * rule lives in `gate_rules`, which was not in this view. handlers/visual.ts does no name screening
+ * of its own. And the nine gate checks judge the draft BODY — `visuals` is a separate table and no
+ * check reads `svg_body`.
+ *
+ * So this is the only place that rule can reach the thing that rebuilds a diagram. It does not make
+ * the visual path gated — nothing judges an SVG — but it stops the generator working without ever
+ * having been told the rule it is most likely to break, which is strictly better than the
+ * hand-copied `naming_rule` paragraph in visual.mjs being the only mention.
+ */
+export const VISUAL_SECTIONS = [
+  "core_rules",
+  "visual_brand",
+  "audience",
+  "gate_rules",
+] as const;
 
 export const VIEWS: Record<LibraryViewName, readonly string[]> = {
   drafting: DRAFTING_SECTIONS,

@@ -34,6 +34,35 @@ import { z } from "zod";
 import { renderLibrary } from "../../supabase/functions/_shared/views.ts";
 import { VISUAL_SYSTEM } from "../../supabase/functions/_shared/prompts.ts";
 
+/**
+ * The write door. Same helper josh.mjs uses, and for the same reason: the connector's role has no
+ * UPDATE anywhere, so a tool that writes directly appears to work today and fails the day the
+ * scoped key is minted. create_visual DID write directly, and it failed differently — see the note
+ * on its handler.
+ *
+ * The key comes from the context rather than the environment: on the hosted connector there is no
+ * process env to read.
+ */
+async function post(url, contextKey, payload) {
+  const authKey = contextKey ?? process.env.CONTENT_MCP_KEY;
+  if (!authKey) throw new Error("CONTENT_MCP_KEY is not set, so nothing can be submitted.");
+
+  const res = await fetch(`${url}/functions/v1/cc-submit`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${authKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = body.error ?? JSON.stringify(body).slice(0, 300);
+    throw new Error(`${detail}${body.next ? `
+
+${body.next}` : ""}`);
+  }
+  return body;
+}
+
 export const visualTools = [
   {
     name: "get_visual_brief",
@@ -124,7 +153,7 @@ export const visualTools = [
           .describe("The stored path of the image being rebuilt, from get_visual_brief"),
       },
     },
-    async handler(args, { db }) {
+    async handler(args, { db, url, key }) {
       const id = args.moment_id;
 
       const [moment] = await db.select("moments", { select: "id,killed", id: `eq.${id}`, limit: 1 });
@@ -151,34 +180,41 @@ export const visualTools = [
         if (re.test(svg)) throw new Error(`The SVG references ${what}. It must be self-contained.`);
       }
 
-      // 10.6 — another attempt is a new row. `unique (moment_id, version)` enforces it, so the
-      // version is computed rather than accepted from the caller.
-      const prior = await db.select("visuals", {
-        select: "version",
-        moment_id: `eq.${id}`,
-        order: "version.desc",
-        limit: 1,
-      });
-      const version = (prior[0]?.version ?? 0) + 1;
-
-      const [row] = await db.insert("visuals", {
+      /*
+       * FILED THROUGH cc-submit, NOT INSERTED HERE. Changed 26 October.
+       *
+       * This used to insert the row itself. It appeared to work, and every visual it made was
+       * unpublishable: it set no `rendered_path`, and worker-publish attaches an image only when
+       * that column is set. It also never touched posts.visual_id, so nothing connected the image
+       * to the post it belonged to.
+       *
+       * It could not be fixed here. `content_mcp` has insert on `visuals` and nothing else
+       * (migration 0031), so this role cannot rasterise and cannot set the column afterwards. The
+       * server runs the same storeVisual the generated path runs — one rasteriser, one version
+       * sequence, one attach rule.
+       *
+       * Josh, 26 October: "Every visual so far has been built outside the system." This was why.
+       *
+       * The version is still computed rather than accepted from a caller (10.6, and
+       * `unique (moment_id, version)` enforces it) — it is just computed server-side now.
+       */
+      const filed = await post(url, key, {
+        kind: "visual",
         moment_id: id,
-        version,
-        source_path: args.source_path ?? "mcp:no-source-recorded",
+        svg,
         taking: args.taking,
         post_doing: args.post_doing ?? null,
-        svg_body: svg,
+        ...(args.source_path && { source_path: args.source_path }),
       });
 
       return {
-        visual_id: row.id,
+        visual_id: filed.visual_id,
         moment_id: id,
-        version,
+        version: filed.version,
         bytes: svg.length,
-        note:
-          "Stored against the moment. It is not attached to any post and nothing is scheduled — " +
-          "posts.visual_id is Josh's to set (11.3). If it needs another go, call this again and it " +
-          "becomes version " + (version + 1) + " rather than replacing this one.",
+        rendered: filed.rendered,
+        attached_to_post: filed.attached_to_post ?? null,
+        note: filed.note,
       };
     },
   },

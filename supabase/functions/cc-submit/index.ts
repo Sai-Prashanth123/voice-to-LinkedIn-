@@ -134,6 +134,14 @@ Deno.serve(async (req) => {
 
     notices_read: decisions.noticesRead,
 
+    /*
+     * An SVG a session wrote, stored and rasterised server-side. create_visual used to insert
+     * straight into `visuals` with no rendered_path, which worker-publish requires — so every
+     * in-system visual was unpublishable from the moment it was made. The MCP role cannot set
+     * rendered_path (0031 grants insert only), so the raster has to happen here.
+     */
+    visual: maintenance.fileVisual,
+
     // The three the pipeline could not do from a session at all. See maintenance.ts.
     run_worker: maintenance.runWorker,
     refresh_sentinels: maintenance.refreshSentinels,
