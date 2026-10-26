@@ -34,6 +34,7 @@
 import { z } from "zod";
 
 import { scan } from "../aitells.mjs";
+import { willRefuse } from "../prefile.mjs";
 import { renderLibrary } from "../../supabase/functions/_shared/views.ts";
 
 /**
@@ -162,8 +163,32 @@ export const scrubTools = [
         ? "re-voice"
         : "scrub";
 
+      /*
+       * WHAT create_draft WILL REFUSE, beside the action rather than buried in the findings.
+       *
+       * This tool reads the library at call time (above), so unlike measure_draft it can check the
+       * library-derived rules properly and its answer here is exact. It is the same module
+       * create_draft throws from.
+       *
+       * The distinction matters: "scrub" means fix these lines, "will_refuse" means the draft
+       * cannot be filed at all until they are gone.
+       */
+      const willNotFile = willRefuse(body, {
+        sections: library
+          ? { banned_phrases: library.banned_phrases, voice_guide: library.voice_guide }
+          : null,
+      });
+
       return {
         action,
+        will_refuse: willNotFile.length > 0
+          ? {
+            count: willNotFile.length,
+            why: willNotFile,
+            note: "create_draft refuses these and stores nothing. They are not part of the scrub — "
+              + "the draft does not exist until they are fixed.",
+          }
+          : { count: 0 },
         action_means: action === "clean"
           ? "Nothing mechanical to fix. The judgement questions below still apply — they are the half " +
             "a regex cannot answer."

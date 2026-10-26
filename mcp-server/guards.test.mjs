@@ -17,6 +17,7 @@ const readFile = async (rel) =>
 import { unknownArgumentMessage, unknownArguments, wrap } from "./server.mjs";
 import { tools } from "./tools/index.mjs";
 import { HIGH_CONFIDENCE, scan } from "./aitells.mjs";
+import { willRefuse } from "./prefile.mjs";
 
 const call = async (tool, args) => {
   const result = await wrap(tool, {})(args);
@@ -100,13 +101,41 @@ test("create_draft refuses the tells where the construction is simply wrong", ()
    */
   const src = readFileSync(new URL("./tools/write.mjs", import.meta.url), "utf8");
 
-  assert.match(src, /HIGH_CONFIDENCE/, "create_draft does not check the mechanical tells");
+  assert.match(src, /prefileVerdict/, "create_draft does not check the mechanical tells");
   assert.match(src, /scan\(args\.body\)/, "create_draft never scans the body");
   // Refuses before it posts, so nothing is stored.
   assert.ok(
-    src.indexOf("HIGH_CONFIDENCE.has") < src.indexOf("functions/v1/cc-submit"),
+    src.indexOf("prefileVerdict(") < src.indexOf("functions/v1/cc-submit"),
     "the tell check runs after the draft has already been sent",
   );
+});
+
+test("the free look predicts the refusal, rather than merely resembling it", () => {
+  /*
+   * measure_draft and scrub_draft are both free and both get skipped, because for a year neither
+   * of them could tell a caller which findings would actually stop a draft. They now report
+   * will_refuse from the same module create_draft throws from.
+   *
+   * Asserted by source for the same reason as the block above: the alternative is a database.
+   */
+  for (const [name, file] of [
+    ["measure_draft", "./tools/measure.mjs"],
+    ["scrub_draft", "./tools/scrub.mjs"],
+    ["create_draft", "./tools/write.mjs"],
+  ]) {
+    const src = readFileSync(new URL(file, import.meta.url), "utf8");
+    assert.match(
+      src,
+      /from "\.\.\/prefile\.mjs"/,
+      `${name} has its own idea of what gets refused`,
+    );
+  }
+
+  // And the one that matters: the same body gives the same answer on both sides.
+  const soup = [1, 2, 3, 4, 5].map((n) =>
+    `${n}. Method ${n}\n→ Pro: this is the reason it is worth the effort for case ${n}.`
+  ).join("\n\n");
+  assert.ok(willRefuse(soup).length > 0, "the free look does not see what create_draft refuses");
 });
 
 test("it refuses only the mechanical ones, and reports the arguable ones", () => {

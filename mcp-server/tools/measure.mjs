@@ -34,6 +34,7 @@ import { z } from "zod";
 
 import { measurePost, per1k, tokens } from "../../scripts/lib/prose.mjs";
 import { scan, HIGH_CONFIDENCE } from "../aitells.mjs";
+import { willRefuse } from "../prefile.mjs";
 import { medianWordRange } from "./voice.mjs";
 import voiceprint from "../../data/josh/law/voiceprint.json" with { type: "json" };
 import sentinels from "../../data/josh/sentinels/latest.json" with { type: "json" };
@@ -195,9 +196,39 @@ export const measureTools = [
         flags.push(`${f.rule} ${f.name} — "${f.matched}" (line ${f.line}). ${f.fix}`);
       }
 
+      /*
+       * WHAT create_draft WILL ACTUALLY REFUSE.
+       *
+       * This tool is the free look, and a free look that does not predict the refusal is worse than
+       * none: it teaches a caller that the warnings are optional, which is exactly how scrub_draft
+       * came to be read and ignored. Same module, same answer, no model call.
+       *
+       * No library is loaded here — this tool deliberately makes no database call (see the header)
+       * — so the library-derived checks come back advisory rather than blocking. The AI tells, which
+       * are the ones that actually refuse today, need no library and are exact.
+       */
+      const willNotFile = willRefuse(body);
+
       return {
         words: m.words,
         paragraphs: m.paragraphs,
+
+        /*
+         * First, because it is the only thing here that stops a draft. Everything below is a
+         * number to read and move on from; this is what create_draft will throw on.
+         */
+        will_refuse: willNotFile.length > 0
+          ? {
+            count: willNotFile.length,
+            why: willNotFile,
+            note: "create_draft will refuse this draft and store nothing. Fix these first — the "
+              + "rest of this report is measurement, not a verdict.",
+          }
+          : {
+            count: 0,
+            note: "Nothing here would stop create_draft filing it. The library-derived rules are "
+              + "checked again at filing against the live library, which this tool does not read.",
+          },
 
         rhythm: {
           sentence_words_mean: m.sentence_words_mean,

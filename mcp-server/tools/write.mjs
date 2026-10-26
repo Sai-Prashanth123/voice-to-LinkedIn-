@@ -54,6 +54,7 @@ import { hashRun, shinglesOf } from "../../supabase/functions/_shared/shingles.t
 import { CLAIMABLE_FIELDS, sourceEntry } from "../../supabase/functions/_shared/entry.ts";
 import { writingSources } from "../sources.mjs";
 import { HIGH_CONFIDENCE, scan } from "../aitells.mjs";
+import { PREFILE_CHECKS, prefileVerdict } from "../prefile.mjs";
 // 9.3 — the recorded framework, normalised on the way in and checked against his own section.
 import { isNamedFramework, namedFrameworks, tidyFramework } from "../frameworks.mjs";
 
@@ -363,15 +364,33 @@ export const writeTools = [
        * will eventually be wrong with no way back.
        */
       const tells = scan(args.body);
-      // `blocking: false` on a finding is a detector saying one of its own arms is weaker than the
-      // rest of its rule — see the note in scan(). Absent means the rule decides, so this is the
-      // same filter it has always been for every rule that does not set it.
-      const blocking = tells.findings.filter((f) => HIGH_CONFIDENCE.has(f.rule) && f.blocking !== false);
+      /*
+       * The refusal set now lives in prefile.mjs, so that measure_draft and scrub_draft can report
+       * the SAME list before a call is spent. A free look that does not predict the refusal is how
+       * scrub_draft came to be ignored.
+       *
+       * It still composes HIGH_CONFIDENCE exactly as this block did, and it still runs here, before
+       * the post to cc-submit below, so a refused draft is never stored.
+       */
+      const prefileSections = await (async () => {
+        try {
+          const rows = await db.select("library_sections", { select: "key,body" });
+          return Object.fromEntries(rows.map((r) => [r.key, r.body ?? ""]));
+        } catch {
+          // No library in hand means the library-derived checks report rather than refuse. "We
+          // could not check" and "this breaks a rule" are different answers.
+          return null;
+        }
+      })();
+      const prefile = prefileVerdict(args.body, { sections: prefileSections });
+      const blocking = prefile.blocking;
       if (blocking.length > 0) {
         throw new Error(
           `The draft uses ${blocking.length} construction(s) the library rules out, so nothing was ` +
           `stored.\n\n` +
-          blocking.map((f) => `  · line ${f.line}: "${f.matched}" — ${f.name}. ${f.fix}`).join("\n") +
+          blocking.map((f) =>
+            `  · ${f.line ? `line ${f.line}: ` : ""}"${f.matched}" — ${f.name}. ${f.fix}`
+          ).join("\n") +
           `\n\nThese are the mechanical ones: the construction is wrong rather than arguable. Fix ` +
           "them and call create_draft again.",
         );
@@ -483,6 +502,19 @@ export const writeTools = [
         borrowed_phrases: {
           checked: `${shingleRuns} seven-word run(s) of this draft, against the reference index (8.3)`,
           found: 0,
+        },
+        /*
+         * Same discipline, for the same reason. Josh wrote on 26 October that he gives the same
+         * notes every time; two of the things he was re-raising were checks that had run and found
+         * nothing to say because they could not see the marker he uses. A check that reports it ran
+         * is a check whose silence means something.
+         */
+        pre_filing_checks: {
+          ran: PREFILE_CHECKS,
+          refused_on: 0,
+          ...(prefile.advisory.length > 0 && {
+            reported_not_refused: prefile.advisory.map((f) => `${f.source}: ${f.matched}`),
+          }),
         },
         ...arguable,
       };
