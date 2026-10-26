@@ -94,3 +94,61 @@ you asked, and the one part that holds even when the estimate is a few words out
 
 Cheers,
 Naga
+
+---
+
+# SECOND EMAIL — why it kept happening
+
+Send after the first, or a day later. It answers a question he has not asked out loud and almost
+certainly has: *is this ever going to stop?*
+
+Rules for it: own the pattern, give one number, make one commitment, and do not hide behind detail.
+It must NOT claim six-for-six, and it must not read as though the volume of work is the answer —
+that is the thing that has not worked three times.
+
+---
+
+**Subject:** Re: the editorial notes — the actual reason
+
+---
+
+Josh — you've written three times now about what looked like three different problems. I went back
+through all of it properly, and they were one problem. You should know what it is.
+
+**Every failure in this system has been silent.** A check runs, finds nothing, and reports success.
+So the only thing left that could notice was you, reading the drafts. That's why you kept giving the
+same notes: you were doing the job the system was supposed to do.
+
+Four examples, all real:
+
+- The rule against repeated bullet blocks works. It looks for `-`, `*` and `•`. Your drafts use `→`,
+  so it has never once fired.
+- I told you on the 19th that it now checks whether you've already told a story. That check has been
+  returning a billing error since the 22nd, on both of your last two posts. Nothing surfaced it.
+- The structure check added on the 14th was reading 500 of 1,839 reference posts, because the
+  database quietly caps a read at 1,000 and doesn't say so.
+- And the gate told you that you'd invented "915 booking systems across 1,933 sites." You wrote that
+  sentence yourself — it's in your notes, word for word. The judge was built with your own notes left
+  out of what it could see.
+
+**Some of it was my fixes breaking things.** The ninth check I added on the 14th is why you couldn't
+approve anything for five days. A migration last week broke a guarantee I'd given you in writing. And
+one I shipped yesterday was wrong within the hour — the same mistake, inside the fix for it.
+
+**The number I should have been giving you.** On 5 October you said working means three drafts in a
+row you'd post with only light edits. Since then: 62 drafts, 4 that cleared the checks, and **none
+you've approved**. I've been reporting mechanisms fixed. You've been reading posts. Both true, and
+only one of them is the thing you asked for.
+
+**So here's what changes.** That number is the only one I report from now on, and it needs you for
+half an hour: 19 drafts are waiting, and the review now shows you what the checks caught *before* it
+reads you the post — including, on the two from yesterday, which verdicts were wrong and why. Approve,
+hold, or tell me what's wrong with each. After that I'd rather build nothing that can't be justified
+against that number.
+
+Two things I'm not going to claim are solved: making a first draft sound like only you could have
+written it, and landing the hook, are not mechanical. The checks catch them reliably — they caught
+them on every draft this week — but no rule makes attempt one land them.
+
+Cheers,
+Naga
