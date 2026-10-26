@@ -35,9 +35,19 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
 import { meetsFloor, NODE_FLOOR } from "../mcp-server/node-floor.mjs";
+import { announce } from "../mcp-server/announce.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
+
+/*
+ * THE MACHINE, FIRST — because "it works on mine" is the whole reason this file exists.
+ *
+ * Printed at the top so a pasted run answers the question with no round trip. Node version and
+ * platform are the two things that most often differ between a machine where this works and one
+ * where it does not.
+ */
+console.log(`\n  Node ${process.versions.node} on ${process.platform}/${process.arch}`);
 
 const results = [];
 const ok = (what, detail) => results.push({ pass: true, what, detail });
@@ -191,6 +201,18 @@ try {
 }
 
 /* ── Say it ───────────────────────────────────────────────────────────────── */
+
+/*
+ * Filed as well as printed.
+ *
+ * He may run this and not send the output — and the facts that matter most (which Node, which
+ * platform, which commit) are then still on the record, which is exactly what was missing when a
+ * clone could not start and nobody could tell. Never awaited, never throws, and sends nothing
+ * personal: see announce().
+ */
+// AWAITED. This script exits, and process.exit() tears down a pending request — the first version
+// did not await and filed nothing while reporting success.
+if (url && key) await announce({ url, key, transport: "doctor", tools: null });
 
 const failed = results.filter((r) => !r.pass);
 

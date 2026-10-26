@@ -142,6 +142,13 @@ Deno.serve(async (req) => {
      */
     visual: maintenance.fileVisual,
 
+    /*
+     * A client reporting which surface it is and what it is running on. Logs only, writes no row.
+     * Without it there is no way to tell a local stdio session from a hosted one, which is why a
+     * clone that could not start went unnoticed for weeks.
+     */
+    client_start: maintenance.clientStart,
+
     // The three the pipeline could not do from a session at all. See maintenance.ts.
     run_worker: maintenance.runWorker,
     refresh_sentinels: maintenance.refreshSentinels,

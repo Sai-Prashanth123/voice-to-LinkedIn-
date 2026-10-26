@@ -34,6 +34,7 @@ import { createDb } from "./db.mjs";
 import { tools, assertUniqueNames } from "./tools/index.mjs";
 import { build, guardMessages, NAME, VERSION } from "./server.mjs";
 import { annotationsFor } from "./auth.mjs";
+import { announce } from "./announce.mjs";
 import { promptsFor } from "./prompts.mjs";
 import { resourcesFor } from "./resources.mjs";
 
@@ -134,6 +135,19 @@ async function main() {
   const transport = new StdioServerTransport();
   await build(context, tools).connect(transport);
   guardMessages(transport, tools);
+
+  /*
+   * Say that a LOCAL session started, and on what.
+   *
+   * The hosted door logs every call (`mcp_http_call` in http.mjs); this one logged nothing, so
+   * there was no way to tell a clone from the connector — which is why `start_post` returning 401
+   * from a clone went unnoticed for weeks. "Never run" and "ran fine" looked identical.
+   *
+   * After connect, not before: the transport owns stdout from here and the server is already
+   * serving. Not awaited and it cannot throw — see announce().
+   */
+  announce({ url: env.url, key: env.key, transport: "stdio", tools: tools.length });
+
   return null; // stays alive on the transport
 }
 

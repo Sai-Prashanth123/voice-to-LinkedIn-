@@ -547,3 +547,44 @@ export async function fileVisual(db: SupabaseClient, body: Body): Promise<Respon
         `kept rather than discarded.`,
   });
 }
+
+/**
+ * A client saying what it is and where it is running. Logs only; writes no row.
+ *
+ * WHY THIS EXISTS, 26 October
+ *
+ * `start_post` returned HTTP 401 from a cloned repository for weeks and nobody knew, because
+ * nothing could tell the two surfaces apart. `http.mjs` logs an `mcp_http_call` for every hosted
+ * call; the local stdio server logged nothing at all. So "the clone has never been run" was not a
+ * finding anyone could make — it was an absence of evidence that looked exactly like an absence of
+ * a problem.
+ *
+ * With this, the first time Josh starts the clone we see it, and we see the one thing that most
+ * often makes a system work here and fail there: his Node version.
+ *
+ * WHAT IS DELIBERATELY NOT SENT
+ *
+ * No working directory, no username, no home path, no key or prefix of one. It is his machine, and
+ * the question is only "which surface, which runtime, which commit". A `cwd` would carry his
+ * username in it, which is more than the question needs — so it is not asked for and not accepted.
+ */
+export async function clientStart(db: SupabaseClient, body: Body): Promise<Response> {
+  const transport = String(body.transport ?? "");
+  if (!["stdio", "doctor", "http"].includes(transport)) {
+    return json({ error: `transport must be stdio, doctor or http — got "${transport}".` }, 400);
+  }
+
+  await logEvent(db, "client_start", "info", {
+    transport,
+    node: typeof body.node === "string" ? body.node.slice(0, 20) : null,
+    platform: typeof body.platform === "string" ? body.platform.slice(0, 20) : null,
+    arch: typeof body.arch === "string" ? body.arch.slice(0, 12) : null,
+    commit: typeof body.commit === "string" ? body.commit.slice(0, 12) : null,
+    // `Number(null)` is 0 and 0 is finite, so a plain isFinite check turned "not applicable" into
+    // "zero tools registered" — which reads as a fault rather than an absence. The doctor sends
+    // null on purpose; it does not build a registry.
+    tools: typeof body.tools === "number" && Number.isFinite(body.tools) ? body.tools : null,
+  });
+
+  return json({ ok: true, recorded: transport });
+}

@@ -643,3 +643,45 @@ test("an old Node is refused with a sentence, not a riddle", async () => {
     "the floor check is imported after the registry, so the .ts import fails first",
   );
 });
+
+test("the two surfaces are distinguishable, and a script that exits awaits the report", () => {
+  /*
+   * `start_post` returned 401 from a clone for weeks and nobody could tell, because the hosted door
+   * logs every call (`mcp_http_call`) and the local stdio server logged nothing at all. "Never run"
+   * and "ran fine" were the same observation. announce() closes that.
+   *
+   * AND THE TRAP IT IMMEDIATELY FELL INTO. The first version was fire-and-forget everywhere, so
+   * doctor.mjs called it and then process.exit(), which tears down the pending request. It filed
+   * nothing and reported success — the exact fault it exists to detect, inside itself. index.mjs
+   * already carries a comment about that trap for a different reason.
+   *
+   * So: a long-lived server may drop the promise, a script that exits must await it.
+   */
+  const announce = readFileSync(new URL("./announce.mjs", import.meta.url), "utf8");
+  assert.match(announce, /return fetch\(/, "announce must return the promise or no caller can wait");
+  /*
+   * Scoped to the PAYLOAD, not the file. The first version of this assertion scanned the whole
+   * module and failed on the `cwd` option passed to git — a path given TO a subprocess, not a path
+   * sent anywhere. The rule is about what leaves the machine.
+   */
+  const payload = announce.slice(announce.indexOf("const payload = {"));
+  assert.doesNotMatch(
+    payload.slice(0, payload.indexOf("};")),
+    /cwd|homedir|__dirname|process\.env\.HOME|USERPROFILE/,
+    "the payload must not carry a path — it would carry his username with it",
+  );
+
+  const doctor = readFileSync(new URL("../scripts/doctor.mjs", import.meta.url), "utf8");
+  assert.match(
+    doctor,
+    /await announce\(/,
+    "doctor.mjs exits, so an unawaited announce files nothing and still prints success",
+  );
+
+  const index = readFileSync(new URL("./index.mjs", import.meta.url), "utf8");
+  assert.match(index, /announce\(\{/, "the stdio server does not say that it started");
+  assert.ok(
+    index.indexOf("connect(transport)") < index.indexOf("announce({"),
+    "announce must come after connect — the transport owns stdout from there",
+  );
+});
