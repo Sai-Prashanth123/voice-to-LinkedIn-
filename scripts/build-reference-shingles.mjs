@@ -129,18 +129,25 @@ if (!APPLY) {
 }
 
 /*
- * Replaced wholesale, not merged. A run that is no longer anywhere in the corpus must stop being a
- * borrowing, or an index built today would keep refusing drafts on the strength of a post that was
- * removed months ago and nothing would say why.
+ * MERGED, NOT REPLACED — and this used to be the other way round.
+ *
+ * It cleared the table first, so that "a run no longer anywhere in the corpus stops being a
+ * borrowing". That reasoning needed a standing DELETE grant on service_role, which broke the
+ * guarantee Josh has in writing that no application role can delete anything. The e2e harness
+ * caught it: S0-04 and S3-04 both named this table. 0051 took the grant back.
+ *
+ * The case it was guarding against cannot happen the way it described: 0046 revoked DELETE on
+ * reference_writer_posts from every role, so a post cannot leave the corpus.
+ *
+ * What remains is narrower and is accepted. A re-scrape upserts on activity_id, so a post CAN come
+ * back worded differently, and shingles from the old wording would linger — a draft could then be
+ * refused for a run nobody holds any more. The refusal quotes the run, so a human reading it can
+ * see the draft borrows nothing. Emptying the index is a migration now, which is a deliberate act
+ * with a name on it rather than a permission a script carries every time it runs.
+ *
+ * merge-duplicates on the primary key makes this idempotent: re-running costs nothing and changes
+ * nothing.
  */
-const del = await fetch(`${url}/rest/v1/reference_shingles?hash=neq.`, {
-  method: "DELETE",
-  headers: { apikey: key, authorization: `Bearer ${key}`, Prefer: "return=minimal" },
-});
-if (!del.ok) {
-  console.error(`  could not clear the old index: ${del.status} ${await del.text()}`);
-  process.exit(1);
-}
 
 const BATCH = 5000;
 let stored = 0;
