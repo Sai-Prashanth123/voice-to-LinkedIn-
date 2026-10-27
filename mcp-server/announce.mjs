@@ -29,24 +29,10 @@
  *      would carry his username; the question does not need it, so it is not collected.
  */
 
-import { execFileSync } from "node:child_process";
-import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-
-/** The commit a clone is actually on, which is the other half of "works on my machine". */
-function commit() {
-  try {
-    return execFileSync("git", ["rev-parse", "--short", "HEAD"], {
-      cwd: dirname(dirname(fileURLToPath(import.meta.url))),
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: 2000,
-      encoding: "utf8",
-    }).trim();
-  } catch {
-    // No git, a tarball, or git not on PATH. Not knowing is fine; guessing is not.
-    return null;
-  }
-}
+// Spelled once, in build-stamp.mjs, because system_status reports the same fact to Josh and two
+// answers to "which build is this" would be worse than none. That module also knows about the
+// deploy stamp, which a clone does not have and the hosted connector cannot live without.
+import { buildCommit } from "./build-stamp.mjs";
 
 /**
  * @param transport "stdio" for the local server, "doctor" for scripts/doctor.mjs
@@ -61,7 +47,7 @@ export function announce({ url, key, transport, tools = null }) {
     node: process.versions.node,
     platform: process.platform,
     arch: process.arch,
-    commit: commit(),
+    commit: buildCommit(),
     tools,
   };
 

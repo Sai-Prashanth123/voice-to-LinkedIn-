@@ -29,6 +29,7 @@
 import { z } from "zod";
 
 import { recordBriefRead } from "../brief-read.mjs";
+import { buildStamp } from "../build-stamp.mjs";
 // The same measure that classifies a draft against what Josh published (12.2). Reused so "how
 // much changed" means one thing everywhere, rather than two similar numbers computed two ways.
 import { similarity } from "../../supabase/functions/_shared/diff.ts";
@@ -875,6 +876,16 @@ export const inspectTools = [
           })(),
           library_version: latestLibrary?.version ?? null,
           sections: sections.length,
+          /*
+           * WHICH BUILD IS ANSWERING.
+           *
+           * First thing every session reads, because "is that fix live?" was unanswerable from
+           * either side until now. On 27 October two features were deployed and inert, and nothing
+           * Josh or we could read would have said which code was running. It reports "unknown"
+           * rather than guessing: a wrong version answers the question falsely, which is worse than
+           * not answering it.
+           */
+          build: buildStamp(),
           means: "These come from Josh's database through this connector. If a session cannot " +
             "produce them, it is not connected to the content system — do not carry on from files " +
             "on disk, say so and stop.",
