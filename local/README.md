@@ -1,16 +1,39 @@
 # The local-first stack
 
-Stage 1 of running this system on Josh's machine with no Supabase project. This directory holds
-only the probe so far — the thing that answers *"can a plain Postgres hold this schema, and do the
-guarantees survive?"* — not the stack itself.
+Running this system on Josh's machine with no Supabase project.
 
 ```
 cd local && npm install
-node probe.mjs
+
+# Download PostgREST (once). Official Windows build, v16.5:
+#   https://github.com/PostgREST/postgrest/releases  ->  bin/postgrest.exe
+
+node stack.mjs     # Postgres + PostgREST + a Supabase-shaped gateway on :54321
+node probe.mjs     # throwaway cluster, asserts the schema and the guarantees
 ```
 
-It boots real Postgres, applies every migration, and asserts the guarantees. Nothing persists:
-`persistent: false`, and `pgdata/` is thrown away.
+`stack.mjs` writes `.env.local` with a `SUPABASE_URL` and a `CONTENT_MCP_KEY`. Point the MCP
+server at those two values and **nothing else changes** — that is the test it was built to pass.
+
+## Proven so far
+
+**The schema and the guarantees** (`probe.mjs`): 54 of 54 migrations on real Postgres, all five
+roles, all four of the clause-11.2 CHECK constraints, zero destructive grants, and DELETE **refused
+by execution** for `content_mcp`, `service_role`, `authenticated` and `anon`.
+
+**The client needs no changes** (`stack.mjs`): `mcp-server/db.mjs`, untouched, against the local
+stack —
+
+```
+ping:   {"reachable":true,"granted":true}
+select: library_sections, with order/limit/select projection   -> rows
+rpc:    joshs_notes with named args                            -> ok
+insert into moments:  REFUSED — Not permitted: permission denied for table moments
+```
+
+That last line is the one that mattered. The role boundary is enforced by the real PostgREST doing
+the real `set role`, not by anything reimplemented — so every `revoke` and every policy in
+`supabase/migrations/` means locally exactly what it means on Supabase.
 
 ## What it proves today
 

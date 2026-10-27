@@ -11,26 +11,15 @@
  */
 
 import EmbeddedPostgres from "embedded-postgres";
-import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const REPO = join(import.meta.dirname, "..");
-const MIGRATIONS = join(REPO, "supabase/migrations");
-const DATA = join(import.meta.dirname, "pgdata");
+// The transforms and the initdb flags live in schema.mjs, because stack.mjs needs the same ones
+// and a second copy of the extension substitutions is precisely the drift that
+// supabase/tests/managed-extensions.sed exists to stop.
+import { applySchema, INITDB_FLAGS } from "./schema.mjs";
 
-/** The same substitutions eval/e2e/pglite.mjs makes, minus the `sed` dependency. */
-function transform(sql) {
-  // Whole statements, not lines. A line filter removed the `using hnsw` line of a two-line
-  // `create index` and left the dangling half behind, which failed migration 0005 and cascaded
-  // into 24 others. Everything here runs to the semicolon.
-  return sql
-    .replace(/create\s+extension[^;]*\b(pg_cron|pg_net)\b[^;]*;/gis, "")
-    .replace(/create\s+extension[^;]*\bvector\b[^;]*;/gis, "")
-    .replace(/alter\s+extension\s+vector\s+set\s+schema[^;]*;/gis, "")
-    .replace(/create\s+index[^;]*\busing\s+hnsw\b[^;]*;/gis, "")
-    .replace(/\bextensions\.vector\s*\(\s*\d+\s*\)/gi, "extensions.vector")
-    .replace(/(?<!extensions\.)\bvector\s*\(\s*\d+\s*\)/gi, "extensions.vector");
-}
+const REPO = join(import.meta.dirname, "..");
+const DATA = join(import.meta.dirname, "pgdata-probe");
 
 const pg = new EmbeddedPostgres({
   databaseDir: DATA,
@@ -38,9 +27,7 @@ const pg = new EmbeddedPostgres({
   password: "probe",
   port: 54999,
   persistent: false,
-  // UTF8 explicitly. Without it initdb takes the Windows locale (WIN1252) and every migration
-  // whose comment banner contains a box-drawing character fails on encoding alone.
-  initdbFlags: ["--encoding=UTF8", "--locale=C"],
+  initdbFlags: INITDB_FLAGS,
 });
 
 console.log("initialising postgres ...");
@@ -51,38 +38,9 @@ console.log("started.");
 const client = pg.getPgClient();
 await client.connect();
 
-const run = async (label, sql) => {
-  try {
-    await client.query(sql);
-  } catch (err) {
-    throw new Error(`${label}: ${err.message}`);
-  }
-};
+const { applied, total, failures } = await applySchema(client, REPO);
 
-// The Supabase-managed objects the migrations reference. Same 62-line enumeration the e2e harness
-// already proved is the complete surface.
-await run("shim", transform(readFileSync(join(REPO, "supabase/tests/shim.sql"), "utf8")));
-await run(
-  "pgvector-substitute",
-  readFileSync(join(REPO, "supabase/tests/pgvector-substitute.sql"), "utf8"),
-);
-
-const files = readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort();
-let applied = 0;
-const failures = [];
-for (const name of files) {
-  try {
-    await client.query(transform(readFileSync(join(MIGRATIONS, name), "utf8")));
-    applied++;
-  } catch (err) {
-    failures.push(`${name}: ${err.message.split("\n")[0]}`);
-    // A failed statement aborts the transaction, and every later query then returns 25P02 — so
-    // without this the guarantee checks below cannot run at all.
-    await client.query("rollback").catch(() => {});
-  }
-}
-
-console.log(`\nmigrations: ${applied} of ${files.length} applied`);
+console.log(`\nmigrations: ${applied} of ${total} applied`);
 for (const f of failures) console.log(`  FAILED  ${f}`);
 
 /* ── The guarantees ───────────────────────────────────────────────────────── */
