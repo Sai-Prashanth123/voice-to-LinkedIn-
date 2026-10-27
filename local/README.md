@@ -35,6 +35,52 @@ That last line is the one that mattered. The role boundary is enforced by the re
 the real `set role`, not by anything reimplemented — so every `revoke` and every policy in
 `supabase/migrations/` means locally exactly what it means on Supabase.
 
+## A correction, and the most important thing found here
+
+The first version of the probe reported *"DELETE refused for every role"* and that was true — but
+**partly for the wrong reason, and the wrong reason looked identical to the right one.**
+
+`supabase/tests/shim.sql` creates `anon`, `authenticated` and `service_role` and grants them to
+`authenticator`. It grants them **no table privileges at all**. On a real Supabase project the
+platform grants those roles the public schema *before any migration runs*, and this repo's
+migrations are written against that: `0006_security.sql:61` REVOKES delete from them, which only
+means something if they had it.
+
+So locally the revokes were no-ops, the roles ended up with nothing, and every DELETE was refused
+because nothing had ever been granted. The guarantee appeared to hold while not being tested at
+all.
+
+Nothing noticed, because the e2e harness connects as the superuser and only ever asserts the
+refusal. The first thing to actually exercise it was `cc-submit`, which could not insert a moment
+as `service_role` — a failure that only shows up once something tries to do real work.
+
+`schema.mjs` now applies Supabase's baseline grants before the migrations, so the refusal
+afterwards is a real test. **"Refused because the revoke worked" and "refused because the grant
+never happened" are different facts, and only one of them is the guarantee.**
+
+Worth carrying back to `eval/`: the same gap is in the e2e harness, so its grant assertions are
+weaker than they read.
+
+## Stopping it
+
+`stack.mjs` stops everything on SIGINT, and **Ctrl-C in its own terminal is the only thing that
+delivers that.** Kill the node process any other way on Windows and the handler never runs:
+Postgres is orphaned, holding its port and data directory, and becomes un-killable even by
+`taskkill /F /T` once anything starts removing that directory underneath it. A reboot is then the
+only remedy.
+
+```
+node stop.mjs              # asks the postmaster to stop, which works where force does not
+node stop.mjs pgdata2      # or a named cluster
+```
+
+Everything is overridable, so a wedged cluster never blocks you:
+
+```
+LOCAL_PG_DATA=pgdata2 LOCAL_PG_PORT=54339 LOCAL_PGRST_PORT=54340 \
+LOCAL_GATEWAY_PORT=54341 LOCAL_CC_PORT=54342 node stack.mjs
+```
+
 ## What it proves today
 
 ```

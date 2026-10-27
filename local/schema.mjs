@@ -54,6 +54,44 @@ export async function applySchema(client, repoRoot) {
     readFileSync(join(repoRoot, "supabase/tests/pgvector-substitute.sql"), "utf8"),
   );
 
+  /*
+   * SUPABASE'S BASELINE GRANTS, WHICH THE MIGRATIONS ASSUME AND THE SHIM DOES NOT PROVIDE.
+   *
+   * On a Supabase project, anon/authenticated/service_role are granted the public schema before
+   * any migration runs, and default privileges hand them every table created afterwards. This
+   * repo's migrations are written against that: `0006_security.sql:61` REVOKES delete from those
+   * three roles, which only means something if they had it.
+   *
+   * Without this, the revokes are no-ops and the roles end up with nothing at all. That looks
+   * identical to the guarantee working — `probe.mjs` reported DELETE refused for every role, and
+   * it was, because they had no privileges whatsoever. The first thing to actually exercise it was
+   * cc-submit, which could not insert a moment as service_role.
+   *
+   * "Refused because the revoke worked" and "refused because the grant never happened" are
+   * different facts, and only one of them is the guarantee. So the baseline goes in first, and the
+   * refusal afterwards is a real test.
+   */
+  await run(
+    "supabase baseline grants",
+    /*
+     * And service_role BYPASSES RLS on Supabase, which is a role ATTRIBUTE rather than a grant —
+     * `0006_security.sql:5` says so in as many words, and every worker depends on it. The shim
+     * creates the role plain, so locally the grants landed and then the policies refused the
+     * insert anyway: "new row violates row-level security policy for table moments".
+     *
+     * The roles differ from Supabase's in attributes, not just privileges, and both halves have to
+     * be reproduced or the local build is a different security model wearing the same role names.
+     */
+    `alter role service_role bypassrls;
+     grant usage on schema public to anon, authenticated, service_role;
+     alter default privileges in schema public
+       grant all on tables to anon, authenticated, service_role;
+     alter default privileges in schema public
+       grant all on sequences to anon, authenticated, service_role;
+     alter default privileges in schema public
+       grant all on functions to anon, authenticated, service_role;`,
+  );
+
   const dir = join(repoRoot, "supabase/migrations");
   const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
   const failures = [];

@@ -36,19 +36,32 @@ import EmbeddedPostgres from "embedded-postgres";
 import { createHmac } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { applySchema, INITDB_FLAGS } from "./schema.mjs";
 
+const exe = process.platform === "win32" ? ".exe" : "";
 const HERE = import.meta.dirname;
 const REPO = join(HERE, "..");
 const PG_BIN = join(HERE, "node_modules/@embedded-postgres/windows-x64/native/bin");
 const POSTGREST = join(HERE, "bin/postgrest.exe");
 
-const PG_PORT = 54329;
-const PGRST_PORT = 54330;
-const GATEWAY_PORT = 54321;
+/*
+ * Overridable, because a stack that cannot be moved cannot be recovered.
+ *
+ * On Windows a killed `node stack.mjs` does not deliver SIGINT, so the shutdown handler below
+ * never runs and Postgres is orphaned — holding its port and its data directory, un-killable even
+ * with `taskkill /F /T` once the directory has been partly removed underneath it. Being able to
+ * say LOCAL_PG_DATA=pgdata-2 LOCAL_PG_PORT=54339 and carry on is the difference between a bad
+ * afternoon and a reboot.
+ *
+ * Stop it with Ctrl-C in its own terminal, which does deliver the signal.
+ */
+const PG_PORT = Number(process.env.LOCAL_PG_PORT ?? 54329);
+const PGRST_PORT = Number(process.env.LOCAL_PGRST_PORT ?? 54330);
+const GATEWAY_PORT = Number(process.env.LOCAL_GATEWAY_PORT ?? 54321);
+const PG_DATA = process.env.LOCAL_PG_DATA ?? "pgdata";
 
 /** Local only, never a credential that reaches anything real. */
 const JWT_SECRET = "local-development-only-secret-not-for-anything-real-0123456789";
@@ -86,7 +99,7 @@ process.on("SIGINT", async () => {
 /* ── Postgres ─────────────────────────────────────────────────────────────── */
 
 const pg = new EmbeddedPostgres({
-  databaseDir: join(HERE, "pgdata"),
+  databaseDir: join(HERE, PG_DATA),
   user: "postgres",
   password: PG_PASSWORD,
   port: PG_PORT,
@@ -165,6 +178,77 @@ async function waitFor(url, label, tries = 40) {
 await waitFor(`http://localhost:${PGRST_PORT}/`, "postgrest");
 console.log(`postgrest  up on ${PGRST_PORT}`);
 
+/* ── cc-submit, the write door ────────────────────────────────────────────── */
+
+/*
+ * Served by Deno, from the same source file that is deployed. Not ported, not reimplemented: it is
+ * 32 routes carrying the claim ledger, the three-strike retry, the extraction verifier that
+ * rebuilds the source FROM THE DATABASE rather than trusting the request, and `mark_ready`, which
+ * is the only thing in the system that authorises publishing. A local rewrite of that is a second
+ * standard, and two standards is how the voice_guide check passed eighteen drafts against an empty
+ * section.
+ *
+ * It needs nothing but two environment variables, because `_shared/db.ts:12-17` builds its client
+ * from SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY — and supabase-js speaks PostgREST, which is
+ * what the gateway is serving. So the deployed code and the local code are the same code.
+ */
+const CC_PORT = Number(process.env.LOCAL_CC_PORT ?? 54331);
+/*
+ * The real deno executable, not a shim.
+ *
+ * Two Windows traps, hit in order. `shell: true` concatenates argv without quoting, and this
+ * repository's path contains a space, so Deno was handed "D:/Voice" and reported a module it
+ * could not find. Dropping the shell then fails differently: Node refuses to spawn a `.cmd` or
+ * `.ps1` without one, which is `spawn EINVAL`. And what npm puts on PATH for deno IS a `.ps1`.
+ *
+ * So: find the binary.
+ */
+function findDeno() {
+  const candidates = [
+    process.env.DENO_BIN,
+    process.platform === "win32"
+      ? join(process.env.APPDATA ?? "", "npm/node_modules/deno/deno.exe")
+      : null,
+    join(process.env.USERPROFILE ?? process.env.HOME ?? "", ".deno/bin/deno" + exe),
+    process.platform === "win32" ? null : "/usr/local/bin/deno",
+  ].filter(Boolean);
+  for (const c of candidates) if (existsSync(c)) return c;
+  throw new Error(
+    "Could not find the deno executable, which serves cc-submit. Looked in: " +
+      candidates.join(", ") + ". Set DENO_BIN, or install Deno.",
+  );
+}
+
+const ccSubmit = spawn(
+  findDeno(),
+  [
+    "run",
+    "--allow-net",
+    "--allow-env",
+    "--allow-read",
+    join(REPO, "supabase/functions/cc-submit/index.ts"),
+  ],
+  {
+    cwd: REPO,
+    env: {
+      ...process.env,
+      SUPABASE_URL: `http://localhost:${GATEWAY_PORT}`,
+      SUPABASE_SERVICE_ROLE_KEY: mintKey("service_role"),
+      // Deno.serve defaults to 8000; this is the one thing the function does not take as an arg.
+      DENO_SERVE_ADDRESS: `tcp:0.0.0.0:${CC_PORT}`,
+      PORT: String(CC_PORT),
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  },
+);
+shutdown.push(() => ccSubmit.kill());
+for (const stream of [ccSubmit.stdout, ccSubmit.stderr]) {
+  stream.on("data", (d) => {
+    const line = String(d).trim();
+    if (line) console.log(`cc-submit  ${line.split("\n")[0].slice(0, 160)}`);
+  });
+}
+
 /* ── The gateway ──────────────────────────────────────────────────────────── */
 
 const gateway = createServer(async (req, res) => {
@@ -194,12 +278,36 @@ const gateway = createServer(async (req, res) => {
     return;
   }
 
+  if (url.pathname.startsWith("/functions/v1/cc-submit")) {
+    const headers = { ...req.headers };
+    delete headers.host;
+    const body = await new Promise((resolve) => {
+      const chunks = [];
+      req.on("data", (c) => chunks.push(c));
+      req.on("end", () => resolve(Buffer.concat(chunks)));
+    });
+    try {
+      const upstream = await fetch(`http://localhost:${CC_PORT}/`, {
+        method: req.method,
+        headers,
+        body: ["GET", "HEAD"].includes(req.method) ? undefined : body,
+      });
+      res.writeHead(upstream.status, Object.fromEntries(upstream.headers));
+      res.end(Buffer.from(await upstream.arrayBuffer()));
+    } catch (err) {
+      res.writeHead(502, { "content-type": "application/json" });
+      res.end(JSON.stringify({ message: `gateway could not reach cc-submit: ${err.message}` }));
+    }
+    return;
+  }
+
   if (url.pathname.startsWith("/functions/v1/")) {
     res.writeHead(501, { "content-type": "application/json" });
     res.end(JSON.stringify({
-      message: `${url.pathname} is not served locally yet`,
-      hint: "The write door is 32 Deno routes and is the next piece of the local stack. Until it "
-        + "is here, writes still go to the hosted project.",
+      message: `${url.pathname} is not served locally`,
+      hint: "Only cc-submit is served here. The workers are driven by pg_cron and pg_net on "
+        + "Supabase, neither of which exists locally — they need a supervisor, which is the next "
+        + "piece.",
     }));
     return;
   }
@@ -210,7 +318,7 @@ const gateway = createServer(async (req, res) => {
 
 await new Promise((r) => gateway.listen(GATEWAY_PORT, r));
 shutdown.push(() => new Promise((r) => gateway.close(r)));
-console.log(`gateway    up on ${GATEWAY_PORT}  (/rest/v1 -> postgrest, /functions/v1 -> 501)`);
+console.log(`gateway    up on ${GATEWAY_PORT}  (/rest/v1 -> postgrest, /functions/v1/cc-submit -> deno)`);
 
 /* ── What a client needs ──────────────────────────────────────────────────── */
 
