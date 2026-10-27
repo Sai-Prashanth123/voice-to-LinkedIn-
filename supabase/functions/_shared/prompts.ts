@@ -624,10 +624,35 @@ export const GATE_USER = (opts: {
   clearedNames?: string[];
   /** Lines from `shapeAgainst` — this post's shape, and the writers' measured range. */
   shape?: string[];
+  /**
+   * What Josh asked for on THIS post, in his words, newest first.
+   *
+   * GATE_SYSTEM tells the judge to name the collision when a post breaks a rule because he asked
+   * for it — and the judge was given no way to know that he had. It could only stay silent, which
+   * leaves the loop it exists to break, or invent an attribution, which breaks the never-invent
+   * rule and GATE_SYSTEM's own instruction to quote what it can see.
+   *
+   * So the notes are handed over. They do NOT soften the verdict: see the warning rendered with
+   * them. A rule he asked to break is still broken.
+   */
+  hisNotes?: string[];
 }) => {
   const parts: string[] = [];
   parts.push(`THE CHECK:\n\n${opts.check.question}`);
   parts.push(`\n---\n\nTHE POST:\n\n${opts.body}`);
+
+  if (opts.hisNotes?.length) {
+    parts.push(
+      `\n---\n\nWHAT JOSH ASKED FOR ON THIS POST — his words, newest first:\n\n` +
+        `${opts.hisNotes.map((n) => `  - "${n}"`).join("\n")}\n\n` +
+        `THIS IS NOT PERMISSION. It does not soften this check and it is not a reason to pass ` +
+        `anything: a rule he asked to break is still broken, and only he can change the standard. ` +
+        `It is here for one purpose — if the post fails BECAUSE he asked for the thing that fails ` +
+        `it, say so and quote the note, so he is asked about the rule instead of being handed a ` +
+        `fifth draft that walks into it again.\n\n` +
+        `If none of these explains the failure, ignore them completely and do not mention them.`,
+    );
+  }
 
   if (opts.entry) {
     parts.push(

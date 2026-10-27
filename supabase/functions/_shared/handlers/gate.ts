@@ -61,6 +61,7 @@ import { oneStepMode } from "../mode.ts";
 // reader looking for the gate rule will go first.
 export { notJudged, unjudgeableChecks };
 import { GATE_CHECKS, GATE_SYSTEM, GATE_USER, PROMPT_VERSION } from "../prompts.ts";
+import { joshNote } from "../notes.ts";
 import { GateVerdictSchema } from "../schemas.ts";
 import type { Job } from "../types.ts";
 import { retryOrPark, writingSources } from "./draft.ts";
@@ -214,6 +215,37 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
 
   let deferred: Error | null = null;
 
+  /*
+   * What Josh asked for on this post. See the same read in mcp-server/tools/brief.mjs and the
+   * note on GATE_USER's `hisNotes`: the judge is told to name a collision between his request and
+   * a library rule, and could not see his request.
+   *
+   * Never allowed to fail the gate.
+   */
+  const hisNotes = await (async () => {
+    try {
+      const { data } = await db
+        .from("jobs")
+        .select("payload")
+        .eq("type", "draft")
+        .eq("payload->>moment_id", String(draft.moment_id))
+        .order("id", { ascending: false })
+        .limit(12);
+      return [
+        ...new Set(
+          (data ?? [])
+            .flatMap((j: { payload?: { failures?: unknown } }) =>
+              Array.isArray(j?.payload?.failures) ? j.payload.failures : []
+            )
+            .map((f: unknown) => joshNote(f))
+            .filter((n): n is string => Boolean(n)),
+        ),
+      ];
+    } catch {
+      return [];
+    }
+  })();
+
   await mapWithLimit(remaining, parallel, async (check, index) => {
     if (deferred) return; // the budget is already gone; stop spending it
     if (spacingMs && index > 0) await new Promise((r) => setTimeout(r, spacingMs));
@@ -232,6 +264,11 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
             audience: gateInputsFor(check.key).audience ? moment.audience : undefined,
             clearedNames: gateInputsFor(check.key).clearedNames ? cleared : undefined,
             shape: gateInputsFor(check.key).shape ? shapeLines : undefined,
+            // The same notes the Claude path hands over, from the same place, so the two gate
+            // paths cannot reach different verdicts on the same draft for want of one input.
+            hisNotes: gateInputsFor(check.key).hisNotes && hisNotes.length > 0
+              ? hisNotes
+              : undefined,
           }),
         }],
         effort: "high",

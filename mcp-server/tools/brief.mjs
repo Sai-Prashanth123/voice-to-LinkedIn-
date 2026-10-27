@@ -39,7 +39,8 @@ import { shapedWriterRows } from "../shape-rows.mjs";
 // Module-level, not via the tool registry: voice.mjs does not import this file, so there is no
 // cycle, and tools/index.mjs warns that a registry lookup needs the tool imported last.
 import { corpusShapeBlock, writerShapeBlock } from "./voice.mjs";
-import { writerAskFrom } from "../writers.mjs";
+import { WRITER_CHOICES, writerAskFrom } from "../writers.mjs";
+import { joshNote, JOSH_NOTE_PREFIX } from "../../supabase/functions/_shared/notes.ts";
 import { WRITTEN_UP } from "../../supabase/functions/_shared/extraction.ts";
 import { parsePillars } from "../../supabase/functions/_shared/library.ts";
 import { renderTranscript } from "../../supabase/functions/_shared/session.ts";
@@ -117,11 +118,13 @@ export const briefTools = [
         "are never included and are refused mechanically at filing.",
       inputSchema: {
         moment_id: z.number().int().describe("Which moment to draft, from list_moments"),
+        // Built from REFERENCE_WRITERS rather than typed out again. The same eight were listed by
+        // hand here and in tools/voice.mjs, so adding or renaming one would have left the matcher
+        // and the description disagreeing in silence.
         writer_handle: z.string().optional().describe(
-          "One of: mattjbarker1 (Matt Barker), demandjen1 (Jen Allen-Knuth), outboundphd " +
-          "(Eric Nowoslawski), juliacarter98 (Julia Carter), ryanscarlin (Ryan Carlin), " +
-          "curtishowland (Curtis Howland), amangrowth (Aman Ghataura), adam-treboutat " +
-          "(Adam Treboutat). Only when Josh named a writer — never chosen for him.",
+          `One of: ${WRITER_CHOICES}. Only when Josh named a writer — never chosen for him. ` +
+          "If he named one in a pushback note instead, it is read from there and does not need " +
+          "passing here.",
         ),
       },
     },
@@ -219,7 +222,16 @@ export const briefTools = [
         order: "id.asc",
         limit: 1,
       });
-      const jobFailures = Array.isArray(waiting?.payload?.failures) ? waiting.payload.failures : [];
+      /*
+       * His note is taken OUT of the rejection reasons, because hisNotes below now carries it.
+       *
+       * Leaving it in both put the same sentence on the page twice, framed two opposite ways: once
+       * under "These are INSTRUCTIONS" and once under "It failed on: ... Fix those specifically".
+       * The second is the mislabelling this whole change exists to remove — his instruction filed
+       * as a verdict against the draft.
+       */
+      const jobFailures = (Array.isArray(waiting?.payload?.failures) ? waiting.payload.failures : [])
+        .filter((f) => !String(f).startsWith(JOSH_NOTE_PREFIX));
 
       /*
        * EVERYTHING HE HAS SAID ABOUT THIS POST — not just the note on the job still waiting.
@@ -254,7 +266,7 @@ export const briefTools = [
       const hisNotes = [...new Set(
         noteJobs
           .flatMap((j) => (Array.isArray(j?.payload?.failures) ? j.payload.failures : []))
-          .map((f) => String(f).match(/Josh's note on the previous version:\s*([\s\S]+)/)?.[1]?.trim())
+          .map((f) => joshNote(f))
           .filter(Boolean),
       )];
       if (waiting?.payload?.previous_body || jobFailures.length > 0) {
@@ -297,14 +309,33 @@ export const briefTools = [
        */
       const ask = args.writer_handle
         ? { handle: args.writer_handle }
-        : writerAskFrom(hisNotes.join("\n"));
+        : writerAskFrom(hisNotes);
 
-      if (ask?.handle) {
-        writerShape = await writerShapeBlock(db, ask.handle);
-        if (writerShape) writerShape.kind = "writer";
-      } else if (ask?.corpus) {
-        // He pointed at the group. A band across eight, never one of them — see corpusShapeBlock.
-        writerShape = await corpusShapeBlock(db);
+      /*
+       * ISOLATED, LIKE THE TASTE READ ABOVE AND FOR THE SAME REASON.
+       *
+       * Both of these page through ~1,800 reference posts. While the only way to reach them was an
+       * explicit `writer_handle`, a failure was the caller's problem. Now his own note can trigger
+       * them, so a slow page or a transient PostgREST error would fail the whole brief — and
+       * `next_work` returns the first unparked moment's brief without skipping one that throws, so
+       * the oldest pending rewrite would stop the entire writing queue on every call.
+       *
+       * A target is an input to a better draft, not a precondition for one. If it cannot be read,
+       * the draft is written without it and the caller is told that is what happened.
+       */
+      let shapeUnavailable = null;
+      try {
+        if (ask?.handle) {
+          writerShape = await writerShapeBlock(db, ask.handle);
+          if (writerShape) writerShape.kind = "writer";
+        } else if (ask?.corpus) {
+          // He pointed at the group. A band across eight, never one of them — see corpusShapeBlock.
+          writerShape = await corpusShapeBlock(db);
+        }
+      } catch (err) {
+        writerShape = null;
+        shapeUnavailable = `The shape he asked for could not be read (${err?.message ?? err}), so ` +
+          "this draft was briefed without it. Nothing else is affected.";
       }
 
       const library = await libraryText(db, "drafting");
@@ -383,7 +414,7 @@ export const briefTools = [
     config: {
       title: "Get the gate's checks for a draft",
       description:
-        "The nine independent checks a draft must clear, each with its own rubric, the post, and " +
+        "Every check a draft must clear, each with its own rubric, the post, and " +
         "the source material it was built from. Judge each one separately and record it with " +
         "record_gate_verdict — one call per check. Do not average across them and do not stop at " +
         "the first failure: Josh should see everything wrong with a draft at once. Checks already " +
@@ -439,6 +470,38 @@ export const briefTools = [
       const writerRows = await shapedWriterRows(db);
       const targets = writerShapeTargets(writerRows);
       const shapeLines = shapeAgainst(measureShape(draft.body), targets);
+
+      /*
+       * WHAT HE ASKED FOR ON THIS POST, FOR THE CHECKS A REQUEST OF HIS CAN TRIP.
+       *
+       * GATE_SYSTEM tells the judge to name the collision when a post breaks a rule because Josh
+       * asked for it — and until now the judge had no way to know he had. It could only fail the
+       * draft with an ordinary verdict, which is what happened four times on moment 113, or invent
+       * an attribution, which breaks the rule above it about quoting only what it can see.
+       *
+       * Same source as the drafting brief: his note lives in the draft job's payload and nowhere
+       * else. Never allowed to fail the gate — a judge with no notes is the judge we had
+       * yesterday, which is worse than this one but not broken.
+       */
+      const hisNotes = await (async () => {
+        try {
+          const rows = await db.select("jobs", {
+            select: "payload",
+            type: "eq.draft",
+            "payload->>moment_id": `eq.${draft.moment_id}`,
+            order: "id.desc",
+            limit: 12,
+          });
+          return [...new Set(
+            rows
+              .flatMap((j) => (Array.isArray(j?.payload?.failures) ? j.payload.failures : []))
+              .map((f) => joshNote(f))
+              .filter(Boolean),
+          )];
+        } catch {
+          return [];
+        }
+      })();
 
       // The same rule the edge function applies, from the same function.
       //
@@ -499,6 +562,7 @@ export const briefTools = [
               audience: sees.audience ? (moment?.audience ?? null) : undefined,
               clearedNames: sees.clearedNames ? cleared : undefined,
               shape: sees.shape ? shapeLines : undefined,
+              hisNotes: sees.hisNotes && hisNotes.length > 0 ? hisNotes : undefined,
             }),
           };
         }),

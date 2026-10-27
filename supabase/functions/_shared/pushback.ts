@@ -19,6 +19,8 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { enqueue } from "./jobs.ts";
 import { logEvent } from "./db.ts";
+// The marker is spelled once, in a module both runtimes can read. See the note there.
+import { JOSH_NOTE_PREFIX } from "./notes.ts";
 
 export async function pushBack(
   db: SupabaseClient,
@@ -52,7 +54,7 @@ export async function pushBack(
     // to clear its own gate; Josh asking for something different is not one of its three failures.
     attempt: 1,
     previous_body: draft?.body ?? "",
-    failures: [`Josh's note on the previous version: ${note.trim()}`],
+    failures: [`${JOSH_NOTE_PREFIX}${note.trim()}`],
     near_miss: (sourceJob?.payload as Record<string, unknown> | undefined)?.near_miss ?? null,
   });
 

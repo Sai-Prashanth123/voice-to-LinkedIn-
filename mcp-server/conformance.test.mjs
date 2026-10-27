@@ -151,6 +151,9 @@ test("no message tells Josh the gate has a number of checks it no longer has", (
         "eight checks",
         "nine checks",
         "ten checks",
+        "eight independent",
+        "nine independent",
+        "ten independent",
       ]
     ) {
       assert.ok(

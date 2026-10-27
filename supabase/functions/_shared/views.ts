@@ -259,18 +259,40 @@ export const CHECK_SEES_CLEARED_NAMES = new Set(["names_cleared"]);
  */
 export const CHECK_SEES_SHAPE = new Set(["shape"]);
 
+/**
+ * Which checks are shown what Josh asked for on this post.
+ *
+ * Only the checks a REQUEST OF HIS can actually trip. He dictates things like "open with I
+ * analysed 21,278 US sales teams" and "invite input from the readers at the end"; those collide
+ * with the banned-phrases list and the hook rule, and nowhere else. A collision is impossible for
+ * names_cleared, identifiable or claims_trace — nothing he can ask for makes an invented quote
+ * acceptable — so handing them his notes would be input they cannot use.
+ *
+ * Deliberately narrow, because the last time inputs were handed out generously five of the checks
+ * ended up reading his private notes and failing drafts for things that were not in them. That is
+ * the mistake this whole filter exists to prevent, and it applies to this field too.
+ */
+export const CHECK_SEES_HIS_NOTES = new Set([
+  "banned_phrases",
+  "hook_opens_loop",
+  "voice_guide",
+  "shape",
+]);
+
 /** What one check may be shown. Both gate paths ask this, and neither decides for itself. */
 export function gateInputsFor(key: string): {
   source: boolean;
   audience: boolean;
   clearedNames: boolean;
   shape: boolean;
+  hisNotes: boolean;
 } {
   return {
     source: CHECK_SEES_SOURCE.has(key),
     audience: CHECK_SEES_AUDIENCE.has(key),
     clearedNames: CHECK_SEES_CLEARED_NAMES.has(key),
     shape: CHECK_SEES_SHAPE.has(key),
+    hisNotes: CHECK_SEES_HIS_NOTES.has(key),
   };
 }
 

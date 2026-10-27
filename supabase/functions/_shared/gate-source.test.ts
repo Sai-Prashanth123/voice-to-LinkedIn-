@@ -163,7 +163,27 @@ test("a check added later is shown the post alone until someone says otherwise",
     clearedNames: false,
     // shape joined the list on 14 Oct and defaults the same way: a new check sees the post alone.
     shape: false,
+    /*
+     * hisNotes joined on 27 Oct. Four checks are shown what Josh asked for on this post, so the
+     * judge can say "this fails BECAUSE he asked for it" instead of failing silently and sending
+     * the writer back into the same wall. A new check is not one of them until someone decides it
+     * is — the last time inputs were handed out generously, five checks ended up reading his
+     * private notes and failing drafts for things that were not in them.
+     */
+    hisNotes: false,
   });
+});
+
+test("only the checks a request of his can trip are shown what he asked for", () => {
+  // A collision is possible where a rule meets a preference: he dictates an opening the banned
+  // list forbids, or a close the hook rule does not want. It is not possible for the checks that
+  // judge truth — nothing he can ask for makes an invented quote or an uncleared name acceptable.
+  for (const key of ["banned_phrases", "hook_opens_loop", "voice_guide", "shape"]) {
+    assert.equal(gateInputsFor(key).hisNotes, true, `${key} cannot see what he asked for`);
+  }
+  for (const key of ["claims_trace", "names_cleared", "identifiable", "anyone_else"]) {
+    assert.equal(gateInputsFor(key).hisNotes, false, `${key} is being shown his notes`);
+  }
 });
 
 test("both gate paths ask the same question about what a check may see", async () => {

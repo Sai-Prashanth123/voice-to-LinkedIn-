@@ -22,9 +22,16 @@ import type { Job } from "../types.ts";
 
 let wasmReady: Promise<void> | null = null;
 function ensureWasm(): Promise<void> {
+  // Same hang as the fonts below, and it predates them: a cached promise over a timeout-less
+  // fetch. Uncached on failure for the same reason.
   wasmReady ??= initWasm(
-    fetch("https://unpkg.com/@resvg/resvg-wasm@2.6.2/index_bg.wasm"),
-  );
+    fetch("https://unpkg.com/@resvg/resvg-wasm@2.6.2/index_bg.wasm", {
+      signal: AbortSignal.timeout(15_000),
+    }),
+  ).catch((err) => {
+    wasmReady = null;
+    throw err;
+  });
   return wasmReady;
 }
 
@@ -50,10 +57,22 @@ const FONT_URLS = [
 ];
 const FONT_FAMILY = "DejaVu Sans";
 
+/*
+ * Deno's fetch has no default timeout, and this promise is cached. Without the signal a request
+ * that is accepted and never answered — a stalled CDN, a proxy that swallows it — would leave the
+ * cached promise unsettled for the life of the instance. Every later storeVisual would then hang
+ * on it, including the text-free diagrams this code is careful not to refuse, and it would hang
+ * BEFORE the visuals insert, losing a generation that cannot be recreated.
+ *
+ * A timeout turns that into a rejection, which the catch below un-caches and which the caller
+ * handles: the SVG is still stored, and only an image with words in it is refused.
+ */
+const FONT_FETCH_MS = 8000;
+
 let fontsReady: Promise<Uint8Array[]> | null = null;
 function ensureFonts(): Promise<Uint8Array[]> {
   fontsReady ??= Promise.all(FONT_URLS.map(async (url) => {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(FONT_FETCH_MS) });
     if (!res.ok) throw new Error(`font ${url} returned ${res.status}`);
     return new Uint8Array(await res.arrayBuffer());
   })).catch((err) => {

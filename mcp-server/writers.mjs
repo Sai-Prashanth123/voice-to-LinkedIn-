@@ -52,38 +52,141 @@ export const WRITER_CHOICES = REFERENCE_WRITERS
  * The names he uses for the group rather than for a person. "Sentinel accounts" is his own term and
  * the one he has used both times.
  */
-const CORPUS_ASK =
-  /\bsentinel(?:s| accounts?)?\b|\breference writers?\b|\bthe eight\b|\bother writers\b|\bothers who have\b/i;
-
-/**
- * What a note is asking for, if anything.
+/*
+ * His own term for the group, and only that.
  *
- * @param note one of his pushback notes, as he dictated it
- * @returns `{ handle }` when he named one writer, `{ corpus: true }` when he pointed at the group,
- *          or `null` when the note is not about the reference writers at all. A named writer wins
- *          over a group reference: it is the more specific instruction.
+ * This matched "the eight", "other writers" and "others who have" until the first review of it.
+ * All three are ordinary English: "the eight reasons are too many" and "others who have run SDR
+ * teams will disagree" are notes he could plausibly write about any post, and either would have
+ * restructured every later draft toward a reference-writer band he never asked for — while telling
+ * him, in the brief, that he had asked for it.
+ *
+ * "Sentinel accounts" is what he actually says, both times he has said it. The 26 October note
+ * contains it, so "others who have" was never needed to catch the real case.
  */
-export function writerAskFrom(note) {
-  const text = String(note ?? "");
-  if (!text.trim()) return null;
+const CORPUS_PHRASES = [
+  "sentinel",
+  "sentinels",
+  "sentinel account",
+  "sentinel accounts",
+  "reference writer",
+  "reference writers",
+];
 
-  /*
-   * Matched on whole words rather than with a built regex. He dictates these notes, so they arrive
-   * lower-cased, unpunctuated and run together; and a handle like `adam-treboutat` is three regex
-   * metacharacters away from matching nothing. Tokenising once is both safer and easier to read.
-   */
-  const spaced = ` ${words(text).join(" ")} `;
-  const says = (phrase) => spaced.includes(` ${words(phrase).join(" ")} `);
+/*
+ * A MENTION IS NOT A REQUEST.
+ *
+ * "This reads like Matt Barker, stop" names Matt Barker. So does "build it the way Barker would".
+ * Taking the first for the second is the worst available failure here: the library says his is the
+ * cadence most likely to leak and that a draft agreeing with him proves nothing about Josh's voice
+ * (8.3), so a complaint about sounding like him would have produced more of him.
+ *
+ * Judged per sentence, because one note can hold both — "I liked the Sentinel idea but this reads
+ * too much like Barker" should resolve to the group, not to Barker.
+ */
+const NEGATIVE =
+  /\b(?:too much like|too close to|stop|stops|don'?t|do not|doesn'?t|does not|didn'?t|not|avoid|avoiding|less|nothing like|no more|reads? like|sounds? like|sounding like|feels? like|copying|copied|ripped off|shouldn'?t)\b/i;
 
-  for (const w of REFERENCE_WRITERS) {
-    // The handle, the full name, or the surname alone — "look at how Barker opens".
-    if (says(w.handle) || says(w.name) || says(w.surname)) return { handle: w.handle };
-  }
+/*
+ * HOW CLOSE THE NEGATION HAS TO BE.
+ *
+ * Scoped to a window around the mention rather than to its sentence, because his notes are
+ * dictated and barely punctuated. The 26 October note runs for 400 characters with one full stop
+ * in it: "I don't know what you suggest with the hook ... and go look at the Sentinel accounts".
+ * A sentence-scoped check read the "don't" and threw away the ask — which is the same fault as
+ * before, just failing in the safe direction.
+ *
+ * Six words back catches "too much like Barker" and "this reads like Matt Barker"; two forward
+ * catches a trailing "stop" or "shouldn't".
+ */
+const LOOK_BACK = 6;
+const LOOK_FORWARD = 2;
 
-  return CORPUS_ASK.test(text) ? { corpus: true } : null;
+/** Lower-cased tokens, apostrophes kept so "don't" survives for the negation test. */
+function tokens(s) {
+  return String(s).toLowerCase().match(/[a-z0-9']+/g) ?? [];
 }
 
-/** Lower-cased word tokens. Hyphens split, so `adam-treboutat` matches "Adam Treboutat" too. */
+/** A token reduced for name matching: possessives and apostrophes dropped. */
+function key(t) {
+  return t.replace(/'s$/, "").replace(/'/g, "");
+}
+
+/** Lower-cased words with no apostrophes — the form writer names are matched in. */
 function words(s) {
-  return (String(s).toLowerCase().match(/[a-z0-9]+/g) ?? []);
+  return tokens(s).map(key).filter(Boolean);
+}
+
+/**
+ * Where `phrase` occurs in `toks`, as token indices. Empty when it does not.
+ *
+ * Hyphens split, so `adam-treboutat` matches "Adam Treboutat" and vice versa.
+ */
+function occurrences(toks, phrase) {
+  const want = words(phrase);
+  if (want.length === 0) return [];
+  const at = [];
+  for (let i = 0; i + want.length <= toks.length; i++) {
+    if (want.every((w, j) => key(toks[i + j]) === w)) at.push(i);
+  }
+  return at;
+}
+
+/** True when this particular mention sits inside a complaint rather than a request. */
+function negated(toks, at, length) {
+  const window = toks
+    .slice(Math.max(0, at - LOOK_BACK), at)
+    .concat(toks.slice(at + length, at + length + LOOK_FORWARD))
+    .join(" ");
+  return NEGATIVE.test(window);
+}
+
+/** Any mention of `phrase` that is not inside a complaint. */
+function askedFor(toks, phrase) {
+  const len = words(phrase).length;
+  return occurrences(toks, phrase).some((at) => !negated(toks, at, len));
+}
+
+export function writerAskFrom(notes) {
+  /*
+   * NEWEST FIRST, AND THE NEWEST ONE THAT ASKS FOR ANYTHING WINS.
+   *
+   * This took a single string of every recent note joined together, so the answer depended on the
+   * order of REFERENCE_WRITERS rather than on when he said it: Matt Barker is first in that list,
+   * so a note about him from three drafts ago beat one about Julia Carter from a minute ago. An
+   * instruction he has replaced is not an instruction.
+   *
+   * Accepts a string for a single note, so callers that have only one do not have to wrap it.
+   */
+  const list = (Array.isArray(notes) ? notes : [notes])
+    .map((n) => String(n ?? ""))
+    .filter((n) => n.trim());
+  if (list.length === 0) return null;
+
+  for (const note of list) {
+    const ask = askFromOne(note);
+    if (ask) return ask;
+  }
+  return null;
+}
+
+function askFromOne(text) {
+  const toks = tokens(text);
+
+  /*
+   * A named writer beats a group reference: it is the narrower instruction. Both passes ignore a
+   * mention that sits inside a complaint, so "I liked the Sentinel idea but this reads too much
+   * like Barker" resolves to the group rather than to Barker.
+   */
+  for (const w of REFERENCE_WRITERS) {
+    // The handle, the full name, or the surname alone — "look at how Barker opens".
+    if (askedFor(toks, w.handle) || askedFor(toks, w.name) || askedFor(toks, w.surname)) {
+      return { handle: w.handle };
+    }
+  }
+
+  for (const phrase of CORPUS_PHRASES) {
+    if (askedFor(toks, phrase)) return { corpus: true };
+  }
+  return null;
 }

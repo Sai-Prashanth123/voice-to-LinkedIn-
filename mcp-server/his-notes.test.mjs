@@ -85,6 +85,69 @@ test("a writer he names by surname, handle or full name resolves to that writer"
   }
 });
 
+test("a complaint about a writer is not a request for that writer", () => {
+  /*
+   * The worst available failure in this file, and the one a review caught before it shipped.
+   *
+   * "This reads like Matt Barker, stop" names Matt Barker, and the first version of writerAskFrom
+   * took any mention as an ask. So a complaint that a draft sounded too much like him would have
+   * answered by building the next draft in his shape — on every redraft of that moment, for up to
+   * twelve notes. The library says his cadence is the likeliest to leak and that agreeing with him
+   * proves nothing about Josh's voice (8.3), so this was not a neutral mistake.
+   */
+  for (const note of [
+    "this reads like Matt Barker, stop",
+    "too much like Barker",
+    "don't copy Barker's turn",
+    "it sounds like Matt Barker and it shouldn't",
+    "less Carter",
+    "avoid the Nowoslawski thing",
+  ]) {
+    assert.equal(writerAskFrom(note), null, `a complaint was read as a request: "${note}"`);
+  }
+});
+
+test("ordinary English about eights and others is not a Sentinel ask", () => {
+  /*
+   * CORPUS_ASK matched "the eight", "other writers" and "others who have". His posts are often
+   * numbered lists, so "the eight reasons are too many" is a note he could plausibly write about
+   * any post — and it would have restructured every later draft toward a reference-writer band
+   * while telling him, in the brief, that he had asked for it.
+   */
+  for (const note of [
+    "the eight reasons are too many, keep the top three",
+    "others who have run SDR teams will disagree",
+    "other writers would hate this",
+    "eight is too many bullets",
+  ]) {
+    assert.equal(writerAskFrom(note), null, `an ordinary phrase was read as an ask: "${note}"`);
+  }
+});
+
+test("the newest note wins, not the order of the writer list", () => {
+  /*
+   * The notes used to be joined into one string, so the answer came from the order of
+   * REFERENCE_WRITERS — Matt Barker is first — rather than from when he said it. An instruction he
+   * has since replaced is not an instruction.
+   */
+  assert.deepEqual(
+    writerAskFrom(["build it the way Carter opens", "earlier: go look at Barker"]),
+    { handle: "juliacarter98" },
+  );
+  assert.deepEqual(
+    writerAskFrom(["go look at the Sentinel accounts", "do it like Barker"]),
+    { corpus: true },
+  );
+});
+
+test("a note that complains about one writer can still ask for the group", () => {
+  // Judged per sentence, so one note holding both resolves to the thing he actually asked for.
+  assert.deepEqual(
+    writerAskFrom("I liked the Sentinel accounts idea. But this reads too much like Barker."),
+    { corpus: true },
+  );
+});
+
 test("a named writer beats a group reference in the same note", () => {
   // The more specific instruction wins. Otherwise "look at the Sentinels, especially Barker"
   // silently loses the only part of it that narrows anything.
