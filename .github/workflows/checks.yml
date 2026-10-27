@@ -117,9 +117,15 @@ jobs:
         # the header: a skip reports green while checking nothing, and a named exclusion is visible
         # in the diff. A new test file is included by default, so one that needs the database fails
         # here loudly instead of quietly not running.
+        #
+        # It did exactly that on 26 October, and nobody looked. writer-shape.test.mjs landed
+        # reading the live project, was not added here, and CI went red on that commit and
+        # stayed red for every commit after it — six in a row, on a PUBLIC repository, while we
+        # were telling Josh the system worked. The mechanism was right and the signal went
+        # unread, which is this project's whole defect class wearing a different hat.
         working-directory: mcp-server
         run: |
-          files=$(ls *.test.mjs | grep -vE '^(capabilities|index|tools)\.test\.mjs$')
+          files=$(ls *.test.mjs | grep -vE '^(capabilities|index|tools|writer-shape|his-notes)\.test\.mjs$')
           echo "running: $files"
           node --test $files
 
