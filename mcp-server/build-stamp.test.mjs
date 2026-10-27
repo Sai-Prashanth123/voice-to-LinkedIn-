@@ -29,7 +29,7 @@ test("it reports a build, or says plainly that it cannot", () => {
   }
 });
 
-test("the stamp wins over git, because the connector has no git at all", () => {
+test("the stamp is a static import, or it never reaches the connector", () => {
   /*
    * The hosted connector is a bundle of files in an edge runtime. `git rev-parse` there returns
    * nothing, so the commit has to be written in before the deploy or it is unknowable. A clone
@@ -39,6 +39,26 @@ test("the stamp wins over git, because the connector has no git at all", () => {
   assert.ok(
     src.indexOf("stamped() ??") < src.indexOf("fromGit() ??"),
     "git would win over the deploy stamp, so a stale clone could misreport the connector",
+  );
+
+  /*
+   * This began as a JSON file read with readFileSync, and the connector reported "unknown" on the
+   * first deploy after it shipped: an edge bundle carries the import graph and nothing else, so a
+   * file nobody imports never arrives. A static import is the only form that travels.
+   */
+  assert.ok(
+    src.includes('import { BUILD } from "./build-info.mjs"'),
+    "the stamp is not a static import, so an edge bundle will not carry it",
+  );
+  // Comments dropped first: this file explains the readFileSync it no longer does, and that
+  // explanation is the most useful thing in it.
+  const code = src
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
+    .join(" ");
+  assert.ok(
+    !code.includes("readFileSync"),
+    "the stamp is read from disk again, which is exactly what did not ship",
   );
 });
 

@@ -21,22 +21,20 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO = dirname(HERE);
+// A STATIC import, which is the whole point. This began as a JSON file read with readFileSync and
+// the connector reported "unknown" on its first deploy: an edge bundle carries the import graph
+// and nothing else, so a file nobody imports never arrives. See build-info.mjs.
+import { BUILD } from "./build-info.mjs";
 
-/** What the deploy wrote in. Absent in a plain clone, which is expected and not an error. */
+const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
+
+/** What the deploy wrote in. Null in the repository on purpose, which is not an error. */
 function stamped() {
-  try {
-    const raw = JSON.parse(readFileSync(`${HERE}/build.json`, "utf8"));
-    if (!raw?.commit) return null;
-    return { commit: String(raw.commit), built_at: raw.built_at ?? null, source: "stamp" };
-  } catch {
-    return null;
-  }
+  if (!BUILD?.commit) return null;
+  return { commit: String(BUILD.commit), built_at: BUILD.built_at ?? null, source: "stamp" };
 }
 
 /** What a clone is actually on. Null without git, a tarball, or git off PATH. */

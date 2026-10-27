@@ -124,17 +124,17 @@ data/josh/             the law set and the measured voiceprint
 docs/                  runbook, handover, the cost model, and his own material in from-josh/
 ```
 
-**Before deploying: `node scripts/stamp-build.mjs`.** The edge runtime has no git, so unless the
+**Deploy with `node scripts/deploy.mjs`, never `supabase functions deploy` by hand.** The edge runtime has no git, so unless the
 commit is written in first the connector cannot say which code is answering — and `system_status`
-reports `build.source: "unknown"` rather than guessing. On 27 October two features were deployed,
+reports `build.source: "unknown"` rather than guessing. That script stamps, deploys and restores
+in one step. On 27 October two features were deployed,
 live and completely inert, and nothing Josh or we could read would have said so. That is what this
 closes.
 
 **A change reaches Josh only when BOTH are done: the push AND the deploy.** He has never used a
 clone — every session he has ever run went through the hosted connector (`mcp_http_call`), which
 serves `mcp-server/` through `supabase/functions/mcp/index.ts`. So `git push` on its own changes
-nothing for him. `npx supabase functions deploy cc-submit mcp worker-dispatch` is the half that
-does.
+nothing for him. The deploy is the half that does.
 
 Before committing: `npx deno test --allow-all supabase/functions/_shared/` and
 `cd mcp-server && node --test`. Both must be green.

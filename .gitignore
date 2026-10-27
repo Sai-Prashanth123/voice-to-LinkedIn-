@@ -84,6 +84,3 @@ docs/to-josh/SEND-THIS.md
 # as the 21 October clear-out above.
 docs/retrospective-2026-10-26.md
 
-# Written by scripts/stamp-build.mjs before a deploy. Never committed: a stamp in git is wrong
-# the moment the next commit lands, and a confidently wrong version is worse than an honest one.
-mcp-server/build.json
