@@ -224,13 +224,31 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
    */
   const hisNotes = await (async () => {
     try {
-      const { data } = await db
+      const { data, error } = await db
         .from("jobs")
         .select("payload")
         .eq("type", "draft")
         .eq("payload->>moment_id", String(draft.moment_id))
         .order("id", { ascending: false })
         .limit(12);
+      /*
+       * supabase-js RESOLVES on a PostgREST error rather than throwing, so the catch below only
+       * ever saw network faults. A permissions or filter error came back as `data: null`, became
+       * an empty list, and the judge ran with no notes and nothing said so — a step reporting
+       * success with no second half, which is the shape this file exists to stop.
+       *
+       * Still never fails the gate. It is now merely visible when it degrades.
+       */
+      if (error) {
+        await logEvent(db, "gate_notes_unavailable", "warn", {
+          moment_id: draft.moment_id,
+          draft_id: draft.id,
+          error: error.message,
+          means: "The checks ran without what Josh asked for on this post, so a verdict that is " +
+            "really a collision with one of his requests will read as an ordinary rejection.",
+        });
+        return [];
+      }
       return [
         ...new Set(
           (data ?? [])

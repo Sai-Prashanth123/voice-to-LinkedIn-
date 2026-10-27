@@ -399,10 +399,24 @@ export const DRAFT_USER = (opts: {
   }
 
   if (opts.previousAttempt) {
+    /*
+     * "Rejected" only when something actually rejected it.
+     *
+     * The usual way a draft comes back round is Josh asking for a change to one that PASSED the
+     * gate. Telling the writer it was rejected, and listing no reason, is both false and useless —
+     * and his own words for what he wanted are in the block above, where they belong.
+     */
+    const failures = opts.previousAttempt.failures ?? [];
     lines.push(
-      `\n---\n\nYour previous attempt was rejected. Here it is:\n\n${opts.previousAttempt.body}\n\n` +
-        `It failed on:\n${opts.previousAttempt.failures.map((f) => `  - ${f}`).join("\n")}\n\n` +
-        `Fix those specifically. Do not start from scratch if the moment and angle were sound.`,
+      failures.length > 0
+        ? `\n---\n\nYour previous attempt was rejected. Here it is:\n\n` +
+          `${opts.previousAttempt.body}\n\n` +
+          `It failed on:\n${failures.map((f) => `  - ${f}`).join("\n")}\n\n` +
+          `Fix those specifically. Do not start from scratch if the moment and angle were sound.`
+        : `\n---\n\nHere is the version this one replaces. Nothing rejected it — what to change is ` +
+          `above, in his words:\n\n${opts.previousAttempt.body}\n\n` +
+          `Change what he asked for and leave the rest. Do not start from scratch if the moment ` +
+          `and angle were sound.`,
     );
   }
 

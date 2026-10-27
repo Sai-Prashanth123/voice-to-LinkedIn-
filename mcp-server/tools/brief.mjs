@@ -270,9 +270,26 @@ export const briefTools = [
           .filter(Boolean),
       )];
       if (waiting?.payload?.previous_body || jobFailures.length > 0) {
+        /*
+         * NO INVENTED VERDICT WHEN THERE WAS NO REJECTION.
+         *
+         * A pushback job's `failures` holds only his note, so once the note is filtered out above
+         * this list is empty — and the fallback here used to substitute `gate_reason ?? "rejected"`.
+         * `gate_reason` is null on a draft that PASSED, which is the normal review path: he reads a
+         * draft that cleared the gate and asks for a change. The brief then told the writer
+         *
+         *     Your previous attempt was rejected. It failed on:
+         *       - rejected
+         *
+         * about a draft the gate approved, in place of the words he actually used. A verdict
+         * nobody reached is the same class of invention as a quote nobody said.
+         */
+        const realFailures = jobFailures.length > 0
+          ? jobFailures
+          : (previous?.gate_passed === false ? [previous.gate_reason ?? "rejected"] : []);
         previousAttempt = {
           body: waiting.payload.previous_body ?? previous?.body ?? "",
-          failures: jobFailures.length > 0 ? jobFailures : [previous?.gate_reason ?? "rejected"],
+          failures: realFailures,
         };
       }
 
@@ -346,6 +363,10 @@ export const briefTools = [
         prompt_version: PROMPT_VERSION,
         library_version: library.version,
         library_sections_awaiting_josh: library.awaiting_josh,
+        // Said out loud, because the comment where this is set promises the caller is told. It was
+        // assigned and read by nothing — a value nothing selects, which is the exact defect this
+        // repo is named for, introduced inside the fix for another instance of it.
+        ...(shapeUnavailable && { writer_shape_unavailable: shapeUnavailable }),
         system: DRAFTER_SYSTEM(library.text),
         user: DRAFT_USER({
           entry,

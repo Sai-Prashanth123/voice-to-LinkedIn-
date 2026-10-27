@@ -107,6 +107,42 @@ test("a complaint about a writer is not a request for that writer", () => {
   }
 });
 
+test("the natural ways of ASKING for a writer are not read as complaints", () => {
+  /*
+   * The other half of the negation rule, and the half the first version got wrong.
+   *
+   * "reads like", "sounds like", "feels like" and "copying" carry no polarity — they are as much
+   * a request as a complaint — and listing them as negative threw away the commonest phrasings.
+   * The result was no shape at all, so the drafter fell back to the default framework: the exact
+   * 26 October complaint, reintroduced by the fix for its opposite.
+   */
+  for (const [note, expected] of [
+    ["make it sound like Barker", { handle: "mattjbarker1" }],
+    ["make it read like Matt Barker", { handle: "mattjbarker1" }],
+    ["I want this to feel like Julia Carter", { handle: "juliacarter98" }],
+    ["copying Barker's structure is what I want", { handle: "mattjbarker1" }],
+    ["make it sound like the Sentinel accounts", { corpus: true }],
+  ]) {
+    assert.deepEqual(writerAskFrom(note), expected, `a request was read as a complaint: "${note}"`);
+  }
+});
+
+test("a negation belonging to the next clause does not cancel the ask", () => {
+  /*
+   * The forward window tested the whole negator set, and the words that follow a request are
+   * usually the start of the next instruction. "Do it like Barker but don't open with a question"
+   * is a request plus an unrelated rule, and it was being discarded.
+   */
+  for (const [note, expected] of [
+    ["do it like Barker but don't open with a question", { handle: "mattjbarker1" }],
+    ["go look at Barker and don't use a question", { handle: "mattjbarker1" }],
+    ["less of the hook, more like Barker", { handle: "mattjbarker1" }],
+    ["this is not working, go look at the Sentinel accounts", { corpus: true }],
+  ]) {
+    assert.deepEqual(writerAskFrom(note), expected, `an unrelated negation cancelled: "${note}"`);
+  }
+});
+
 test("ordinary English about eights and others is not a Sentinel ask", () => {
   /*
    * CORPUS_ASK matched "the eight", "other writers" and "others who have". His posts are often

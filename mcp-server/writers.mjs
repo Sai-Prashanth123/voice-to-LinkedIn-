@@ -81,11 +81,25 @@ const CORPUS_PHRASES = [
  * cadence most likely to leak and that a draft agreeing with him proves nothing about Josh's voice
  * (8.3), so a complaint about sounding like him would have produced more of him.
  *
- * Judged per sentence, because one note can hold both — "I liked the Sentinel idea but this reads
- * too much like Barker" should resolve to the group, not to Barker.
+ * ONLY WORDS THAT CARRY POLARITY COUNT.
+ *
+ * The first version of this listed "reads like", "sounds like", "feels like" and "copying" as
+ * negative. They are not: "make it sound like Barker" and "copying Barker's structure is what I
+ * want" are requests, and all four were being thrown away. That is the 26 October complaint again
+ * — the drafter falling back to the default framework when he asked for a writer — reintroduced by
+ * the fix for the opposite mistake. A verb that works in both directions decides nothing; the
+ * negator next to it does.
  */
-const NEGATIVE =
-  /\b(?:too much like|too close to|stop|stops|don'?t|do not|doesn'?t|does not|didn'?t|not|avoid|avoiding|less|nothing like|no more|reads? like|sounds? like|sounding like|feels? like|copying|copied|ripped off|shouldn'?t)\b/i;
+const NEGATOR =
+  /\b(?:not|no|never|none|nothing|don'?t|dont|doesn'?t|didn'?t|can'?t|won'?t|shouldn'?t|stop|stops|avoid|avoiding|less|too|instead|away from|ripped off)\b/i;
+
+/*
+ * A complaint can also trail the name: "this reads like Matt Barker, stop". Kept to the few words
+ * that can only be closing a complaint, because the words that usually follow a request are the
+ * START OF THE NEXT CLAUSE — "do it like Barker but don't open with a question" is an instruction
+ * plus an unrelated negation, and testing the full negator set forward threw it away.
+ */
+const TRAILING_COMPLAINT = /\b(?:stop|stops|shouldn'?t|instead|no more|too much)\b/i;
 
 /*
  * HOW CLOSE THE NEGATION HAS TO BE.
@@ -93,14 +107,14 @@ const NEGATIVE =
  * Scoped to a window around the mention rather than to its sentence, because his notes are
  * dictated and barely punctuated. The 26 October note runs for 400 characters with one full stop
  * in it: "I don't know what you suggest with the hook ... and go look at the Sentinel accounts".
- * A sentence-scoped check read the "don't" and threw away the ask — which is the same fault as
- * before, just failing in the safe direction.
+ * A sentence-scoped check read the "don't" and threw away the ask — the same fault as before,
+ * failing in the safe direction.
  *
- * Six words back catches "too much like Barker" and "this reads like Matt Barker"; two forward
- * catches a trailing "stop" or "shouldn't".
+ * Four back rather than six: "less of the hook, more like Barker" is a request, and a six-word
+ * window reached back over the comma to the "less" that belongs to the hook.
  */
-const LOOK_BACK = 6;
-const LOOK_FORWARD = 2;
+const LOOK_BACK = 4;
+const LOOK_FORWARD = 4;
 
 /** Lower-cased tokens, apostrophes kept so "don't" survives for the negation test. */
 function tokens(s) {
@@ -134,11 +148,9 @@ function occurrences(toks, phrase) {
 
 /** True when this particular mention sits inside a complaint rather than a request. */
 function negated(toks, at, length) {
-  const window = toks
-    .slice(Math.max(0, at - LOOK_BACK), at)
-    .concat(toks.slice(at + length, at + length + LOOK_FORWARD))
-    .join(" ");
-  return NEGATIVE.test(window);
+  const before = toks.slice(Math.max(0, at - LOOK_BACK), at).join(" ");
+  const after = toks.slice(at + length, at + length + LOOK_FORWARD).join(" ");
+  return NEGATOR.test(before) || TRAILING_COMPLAINT.test(after);
 }
 
 /** Any mention of `phrase` that is not inside a complaint. */

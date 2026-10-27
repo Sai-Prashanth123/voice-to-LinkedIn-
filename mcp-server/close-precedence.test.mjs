@@ -26,7 +26,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { prefileVerdict } from "./prefile.mjs";
-import { GATE_CHECKS, GATE_SYSTEM } from "../supabase/functions/_shared/prompts.ts";
+import { DRAFT_USER, GATE_CHECKS, GATE_SYSTEM } from "../supabase/functions/_shared/prompts.ts";
 
 /** Enough of the live library for the rule to be considered present. */
 const RULE = {
@@ -88,4 +88,44 @@ test("the judge is told to name a collision instead of failing in silence", () =
   assert.match(text, /IF THE POST BREAKS A RULE BECAUSE JOSH ASKED FOR IT, STILL FAIL IT/);
   assert.match(text, /quote his instruction/);
   assert.match(text, /WHERE TWO SECTIONS OF THE LIBRARY DISAGREE, THE MORE SPECIFIC ONE WINS/);
+});
+
+/* ── A verdict nobody reached is an invention ────────────────────────────────── */
+
+test("a draft that passed is not described to the writer as rejected", () => {
+  /*
+   * The normal review path: Josh reads a draft that CLEARED the gate and asks for a change.
+   *
+   * His note is the only entry in the pushback job's `failures`, and it is now filtered out of the
+   * rejection list because the brief carries it separately as an instruction. That left the list
+   * empty, and the fallback substituted `gate_reason ?? "rejected"` — which is null on a passing
+   * draft. So the brief said "Your previous attempt was rejected. It failed on: - rejected" about
+   * a draft the gate approved, in place of the words he actually used.
+   *
+   * A verdict nobody reached is the same class of invention as a quote nobody said, and clause 1
+   * does not distinguish between them.
+   */
+  const passed = DRAFT_USER({
+    entry: { their_actual_words: "something that happened" },
+    clearedNames: [],
+    unclearedNames: [],
+    previousAttempt: { body: "The previous draft.", failures: [] },
+    hisNotes: ["keep everything under the methods on one line"],
+  });
+  assert.doesNotMatch(passed, /was rejected/);
+  assert.doesNotMatch(passed, /It failed on:/);
+  assert.match(passed, /Nothing rejected it/);
+  // His words still reach the writer, which is the point of the whole block.
+  assert.match(passed, /one line/);
+
+  // And a real rejection still reads as one.
+  const failed = DRAFT_USER({
+    entry: { their_actual_words: "something that happened" },
+    clearedNames: [],
+    unclearedNames: [],
+    previousAttempt: { body: "The previous draft.", failures: ["hook_opens_loop: states it"] },
+  });
+  assert.match(failed, /was rejected/);
+  assert.match(failed, /It failed on:/);
+  assert.match(failed, /hook_opens_loop/);
 });
