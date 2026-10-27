@@ -1,0 +1,11 @@
+{
+  "name": "voice-to-content-local",
+  "private": true,
+  "type": "module",
+  "description": "The local-first stack's own dependencies. Separate from mcp-server/ so a client install never pulls a 109MB Postgres down, and separate from eval/ because that one is a test harness and this one is meant to become the product.",
+  "comment": "embedded-postgres ships real Postgres binaries per platform. Only a beta is published (18.4.0-beta.17) and it carries NO pgvector, so the vector columns fall back to the same substitute eval/ uses — a domain over float8[], with no index and no dimension enforcement. Both facts are load-bearing and are written up in local/README.md.",
+  "dependencies": {
+    "embedded-postgres": "18.4.0-beta.17",
+    "pg": "^8"
+  }
+}
