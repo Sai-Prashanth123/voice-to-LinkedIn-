@@ -360,7 +360,7 @@ engagement.
 
 ## The gate
 
-Eight checks, live in the system. Any one failing fails the draft — there is no score to offset a
+The checks live in the system. Any one failing fails the draft — there is no score to offset a
 weak check with a strong one. Three attempts, then the moment parks.
 
 The rubrics are deliberately not copied here: they are fetched from \`get_gate_brief\`, which reads

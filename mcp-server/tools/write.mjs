@@ -221,7 +221,7 @@ export const writeTools = [
         "it names, nothing is written and the failures come back for you to fix. " +
         "Call get_moment first: the material is the only thing a draft may claim from, and any " +
         "uncleared name must not appear. " +
-        "Drafts are written HERE, in Claude, and SO ARE THE EIGHT CHECKS. " +
+        "Drafts are written HERE, in Claude, and SO ARE THE CHECKS. " +
         // This line said the opposite until 14 Oct 2026: "the server runs the eight quality checks
         // by itself; do not run them yourself." That was true when the server held the gate and
         // stopped being true when `gate_runs_in_claude` was turned on, which is the default. A

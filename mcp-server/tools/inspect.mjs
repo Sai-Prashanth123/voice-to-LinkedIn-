@@ -886,7 +886,7 @@ export const inspectTools = [
         mode: modeName(oneStep),
         mode_means: oneStep
           ? "He gives you material and you write it: start_post, write_post, create_draft. Nothing " +
-            "asks him questions and nothing is pulled from the idea bank. The eight checks run and " +
+            "asks him questions and nothing is pulled from the idea bank. The checks still run and " +
             "you read him what they caught, but they do not hold the post back — he decides."
           : "The interviewed path: capture_thought, a few short questions, next_work for what is " +
             "waiting, and a draft waits for the checks to pass.",

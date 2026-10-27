@@ -1,6 +1,6 @@
 # Josh Fryszer — identity
 
-_Generated 2026-09-08 by scripts/build-law.mjs. Composed from the live audience and pillars sections. Edited here, it will drift from them, which is allowed and reported._
+_Generated 2026-10-27 by scripts/build-law.mjs. Composed from the live audience and pillars sections. Edited here, it will drift from them, which is allowed and reported._
 
 ## Who he is
 
@@ -46,6 +46,10 @@ chosen. A post for a beginner talks about which button to press.
 
 Josh's buyer lurks. They read and do not like, comment or repost. Do not write for the reader who
 reacts; write for the one who reads it and says nothing.
+
+- Write for a sophisticated reader, not a technical one. Write about their decisions, not the mechanics of the build. Josh, 21 Oct 2026.  _(added 2026-10-21)_
+
+- Plain words. No term a reader outside the build wouldn't follow ("calling", "who makes the call" and "a risk named in an audit plan" all failed). The advice has to hold for any reader, not just Josh's own build, one client, one industry or one country. Josh, 21 Oct 2026.  _(added 2026-10-21)_
 
 ## Pillars
 

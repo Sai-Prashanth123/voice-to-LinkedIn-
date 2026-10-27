@@ -4,7 +4,7 @@
  * WHO DOES WHAT, NOW
  *
  * Drafts are written in Claude. The server does not write them any more — worker-dispatch leaves
- * `draft` jobs pending — but it still judges every draft, running the eight checks by itself the
+ * `draft` jobs pending — but it still judges every draft, running the checks by itself the
  * moment one is filed. So the work this tool hands out is writing, and only writing.
  *
  * It used to hand out gating first, on the grounds that a half-judged draft blocks everything
@@ -50,7 +50,7 @@ export const workTools = [
         "Returns the next idea waiting to be written — first drafts and rewrites alike — WITH the " +
         "brief needed to write it, in one call. A rewrite comes with what the last draft said and " +
         "why it was rejected or what Josh asked to change. Write it, file it with create_draft, " +
-        "then ask again. The server runs the eight quality checks on its own after filing; do not " +
+        "then ask again. The server runs the quality checks on its own after filing; do not " +
         "run them here.",
       inputSchema: {},
     },
@@ -122,7 +122,7 @@ export const workTools = [
         });
         if (!moment || moment.killed || moment.status === "parked") continue;
 
-        // A draft part-way through its eight checks is still this job; one already finished is not.
+        // A draft part-way through the checks is still this job; one already finished is not.
         const verdicts = await db.select("gate_runs", {
           select: "check_key",
           draft_id: `eq.${draft.id}`,

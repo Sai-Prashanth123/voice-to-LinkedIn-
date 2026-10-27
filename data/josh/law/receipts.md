@@ -1,6 +1,6 @@
 # Josh Fryszer — receipts
 
-_Generated 2026-09-08 by scripts/build-law.mjs. Drawn only from the four calls with no client-identification caveat._
+_Generated 2026-10-27 by scripts/build-law.mjs. Drawn only from the four calls with no client-identification caveat._
 
 ## ⛔ DO-NOT-SAY
 

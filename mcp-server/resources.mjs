@@ -29,7 +29,7 @@ const LAW_DESCRIPTIONS = {
   "voice.md": "How he builds a thought — from speech, never from the archive (8a)",
   "receipts.md": "His real numbers and scars, behind a do-not-say list of every client name",
   "content-plan.md": "The three structures, the backlog and the pillar rotation",
-  "quality-bar.md": "The eight gate checks and the mechanical bans, as a writer would read them",
+  "quality-bar.md": "The gate checks and the mechanical bans, as a writer would read them",
   "voiceprint.md": "The measured fingerprint, in prose. The numbers are in voiceprint://josh",
 };
 

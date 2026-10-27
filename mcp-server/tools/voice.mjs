@@ -606,6 +606,70 @@ export async function writerShapeBlock(db, handle) {
   };
 }
 
+/**
+ * The eight together, as a band — what "go look at the Sentinel accounts" actually asks for.
+ *
+ * WHY THIS IS NOT writerShapeBlock WITH A LOOP
+ *
+ * Twice in two days Josh asked for this and got the default framework, because the only thing the
+ * brief could carry was ONE writer:
+ *
+ *   26 Oct — "go look at the Sentinel accounts to see how others who have done lists like this
+ *             would write it"
+ *   27 Oct — "what makes a good opening hook from the Sentinel accounts"
+ *
+ * Answering that with Matt Barker would be the wrong answer and the dangerous one. He is where
+ * Josh's rules came from, his cadence is the likeliest to leak, and a draft that agrees with him
+ * proves nothing (8.3). What he asked for is how EIGHT different writers handle a problem, which is
+ * a range, not a voice — so this returns the band and says plainly that the middle of it is not a
+ * target.
+ *
+ * It is the same loader and the same function the ninth gate check uses, unfiltered, so the number
+ * the drafter aims at is the number the draft is measured against.
+ */
+export async function corpusShapeBlock(db) {
+  const rows = await shapedWriterRows(db);
+  const all = writerShapeTargets(rows);
+  const band = (xs) => (xs?.length ? `${Math.min(...xs)} to ${Math.max(...xs)}` : "not measured");
+
+  if (!all.aboveFold?.length && !all.paragraphs?.length) {
+    return {
+      kind: "corpus",
+      refused: "Nothing measurable is stored for any of the eight, so there is no band to aim at. " +
+        "Read them with get_reference_posts instead.",
+    };
+  }
+
+  const handles = new Set(rows.map((r) => r.handle));
+
+  return {
+    kind: "corpus",
+    name: "the eight together",
+    lines: [
+      `ABOVE THE FOLD: they run ${band(all.aboveFold)} words. That is the range the shape check ` +
+        "will measure this draft against.",
+      `PARAGRAPHS: they run ${band(all.paragraphs)}.`,
+      "THE RANGE IS NOT A TARGET. It is eight writers who disagree with each other, and the " +
+        "middle of it is nobody's habit. Land anywhere inside it deliberately; being outside it " +
+        "is not automatically wrong, and the check is told so.",
+      "WHAT TO TAKE FROM THEM is where the post gets in, where it turns and how it lands — not a " +
+        "length. If you want one writer's habits rather than the range, that is a different ask " +
+        "and it needs his name.",
+    ],
+    excludes: [
+      "Not one of their sentences. Every seven-word run of this draft is checked against every " +
+        "stored post of all eight before it is filed, and a borrowed run is refused.",
+      ...(handles.has("mattjbarker1")
+        ? ["Matt Barker is in this set, and his turn that renames the reader's problem — state it, " +
+          "deny it, substitute another — is the exact construction Josh's banned-phrases section " +
+          "forbids. The range may be taken from him; that move may not."]
+        : []),
+    ],
+    basis: `Measured across ${rows.length} posts by ${handles.size} of the eight — the ones that ` +
+      "kept their line breaks.",
+  };
+}
+
 export const sentinelTools = [
   {
     name: "get_sentinels",

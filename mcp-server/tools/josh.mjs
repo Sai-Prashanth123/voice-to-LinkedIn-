@@ -303,7 +303,7 @@ export const joshTools = [
         "ONLY when he asks. Never on your own initiative, and never because a draft was rejected " +
         "or an interview felt slow — a mode that turns itself on is indistinguishable, from his " +
         "side, from the system ignoring him. \"one_step\": he gives you material and you write it, " +
-        "nothing asks him questions, nothing is pulled from the idea bank, and the eight checks " +
+        "nothing asks him questions, nothing is pulled from the idea bank, and the checks still " +
         "run and are read to him without holding the post back. \"interviewed\": the path the build " +
         "specification describes — a thought is captured, questions are asked, selection fills the " +
         "queue. Nothing is deleted either way and either can be set again at any time.",

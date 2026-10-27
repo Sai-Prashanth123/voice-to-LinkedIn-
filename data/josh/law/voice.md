@@ -1,6 +1,6 @@
 # Josh Fryszer — voice
 
-_Generated 2026-09-08 by scripts/build-law.mjs. Built from SPEECH. See the warning below before using any of it._
+_Generated 2026-10-27 by scripts/build-law.mjs. Built from SPEECH. See the warning below before using any of it._
 
 ## Read this first
 

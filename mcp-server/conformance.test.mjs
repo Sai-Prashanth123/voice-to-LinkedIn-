@@ -134,9 +134,27 @@ test("no message tells Josh the gate has a number of checks it no longer has", (
       .filter((line) => !isComment(line))
       .join(" ");
 
-    for (const bad of ["of 8 checks", "of eight checks", "run the eight checks"]) {
+    /*
+     * Widened on 27 October, with the count still wrong in two live descriptions that both guards
+     * walked straight past: `create_draft` said "SO ARE THE EIGHT CHECKS" (capitals, so no listed
+     * phrase matched) and `get_gate_brief` was titled "Get the nine checks for a draft" — right
+     * today and wrong on the day a tenth lands, which is the whole point.
+     *
+     * Matched case-insensitively now, and against any count rather than against "eight", because
+     * a guard that only knows the number it was wrong about last time cannot catch the next one.
+     */
+    for (
+      const bad of [
+        "of 8 checks",
+        "of eight checks",
+        "run the eight checks",
+        "eight checks",
+        "nine checks",
+        "ten checks",
+      ]
+    ) {
       assert.ok(
-        !code.includes(bad),
+        !code.toLowerCase().includes(bad),
         `${f} reports the gate size as a literal ("${bad}"). Count from GATE_CHECKS.length.`,
       );
     }
@@ -154,12 +172,39 @@ test("nothing that instructs a session states the gate size as a word", () => {
    * The number belongs in one place. These files should say "the checks", and the brief and
    * checks_remaining say how many there are today.
    */
+  /*
+   * Widened on 27 October. The five below were clean and the drift had simply moved somewhere the
+   * guard could not see: `system_status`'s own `mode_means` string still said "The eight checks
+   * run", and that is the FIRST sentence about the gate that every session reads (CLAUDE.md:31
+   * tells it to call system_status first). Seven more said it in tool descriptions, in the MCP
+   * prompt titles, in the resource list, and in Josh's own law set on disk.
+   *
+   * A guard that scans the five files somebody already remembered to fix is not a guard.
+   */
   const files = [
     "../CLAUDE.md",
     "./instructions.mjs",
     "../.claude/skills/gate-check/SKILL.md",
     "../.claude/skills/draft-post/SKILL.md",
     "../.claude/skills/josh-voice/SKILL.md",
+    // Everything else a model is handed. Tool descriptions and prompt titles instruct exactly as
+    // hard as a skill does, and the law set is served as an MCP resource.
+    "./prompts.mjs",
+    "./resources.mjs",
+    "./tools/inspect.mjs",
+    "./tools/josh.mjs",
+    "./tools/onestep.mjs",
+    "./tools/work.mjs",
+    "./tools/visual.mjs",
+    "../data/josh/law/quality-bar.md",
+    "../.claude/commands/write.md",
+    "../.claude/commands/review.md",
+    "../.claude/commands/sentinels.md",
+    "../.claude/commands/waiting.md",
+    "../.claude/commands/write.md",
+    // The hook is the one thing that speaks to the session mid-draft, and it said "the nine
+    // checks" in both of its messages.
+    "../.claude/hooks/writing-order.mjs",
   ];
 
   // "all eight are in", "the eight checks", "eight quality checks" — the forms that instruct.

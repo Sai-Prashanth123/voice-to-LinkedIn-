@@ -44,5 +44,5 @@ Then whichever he says:
 on the date given and nothing asks him again. So read it first, and never call it on a draft he has
 not explicitly approved.
 
-If a draft has not been judged yet, the nine checks run first — `mark_ready` will refuse it, and
+If a draft has not been judged yet, the gate's checks run first — `mark_ready` will refuse it, and
 that refusal is correct.

@@ -142,9 +142,9 @@ export function promptsFor(context) {
     {
       name: "gate-check",
       config: {
-        title: "Judge a draft against the eight checks",
+        title: "Judge a draft against the gate's checks",
         description:
-          "Run the quality gate on one draft. Eight independent judgements; be adversarial, and " +
+          "Run the quality gate on one draft. One independent judgement per check; be adversarial, and " +
           "when unsure, fail it. Add inline: true to receive every rubric in the message.",
         argsSchema: {
           draft_id: completableId(context, draftOptions, "Which draft to judge"),

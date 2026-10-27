@@ -454,7 +454,7 @@ export async function finishGate(
   await notice(
     db,
     "draft_ready",
-    `A draft cleared all eight checks and is in the calendar${named?.title ? `: "${named.title}"` : ""}.`,
+    `A draft cleared all ${GATE_CHECKS.length} checks and is in the calendar${named?.title ? `: "${named.title}"` : ""}.`,
     {
       momentId,
       actedOn: ["list_calendar", "mark_ready", "push_back_on_draft"],

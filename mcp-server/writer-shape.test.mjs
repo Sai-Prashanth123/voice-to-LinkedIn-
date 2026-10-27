@@ -161,10 +161,33 @@ test("an unknown handle refuses instead of inventing a shape", async () => {
   assert.equal(block.lines, undefined);
 });
 
-test("no writer named means no block at all", async () => {
+test("no writer asked for, by anyone, means no block at all", async () => {
+  /*
+   * This asserted `moment_id: 111` carried no shape when no handle was passed. That changed on
+   * 27 October and the change is the point: his pushback on 111 says "go look at the Sentinel
+   * accounts to see how others who have done lists like this would write it", and the brief now
+   * reads it. A shape SHOULD appear there, and the test below covers it.
+   *
+   * So the negative case moved to moment 109, which is the stronger one: 1,609 characters of his
+   * notes, none of them about the reference writers. It proves the detector discriminates rather
+   * than firing on the presence of a note.
+   */
+  const brief = await tools.find((t) => t.name === "get_drafting_brief")
+    .handler({ moment_id: 109 }, { db, url: creds.url });
+  assert.equal(brief.writer_shape, undefined, "a shape appeared that nobody asked for");
+  assert.doesNotMatch(brief.user, /BUILD THIS ONE/);
+});
+
+test("the Sentinel ask in his note on 111 is acted on, not just reported", async () => {
+  // The 26 October complaint, closed. He asked for the reference writers in a pushback and the
+  // only thing that happened was the note being read out to the writer.
   const brief = await tools.find((t) => t.name === "get_drafting_brief")
     .handler({ moment_id: 111 }, { db, url: creds.url });
-  assert.equal(brief.writer_shape, undefined, "a shape appeared without being asked for");
+
+  assert.equal(brief.writer_shape?.asked_by, "his_note");
+  assert.equal(brief.writer_shape?.handle, null, "a group ask resolved to one writer");
+  assert.match(brief.user, /BUILD THIS ONE THE WAY THE EIGHT HANDLE IT/);
+  // Never one writer's name as the model, for a group ask.
   assert.doesNotMatch(brief.user, /BUILD THIS ONE IN/);
 });
 

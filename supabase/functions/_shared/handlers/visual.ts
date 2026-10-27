@@ -28,6 +28,48 @@ function ensureWasm(): Promise<void> {
   return wasmReady;
 }
 
+/*
+ * FONTS, AND WHY A DIAGRAM WITHOUT THEM IS WORSE THAN NO DIAGRAM.
+ *
+ * resvg draws text by looking up a font. There are no system fonts in the edge runtime, so with
+ * none supplied it renders every shape correctly and silently drops EVERY WORD — and returns a
+ * valid PNG, so `rendered_path` is set and the tool reports success.
+ *
+ * Measured on 27 October: visual 7 on moment 111 came back `rendered: true`, 5,156 bytes, 1200x600,
+ * and contained two coloured bars, a rule, and not one of its four labels. Nothing in the system
+ * could have told anybody — `create_visual` said it worked, no event was logged, and there is no
+ * way to look at a stored visual. The first reader would have been whoever saw it on LinkedIn.
+ *
+ * That is the defect class this repo is named for: a step that reports success and has no second
+ * half. So two changes here. The font is loaded, and a render that could not load a font for an
+ * image WITH TEXT IN IT is a failure rather than a wordless success.
+ */
+const FONT_URLS = [
+  "https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf",
+  "https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans-Bold.ttf",
+];
+const FONT_FAMILY = "DejaVu Sans";
+
+let fontsReady: Promise<Uint8Array[]> | null = null;
+function ensureFonts(): Promise<Uint8Array[]> {
+  fontsReady ??= Promise.all(FONT_URLS.map(async (url) => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`font ${url} returned ${res.status}`);
+    return new Uint8Array(await res.arrayBuffer());
+  })).catch((err) => {
+    // Do not cache the failure: a cold start during a CDN blip would otherwise poison this
+    // instance for its whole life, and every visual it rendered after that would lose its words.
+    fontsReady = null;
+    throw err;
+  });
+  return fontsReady;
+}
+
+/** Whether the image has anything to say. Only then is a missing font fatal. */
+export function hasText(svg: string): boolean {
+  return /<text[\s>]|<tspan[\s>]/i.test(svg);
+}
+
 export async function handleVisual(db: SupabaseClient, job: Job): Promise<void> {
   const momentId = Number(job.payload.moment_id);
   const sourcePath = String(job.payload.source_path);
@@ -222,7 +264,29 @@ export async function storeVisual(
   let renderError: string | null = null;
   try {
     await ensureWasm();
-    const resvg = new Resvg(svg, { fitTo: { mode: "width", value: 1200 } });
+
+    /*
+     * A missing font is fatal for an image with words in it, and harmless for one without. Judged
+     * rather than assumed, because refusing a purely geometric diagram over a CDN blip would be
+     * the opposite mistake. See the note on ensureFonts.
+     */
+    let fontBuffers: Uint8Array[] = [];
+    try {
+      fontBuffers = await ensureFonts();
+    } catch (fontErr) {
+      if (hasText(svg)) {
+        throw new Error(
+          `the fonts could not be loaded (${fontErr}), and this image has text in it. Rendering ` +
+            `it now would produce the shapes with every word missing, and report success. Kept ` +
+            `the SVG; no PNG was stored.`,
+        );
+      }
+    }
+
+    const resvg = new Resvg(svg, {
+      fitTo: { mode: "width", value: 1200 },
+      font: { fontBuffers, defaultFontFamily: FONT_FAMILY, loadSystemFonts: false },
+    });
     // Copied into a fresh Uint8Array: resvg returns one backed by ArrayBufferLike, which neither
     // Blob nor a fetch body will accept.
     const rendered = new Uint8Array(resvg.render().asPng());

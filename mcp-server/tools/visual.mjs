@@ -15,7 +15,7 @@
  *
  * The visual view is core_rules, visual_brand and audience — three sections. It does NOT include
  * gate_rules, which is where Josh's "never name a client" rule lives, and `handlers/visual.ts`
- * contains no name screening of its own. The eight gate checks read a draft's body; nothing reads
+ * contains no name screening of its own. The gate checks read a draft's body; nothing reads
  * `svg_body`.
  *
  * So a rebuilt diagram carrying a client's name straight out of the source image would pass every

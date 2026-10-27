@@ -27,7 +27,7 @@
  * WHAT THIS DELIBERATELY DOES NOT DO
  *
  * Soften anything. The extraction still goes through verifyExtraction against a source rebuilt
- * server-side, uncleared names still stop a draft, and the eight checks still run. The only thing
+ * server-side, uncleared names still stop a draft, and the checks still run. The only thing
  * one-step mode changes about quality is who decides what to do about a failing check.
  */
 
@@ -220,7 +220,7 @@ export const oneStepTools = [
         drafting_brief: brief,
         how: [
           "Read the brief's system text in full. It is the live library — his voice guide, his " +
-            "banned phrases, his hook and closing rules — and it is what the eight checks judge " +
+            "banned phrases, his hook and closing rules — and it is what the checks judge " +
             "against, so a draft that ignores it fails for reasons you could have read first.",
           "measure_draft and scrub_draft are free and catch most of what the checks would reject.",
           "Then create_draft, with every claim carrying the span it rests on.",

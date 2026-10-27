@@ -1,6 +1,6 @@
 # Josh Fryszer — content plan
 
-_Generated 2026-09-08 by scripts/build-law.mjs. Part A is his three frameworks. Part B counts the prompts live from the library._
+_Generated 2026-10-27 by scripts/build-law.mjs. Part A is his three frameworks. Part B counts the prompts live from the library._
 
 ## Part A — Structure library
 

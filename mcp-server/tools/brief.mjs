@@ -38,7 +38,8 @@ import { writingSources } from "../sources.mjs";
 import { shapedWriterRows } from "../shape-rows.mjs";
 // Module-level, not via the tool registry: voice.mjs does not import this file, so there is no
 // cycle, and tools/index.mjs warns that a registry lookup needs the tool imported last.
-import { writerShapeBlock } from "./voice.mjs";
+import { corpusShapeBlock, writerShapeBlock } from "./voice.mjs";
+import { writerAskFrom } from "../writers.mjs";
 import { WRITTEN_UP } from "../../supabase/functions/_shared/extraction.ts";
 import { parsePillars } from "../../supabase/functions/_shared/library.ts";
 import { renderTranscript } from "../../supabase/functions/_shared/session.ts";
@@ -150,9 +151,9 @@ export const briefTools = [
        * prompt rather than sitting behind analyse_reference_writer, which nothing told the drafter
        * to call — the gap Josh described on 26 October.
        */
-      const writerShape = args.writer_handle
-        ? await writerShapeBlock(db, args.writer_handle)
-        : null;
+      // Resolved after the pushback note is read, because the note may itself be the instruction.
+      // Declared here so the ordering of the two reads below cannot silently change the answer.
+      let writerShape = null;
 
       /*
        * WHAT HE HAS ALREADY SAID ABOUT DRAFTS — the one thing this brief never carried.
@@ -219,6 +220,43 @@ export const briefTools = [
         limit: 1,
       });
       const jobFailures = Array.isArray(waiting?.payload?.failures) ? waiting.payload.failures : [];
+
+      /*
+       * EVERYTHING HE HAS SAID ABOUT THIS POST — not just the note on the job still waiting.
+       *
+       * The read above is filtered to `status = pending`, and `create_draft` closes the job it
+       * answers. So his note survived exactly one draft and then disappeared from this brief for
+       * good. On moment 113, on 27 October, that played out in ninety minutes:
+       *
+       *   03:11  job 353  "the opening hook could be something like I analysed 21,278 US sales
+       *                    teams… I don't think we need to mention the 20 company test"
+       *   03:16  job 354  "no one cares about the data set, role count looked wrong… this
+       *                    audience doesn't care about that"
+       *   03:31  job 355  "Heads of sales development is very specific. What about Managers of
+       *                    SDRs… want to invite input from the readers at the end"
+       *
+       * All three are `status = done`. By draft 93 the brief carried none of them, so the writer
+       * was working from gate verdicts alone — and hook_opens_loop and banned_phrases failed on all
+       * four drafts in a row. Four identical failures is not a writer who will not learn. It is a
+       * brief that forgot the instruction between attempts.
+       *
+       * His note does not stop being his note when the job closes. Newest first, deduplicated,
+       * and kept SEPARATE from the gate's reasons: one is an instruction and the other is a
+       * verdict, and filing the first under "it failed on" mislabels what he said.
+       */
+      const noteJobs = await db.select("jobs", {
+        select: "payload",
+        type: "eq.draft",
+        "payload->>moment_id": `eq.${id}`,
+        order: "id.desc",
+        limit: 12,
+      });
+      const hisNotes = [...new Set(
+        noteJobs
+          .flatMap((j) => (Array.isArray(j?.payload?.failures) ? j.payload.failures : []))
+          .map((f) => String(f).match(/Josh's note on the previous version:\s*([\s\S]+)/)?.[1]?.trim())
+          .filter(Boolean),
+      )];
       if (waiting?.payload?.previous_body || jobFailures.length > 0) {
         previousAttempt = {
           body: waiting.payload.previous_body ?? previous?.body ?? "",
@@ -238,6 +276,37 @@ export const briefTools = [
         };
       }
 
+      /*
+       * WHICH SHAPE TO BUILD IN — HIS PARAMETER, OR FAILING THAT, HIS OWN WORDS.
+       *
+       * `writer_handle` has been available since 26 October and is optional, so a session that does
+       * not think to pass it gets the default framework. That is the complaint he opened with on
+       * 26 October, one layer further in — and he then made the ask twice more, in pushback notes
+       * nothing read:
+       *
+       *   26 Oct — "go look at the Sentinel accounts to see how others who have done lists like
+       *             this would write it"
+       *   27 Oct — "what makes a good opening hook from the Sentinel accounts"
+       *
+       * Both arrived in `previousAttempt.failures`, which this brief already carries verbatim to
+       * the writer — so the instruction WAS on the page and only a human could act on it. Reading
+       * it here is the difference between telling the drafter what he said and doing what he said.
+       *
+       * An explicit parameter always wins: it is this session's instruction, where the note may be
+       * three drafts old.
+       */
+      const ask = args.writer_handle
+        ? { handle: args.writer_handle }
+        : writerAskFrom(hisNotes.join("\n"));
+
+      if (ask?.handle) {
+        writerShape = await writerShapeBlock(db, ask.handle);
+        if (writerShape) writerShape.kind = "writer";
+      } else if (ask?.corpus) {
+        // He pointed at the group. A band across eight, never one of them — see corpusShapeBlock.
+        writerShape = await corpusShapeBlock(db);
+      }
+
       const library = await libraryText(db, "drafting");
 
       const brief = {
@@ -254,6 +323,7 @@ export const briefTools = [
           clearedNames: cleared,
           unclearedNames: uncleared,
           previousAttempt,
+          hisNotes,
           writerShape: writerShape?.lines ? writerShape : null,
           /*
            * Pre-rendered here, so prompts.ts stays a pure string module with no database shape in
@@ -279,13 +349,19 @@ export const briefTools = [
          */
         ...(writerShape && {
           writer_shape: writerShape.refused
-            ? { handle: writerShape.handle, no_target: writerShape.refused }
+            ? { handle: writerShape.handle ?? null, no_target: writerShape.refused }
             : {
-              handle: writerShape.handle,
+              handle: writerShape.handle ?? null,
               name: writerShape.name,
               basis: writerShape.basis,
               targets: writerShape.lines,
               not_from_him: writerShape.excludes,
+              /*
+               * Where the target came from, because a shape nobody asked for in THIS call needs to
+               * announce itself. "his_note" means it was read out of his own pushback — tell him
+               * that rather than letting a target appear from nowhere.
+               */
+              asked_by: args.writer_handle ? "this_call" : "his_note",
             },
         }),
         // Repeated outside the prose because it is the one instruction that must not be missed,
@@ -305,7 +381,7 @@ export const briefTools = [
   {
     name: "get_gate_brief",
     config: {
-      title: "Get the nine checks for a draft",
+      title: "Get the gate's checks for a draft",
       description:
         "The nine independent checks a draft must clear, each with its own rubric, the post, and " +
         "the source material it was built from. Judge each one separately and record it with " +

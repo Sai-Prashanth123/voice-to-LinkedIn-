@@ -180,7 +180,7 @@ function main(event) {
         hookSpecificOutput: {
           hookEventName: "PostToolUse",
           additionalContext:
-            "The draft is filed. The nine checks come next, in a fresh breath — use the " +
+            "The draft is filed. The checks come next, in a fresh breath — use the " +
             "gate-check skill, judge each check on its own rubric, and read Josh what it caught. " +
             "In one_step mode they do not hold the post back; he decides. Record each with " +
             "record_gate_verdict, because a check nobody recorded is a check nobody ran.",
@@ -204,7 +204,7 @@ function main(event) {
       decision: "block",
       reason:
         `${pending.length} draft(s) were written this session and no gate verdict was recorded. ` +
-        `Run the nine checks with the gate-check skill and read him what they caught, then stop. ` +
+        `Run the checks with the gate-check skill and read him what they caught, then stop. ` +
         `If he has already seen them, say so and finish.`,
     });
     return;

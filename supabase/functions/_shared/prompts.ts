@@ -11,7 +11,7 @@
  * instruction rather than guessed at.
  */
 
-export const PROMPT_VERSION = "2026-10-13.1";
+export const PROMPT_VERSION = "2026-10-27.1";
 
 /* ────────────────────────────────────────────────────────────────────────── *
  * THE INTERVIEW (clause 5)
@@ -270,7 +270,19 @@ export const DRAFT_USER = (opts: {
     lines: string[];
     excludes: string[];
     basis: string;
+    /*
+     * "corpus" when he pointed at the group rather than at a person — his own words are "the
+     * Sentinel accounts", and he has used them twice. A band across eight writers who disagree is
+     * a different instruction from one writer's habits, and answering the first with the second
+     * would hand over the cadence 8.3 exists to keep out. So it is rendered differently below.
+     */
+    kind?: "writer" | "corpus";
   } | null;
+  /**
+   * Every note he has left on THIS moment, newest first, his words. See the block below for why it
+   * is not folded into `previousAttempt.failures`.
+   */
+  hisNotes?: string[];
   /*
    * WHAT JOSH HAS SAID ABOUT DRAFTS, and what he changed. Pre-rendered strings, newest first.
    *
@@ -341,8 +353,12 @@ export const DRAFT_USER = (opts: {
 
   if (opts.writerShape) {
     const w = opts.writerShape;
+    const corpus = w.kind === "corpus";
     lines.push(
-      `\n---\n\nBUILD THIS ONE IN ${w.name.toUpperCase()}'S SHAPE.\n\n` +
+      (corpus
+        ? `\n---\n\nBUILD THIS ONE THE WAY THE EIGHT HANDLE IT — he asked for the Sentinel ` +
+          `accounts, not for one writer.\n\n`
+        : `\n---\n\nBUILD THIS ONE IN ${w.name.toUpperCase()}'S SHAPE.\n\n`) +
         `${w.basis}\n\n` +
         `${w.lines.map((l) => `  - ${l}`).join("\n")}\n\n` +
         `NOT FROM HIM, whatever the shape suggests:\n` +
@@ -353,9 +369,32 @@ export const DRAFT_USER = (opts: {
         `The framework still names what the body argues, and it is still recorded (9.3). This shape ` +
         `decides how the post gets in, where it turns, how much sits above the fold, and how it ` +
         `lands. Where the two disagree about structure, the measured shape wins for this post.\n\n` +
-        `His sentences are not available to you and never will be. Every seven-word run of your ` +
-        `draft is checked against every stored post of his before this draft is filed, and a ` +
+        (corpus ? `Their sentences are not available to you` : `His sentences are not available to you`) +
+        ` and never will be. Every seven-word run of your draft is checked against every stored ` +
+        `post of ` + (corpus ? `all eight` : `his`) + ` before this draft is filed, and a ` +
         `borrowed run is refused. Take the shape; write the words yourself.`,
+    );
+  }
+
+  /*
+   * WHAT HE HAS ALREADY TOLD YOU ABOUT THIS POST. Separate from the gate's reasons above, and from
+   * tasteNotes below: this is an instruction about THIS post, dictated, newest first.
+   *
+   * It carried exactly one draft before 27 October, because `create_draft` closes the job his note
+   * travels on. Three notes in ninety minutes, and by the fourth draft the brief carried none of
+   * them — which is why the same two checks failed four times running.
+   */
+  if (opts.hisNotes?.length) {
+    lines.push(
+      `\n---\n\nWHAT HE HAS ALREADY TOLD YOU ABOUT THIS POST — newest first.\n\n` +
+        `${opts.hisNotes.map((n) => `  - "${n}"`).join("\n\n")}\n\n` +
+        `These are INSTRUCTIONS, not feedback to weigh up, and they are cumulative: an earlier one ` +
+        `still stands unless a later one replaces it. Dictated, so take what he is asking for and ` +
+        `not the spoken cadence — the voice guide is explicit that his filler is not his writing.\n\n` +
+        `If one of them asks for something the library forbids, DO WHAT HE ASKED and say so in the ` +
+        `handover, naming the rule. The gate will fail it, correctly, and only he can change the ` +
+        `standard (12.10) — so the way out is a library change he decides on, never a quiet ` +
+        `override and never a fifth draft into the same wall.`,
     );
   }
 
@@ -398,6 +437,18 @@ the post, which no reader will ever see. A failure must be something IN THE POST
 must quote the words from the post that fail. If you cannot quote them, there is nothing to fail.
 On 5 October a post was rejected for "17 campuses" and a named initiative that appeared nowhere in
 it; both were in the notes. That is the error to avoid, and it is the easiest one to make.
+
+WHERE TWO SECTIONS OF THE LIBRARY DISAGREE, THE MORE SPECIFIC ONE WINS. A list of banned forms is
+narrower than the section that defines the move, so the section that defines it is the authority and
+the list enumerates what it rules out. Say which two you are reading when this comes up.
+
+IF THE POST BREAKS A RULE BECAUSE JOSH ASKED FOR IT, STILL FAIL IT — AND SAY THAT IS WHY. Your
+reason must name the rule and quote his instruction, so the session raises a library change with him
+instead of redrafting into the same wall. On 27 October he dictated the opening "I analysed 21,278
+US sales teams", which the banned list rules out in as many words; the draft obeyed him and failed
+here, four times in ninety minutes, and nothing told anybody the two were in conflict. A rule only
+Josh can change is not a rule the writer can satisfy, and a check that does not say so turns one
+disagreement into an unbounded loop.
 
 ${library}`;
 
@@ -443,7 +494,18 @@ export const GATE_CHECKS: GateCheckSpec[] = [
       `Read only the first line. It PASSES if it creates a question the reader needs answered, and ` +
       `makes them want the next line.\n\n` +
       `It FAILS if it states the conclusion up front, summarises the post, announces the topic, or ` +
-      `is a rhetorical question of the kind that gets scrolled past.`,
+      `is a rhetorical question of the kind that gets scrolled past.\n\n` +
+      `A FINDING NAMED BUT WITHHELD IS A LOOP, NOT A CONCLUSION. The question is whether anything ` +
+      `is still owed to the reader after the first line, not whether the line contains facts. ` +
+      `"One SDR for every 4.7 net-new sellers" closes the loop: the number is the whole post. ` +
+      `"I worked out the SDR-to-AE ratio at 2,206 US software companies" withholds the ratio, and ` +
+      `that gap IS the loop — the reader taps to find the number out. Naming the METHOD while ` +
+      `withholding the FINDING passes. Naming the FINDING passes only where the post still owes ` +
+      `the reader why it is true.\n\n` +
+      `On 27 October this check failed four consecutive drafts of one post, three of them for ` +
+      `openings that withheld the finding, while Josh was asking in writing for exactly that ` +
+      `opening. Four failures on one post is this check misreading its own rule, not a writer who ` +
+      `will not learn.`,
   },
   {
     key: "aimed_at_someone",
@@ -514,6 +576,18 @@ export const GATE_CHECKS: GateCheckSpec[] = [
       `Check the post against the banned phrases and AI tells section of the reference library.\n\n` +
       `It FAILS if it contains any of them. These are the specific tics that make writing read as ` +
       `machine-produced, and they are what make a post feel wrong even when a reader cannot say why.\n\n` +
+      `THE BANNED LIST NAMES FORMS, NOT MOVES — AND "closes" IS THE AUTHORITY ON HOW A POST ENDS. ` +
+      `"Never end by asking for engagement" rules out the generic forms it names: "Agree?", ` +
+      `"Thoughts?", "What would you add?" and their relatives — answerable by anyone, asked to farm ` +
+      `replies. The "closes" section calls a genuine question THE DEFAULT CLOSE: specific enough ` +
+      `that only his reader could answer it, and one he actually wants answered. A close like that ` +
+      `PASSES. "If you've run SDRs at a company past 1,000 people, is that what you saw?" is the ` +
+      `default close, not engagement bait.\n\n` +
+      `On 27 October three drafts in ninety minutes failed here for ending on the close his own ` +
+      `library calls the default — one of them written straight after he asked, in writing, to ` +
+      `"invite input from the readers of the post at the end". Two sections of his library ` +
+      `disagreed and this check picked the broader one. If the close is specific to his reader, it ` +
+      `is not on the banned list.\n\n` +
       `If that section is empty, PASS. A rule nobody has written cannot be broken, and failing every ` +
       `post against a list that does not exist would stop anything ever reaching Josh — which looks ` +
       `like a broken system rather than a missing input.`,

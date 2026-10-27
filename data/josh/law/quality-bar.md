@@ -1,6 +1,6 @@
 # Josh Fryszer — quality bar
 
-_Generated 2026-09-08 by scripts/build-law.mjs. The master test and the mechanical bans. The gate's own rubrics live in the system, not here._
+_Generated 2026-10-27 by scripts/build-law.mjs. The master test and the mechanical bans. The gate's own rubrics live in the system, not here._
 
 ## The simplest rule
 
@@ -40,7 +40,7 @@ engagement.
 
 ## The gate
 
-Eight checks, live in the system. Any one failing fails the draft — there is no score to offset a
+The checks live in the system. Any one failing fails the draft — there is no score to offset a
 weak check with a strong one. Three attempts, then the moment parks.
 
 The rubrics are deliberately not copied here: they are fetched from `get_gate_brief`, which reads
