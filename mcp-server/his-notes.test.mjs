@@ -143,6 +143,45 @@ test("a negation belonging to the next clause does not cancel the ask", () => {
   }
 });
 
+test("a negator anywhere in the same clause still cancels, however far away", () => {
+  /*
+   * The token-window version of this rule was wrong in both directions at once and there was no
+   * number that fixed both. Six tokens back reached over a comma and threw away "less of the hook,
+   * more like Barker"; four stopped short of the "don't" in "I don't want it to sound like
+   * Barker" and asked for more of the cadence the library says is likeliest to leak.
+   *
+   * Distance was never the thing that separated them. The clause is.
+   */
+  for (const note of [
+    "I don't want it to sound like Barker",
+    "I do not want this to read like Matt Barker",
+    "this is copied from Barker",
+    "it copied Barker's turn",
+  ]) {
+    assert.equal(writerAskFrom(note), null, `a complaint was read as a request: "${note}"`);
+  }
+});
+
+test("a negation in an earlier clause does not reach the ask", () => {
+  // The other half of the same rule, and the one a fixed window kept breaking.
+  for (const [note, expected] of [
+    ["no questions, like Barker", { handle: "mattjbarker1" }],
+    ["never a question, like Barker", { handle: "mattjbarker1" }],
+    ["less hook, more like Barker", { handle: "mattjbarker1" }],
+    ["no hook, sentinel accounts style", { corpus: true }],
+  ]) {
+    assert.deepEqual(writerAskFrom(note), expected, `an earlier clause cancelled: "${note}"`);
+  }
+});
+
+test("a trailing 'instead' is how he asks, not how he complains", () => {
+  // "instead" was listed as a trailing complaint. "use Barker instead" is one of the plainest
+  // ways he could ask for a writer, and it was being discarded. Only "instead of" negates.
+  assert.deepEqual(writerAskFrom("use Barker instead"), { handle: "mattjbarker1" });
+  assert.deepEqual(writerAskFrom("go with Carter instead"), { handle: "juliacarter98" });
+  assert.equal(writerAskFrom("do something instead of the Barker thing"), null);
+});
+
 test("ordinary English about eights and others is not a Sentinel ask", () => {
   /*
    * CORPUS_ASK matched "the eight", "other writers" and "others who have". His posts are often

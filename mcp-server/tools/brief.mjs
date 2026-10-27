@@ -101,6 +101,30 @@ async function setting(db, key, fallback) {
   return row?.value ?? fallback;
 }
 
+/**
+ * What the gate actually recorded against a draft, as rendered reasons.
+ *
+ * Read rather than inferred from `drafts.gate_passed`, because that column has three states and
+ * only one of them means "clean": false is rejected, true is passed, and null is NOT YET JUDGED —
+ * which a part-way gate run leaves behind with real failures already written against it.
+ */
+async function gateFailures(db, draftId) {
+  if (!draftId) return [];
+  try {
+    const runs = await db.select("gate_runs", {
+      select: "check_key,passed,reason",
+      draft_id: `eq.${draftId}`,
+    });
+    return runs
+      .filter((r) => r.passed === false)
+      .map((r) => `${r.check_key}: ${r.reason ?? "failed without a stated reason"}`);
+  } catch {
+    // Never worth failing a brief over. An empty list reads as "nothing recorded", which is what
+    // the caller would otherwise have had anyway.
+    return [];
+  }
+}
+
 export const briefTools = [
   {
     name: "get_drafting_brief",
@@ -284,12 +308,28 @@ export const briefTools = [
          * about a draft the gate approved, in place of the words he actually used. A verdict
          * nobody reached is the same class of invention as a quote nobody said.
          */
-        const realFailures = jobFailures.length > 0
-          ? jobFailures
-          : (previous?.gate_passed === false ? [previous.gate_reason ?? "rejected"] : []);
+        /*
+         * AND "NOT YET JUDGED" IS NOT "NOTHING REJECTED IT" EITHER.
+         *
+         * The first fix for the above read `gate_passed === false`, which made every other value —
+         * including null — mean the draft was clean. It is not: `finishGate` leaves `gate_passed`
+         * null until every check has answered, so a draft part-way through, or one whose verdicts
+         * were recorded and never closed out, sits at null WITH failing gate_runs rows against it.
+         * Telling the writer "nothing rejected it" about that draft is the same invention pointing
+         * the other way, and it drops the failures on the floor.
+         *
+         * So the verdicts are read rather than inferred from one column, and the three states are
+         * kept apart.
+         */
+        const recorded = jobFailures.length > 0 ? [] : await gateFailures(db, previous?.id);
         previousAttempt = {
           body: waiting.payload.previous_body ?? previous?.body ?? "",
-          failures: realFailures,
+          failures: jobFailures.length > 0 ? jobFailures : recorded,
+          verdict: jobFailures.length > 0 || recorded.length > 0
+            ? "rejected"
+            : previous?.gate_passed === true
+            ? "passed"
+            : "not_judged",
         };
       }
 

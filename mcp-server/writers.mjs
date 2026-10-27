@@ -91,30 +91,35 @@ const CORPUS_PHRASES = [
  * negator next to it does.
  */
 const NEGATOR =
-  /\b(?:not|no|never|none|nothing|don'?t|dont|doesn'?t|didn'?t|can'?t|won'?t|shouldn'?t|stop|stops|avoid|avoiding|less|too|instead|away from|ripped off)\b/i;
+  /\b(?:not|no|never|none|nothing|don'?t|dont|doesn'?t|didn'?t|can'?t|won'?t|shouldn'?t|stop|stops|avoid|avoiding|less|too|copied|ripped off|instead of|away from)\b/i;
 
 /*
- * A complaint can also trail the name: "this reads like Matt Barker, stop". Kept to the few words
- * that can only be closing a complaint, because the words that usually follow a request are the
- * START OF THE NEXT CLAUSE — "do it like Barker but don't open with a question" is an instruction
- * plus an unrelated negation, and testing the full negator set forward threw it away.
+ * A complaint can also trail the name: "this reads like Matt Barker, stop". Kept to the three
+ * words that can ONLY be closing a complaint about the thing just named.
+ *
+ * Nothing broader, because what usually follows a request is the start of the next instruction:
+ * "go look at Barker and don't use a question" is an ask plus an unrelated rule, and a wider set
+ * threw it away. "instead" was in here and is not a complaint at all — "use Barker instead" is one
+ * of the plainest ways he could ask for a writer, and it was being discarded. Only "instead of"
+ * negates, and that is in NEGATOR where it belongs.
  */
-const TRAILING_COMPLAINT = /\b(?:stop|stops|shouldn'?t|instead|no more|too much)\b/i;
+const TRAILING_COMPLAINT = /\b(?:stop|stops|shouldn'?t|no more)\b/i;
 
 /*
- * HOW CLOSE THE NEGATION HAS TO BE.
+ * WHERE A NEGATION STOPS APPLYING: AT THE END OF ITS CLAUSE.
  *
- * Scoped to a window around the mention rather than to its sentence, because his notes are
- * dictated and barely punctuated. The 26 October note runs for 400 characters with one full stop
- * in it: "I don't know what you suggest with the hook ... and go look at the Sentinel accounts".
- * A sentence-scoped check read the "don't" and threw away the ask — the same fault as before,
- * failing in the safe direction.
+ * This counted tokens — six, then four — and both numbers were wrong in both directions at once.
+ * Six reached back over a comma into the previous clause and threw away "less of the hook, more
+ * like Barker". Four stopped short of the negator in "I don't want it to sound like Barker", so a
+ * plain complaint asked for more of the cadence the library says is likeliest to leak. There is no
+ * number that separates those two, because the thing that separates them is not distance.
  *
- * Four back rather than six: "less of the hook, more like Barker" is a request, and a six-word
- * window reached back over the comma to the "less" that belongs to the hook.
+ * A clause is. "I don't want it to sound like Barker" is one clause and the negation applies;
+ * "no questions, like Barker" is two and it does not. His notes are dictated, so the breaks are
+ * mostly conjunctions rather than punctuation — which is why a sentence split failed here earlier
+ * and a clause split does not.
  */
-const LOOK_BACK = 4;
-const LOOK_FORWARD = 4;
+const CLAUSE_BREAK = /[,;:.!?]+|\b(?:but|and|so|then|however|although|though|plus)\b/i;
 
 /** Lower-cased tokens, apostrophes kept so "don't" survives for the negation test. */
 function tokens(s) {
@@ -146,17 +151,27 @@ function occurrences(toks, phrase) {
   return at;
 }
 
-/** True when this particular mention sits inside a complaint rather than a request. */
-function negated(toks, at, length) {
-  const before = toks.slice(Math.max(0, at - LOOK_BACK), at).join(" ");
-  const after = toks.slice(at + length, at + length + LOOK_FORWARD).join(" ");
-  return NEGATOR.test(before) || TRAILING_COMPLAINT.test(after);
+/** The note in clauses, each as its own token list. */
+function clauses(text) {
+  return String(text)
+    .split(CLAUSE_BREAK)
+    .map((c) => tokens(c))
+    .filter((c) => c.length > 0);
 }
 
-/** Any mention of `phrase` that is not inside a complaint. */
-function askedFor(toks, phrase) {
-  const len = words(phrase).length;
-  return occurrences(toks, phrase).some((at) => !negated(toks, at, len));
+/**
+ * Any mention of `phrase` in a clause that is not complaining about it.
+ *
+ * A clause carrying a negator negates everything named in it. A clause followed by one that can
+ * only be closing a complaint — "…, stop", "…and it shouldn't" — is negated too.
+ */
+function askedFor(parts, phrase) {
+  return parts.some((toks, i) => {
+    if (occurrences(toks, phrase).length === 0) return false;
+    if (NEGATOR.test(toks.join(" "))) return false;
+    const next = parts[i + 1];
+    return !(next && TRAILING_COMPLAINT.test(next.join(" ")));
+  });
 }
 
 export function writerAskFrom(notes) {
@@ -183,7 +198,7 @@ export function writerAskFrom(notes) {
 }
 
 function askFromOne(text) {
-  const toks = tokens(text);
+  const parts = clauses(text);
 
   /*
    * A named writer beats a group reference: it is the narrower instruction. Both passes ignore a
@@ -192,13 +207,13 @@ function askFromOne(text) {
    */
   for (const w of REFERENCE_WRITERS) {
     // The handle, the full name, or the surname alone — "look at how Barker opens".
-    if (askedFor(toks, w.handle) || askedFor(toks, w.name) || askedFor(toks, w.surname)) {
+    if (askedFor(parts, w.handle) || askedFor(parts, w.name) || askedFor(parts, w.surname)) {
       return { handle: w.handle };
     }
   }
 
   for (const phrase of CORPUS_PHRASES) {
-    if (askedFor(toks, phrase)) return { corpus: true };
+    if (askedFor(parts, phrase)) return { corpus: true };
   }
   return null;
 }

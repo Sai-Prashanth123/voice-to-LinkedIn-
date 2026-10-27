@@ -241,6 +241,13 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
        */
       if (error) {
         await logEvent(db, "gate_notes_unavailable", "warn", {
+          /*
+           * `standing` is what makes a warn reportable. worker-ops counts errors and only those
+           * warns that opt in (worker-ops/index.ts:199-231), so without this the row is written
+           * and read by nobody — a warn nobody reads, which is the exact thing this event was
+           * added to stop. dedup.ts does the same for the same reason.
+           */
+          standing: true,
           moment_id: draft.moment_id,
           draft_id: draft.id,
           error: error.message,

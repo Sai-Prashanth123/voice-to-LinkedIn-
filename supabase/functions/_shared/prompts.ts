@@ -245,7 +245,12 @@ export const DRAFT_USER = (opts: {
   pillar: string | null;
   clearedNames: string[];
   unclearedNames: string[];
-  previousAttempt?: { body: string; failures: string[] };
+  previousAttempt?: {
+    body: string;
+    failures: string[];
+    /** What the gate actually reached. Absent means infer it from `failures`, as before. */
+    verdict?: "rejected" | "passed" | "not_judged";
+  };
   /* 7.2 — what this moment sits close to, when it is close but not a retelling. */
   nearMiss?: string | null;
   /*
@@ -407,17 +412,35 @@ export const DRAFT_USER = (opts: {
      * and his own words for what he wanted are in the block above, where they belong.
      */
     const failures = opts.previousAttempt.failures ?? [];
-    lines.push(
-      failures.length > 0
-        ? `\n---\n\nYour previous attempt was rejected. Here it is:\n\n` +
+    const tail = `Do not start from scratch if the moment and angle were sound.`;
+
+    /*
+     * Three states, said apart. "Not judged" is not "passed": a gate part-way through leaves
+     * gate_passed null, and calling that clean would be an invention in the opposite direction
+     * from the "It failed on: - rejected" it replaced.
+     */
+    const verdict = opts.previousAttempt.verdict ?? (failures.length > 0 ? "rejected" : "passed");
+
+    if (failures.length > 0) {
+      lines.push(
+        `\n---\n\nYour previous attempt was rejected. Here it is:\n\n` +
           `${opts.previousAttempt.body}\n\n` +
           `It failed on:\n${failures.map((f) => `  - ${f}`).join("\n")}\n\n` +
-          `Fix those specifically. Do not start from scratch if the moment and angle were sound.`
-        : `\n---\n\nHere is the version this one replaces. Nothing rejected it — what to change is ` +
-          `above, in his words:\n\n${opts.previousAttempt.body}\n\n` +
-          `Change what he asked for and leave the rest. Do not start from scratch if the moment ` +
-          `and angle were sound.`,
-    );
+          `Fix those specifically. ${tail}`,
+      );
+    } else if (verdict === "passed") {
+      lines.push(
+        `\n---\n\nHere is the version this one replaces. It cleared every check — nothing rejected ` +
+          `it, and what to change is above, in his words:\n\n${opts.previousAttempt.body}\n\n` +
+          `Change what he asked for and leave the rest. ${tail}`,
+      );
+    } else {
+      lines.push(
+        `\n---\n\nHere is the version this one replaces:\n\n${opts.previousAttempt.body}\n\n` +
+          `It was never fully judged, so treat it as neither passed nor rejected: no verdict was ` +
+          `reached on it either way. What to change is above, in his words. ${tail}`,
+      );
+    }
   }
 
   return lines.join("\n");

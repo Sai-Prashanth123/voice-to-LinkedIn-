@@ -114,7 +114,7 @@ test("a draft that passed is not described to the writer as rejected", () => {
   });
   assert.doesNotMatch(passed, /was rejected/);
   assert.doesNotMatch(passed, /It failed on:/);
-  assert.match(passed, /Nothing rejected it/);
+  assert.match(passed, /nothing rejected it/);
   // His words still reach the writer, which is the point of the whole block.
   assert.match(passed, /one line/);
 
@@ -128,4 +128,26 @@ test("a draft that passed is not described to the writer as rejected", () => {
   assert.match(failed, /was rejected/);
   assert.match(failed, /It failed on:/);
   assert.match(failed, /hook_opens_loop/);
+});
+
+test("a draft the gate never finished judging is called neither passed nor rejected", () => {
+  /*
+   * The opposite invention, and the one the first fix introduced. `finishGate` leaves gate_passed
+   * null until every check answers, so a draft part-way through — or one whose verdicts were
+   * recorded and never closed out, which is draft 57 on 5 October — sits at null. Reading that as
+   * "nothing rejected it" tells the writer a draft was clean when the gate had reached no verdict
+   * on it at all.
+   */
+  const unjudged = DRAFT_USER({
+    entry: { their_actual_words: "something that happened" },
+    clearedNames: [],
+    unclearedNames: [],
+    previousAttempt: { body: "The previous draft.", failures: [], verdict: "not_judged" },
+    hisNotes: ["the opening is flat"],
+  });
+  assert.doesNotMatch(unjudged, /was rejected/);
+  assert.doesNotMatch(unjudged, /nothing rejected it/);
+  assert.match(unjudged, /never fully judged/);
+  assert.match(unjudged, /neither passed nor rejected/);
+  assert.match(unjudged, /the opening is flat/);
 });
