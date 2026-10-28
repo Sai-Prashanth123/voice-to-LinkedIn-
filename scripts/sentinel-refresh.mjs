@@ -38,19 +38,45 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from "
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { measurePost, median, tally } from "./lib/prose.mjs";
+/*
+ * ONE COMPOSER OF THE BLOCK, SHARED WITH THE EDGE FUNCTION.
+ *
+ * `block()` lived here and a hand-copy of it lived in `supabase/functions/cc-submit/maintenance.ts`,
+ * and the two had already drifted on the one thing a reader cannot check: the denominator. This file
+ * reported the three corroborating fractions over `m.posts` — every stored post, 1,899 — and the
+ * copy reported the identical sentence over `totals.of`, the 1,839 that kept their line breaks. The
+ * live row said "147 of 1899 posts do", which is how we know this script wrote it last; running
+ * `refresh_sentinels` next would have made the same claim read 1,839, with nothing anywhere
+ * recording that it had changed.
+ *
+ * Node strips the types and reads it verbatim, the way measure.mjs reads _shared/shape.ts.
+ */
+import {
+  describeRefusals,
+  END,
+  measurementSpan,
+  referencePostsBody,
+  refusals,
+  removeWriterReads,
+  SECTION_BUDGET,
+  spliceSpan,
+  START,
+} from "../supabase/functions/_shared/library-spans.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
 const DIR = join(ROOT, "data", "josh", "sentinels");
 
 const APPLY = process.argv.includes("--apply");
+const REPROPOSE = process.argv.includes("--re-propose");
 const postsPath = (() => {
   const i = process.argv.indexOf("--posts");
   return i >= 0 ? process.argv[i + 1] : null;
 })();
 
-if (!postsPath) {
+if (!postsPath && !REPROPOSE) {
   console.error("usage: node scripts/sentinel-refresh.mjs --posts <scraped.json> [--apply]");
+  console.error("       node scripts/sentinel-refresh.mjs --re-propose [--apply]");
   process.exit(2);
 }
 
@@ -229,52 +255,6 @@ function diff(prev, next) {
   return { first_run: false, changes };
 }
 
-/* ── The block that goes into the section ─────────────────────────────────── */
-
-const START = "<!-- sentinel-measurements:start -->";
-const END = "<!-- sentinel-measurements:end -->";
-
-function block(m) {
-  const L = [];
-  L.push(START);
-  L.push("");
-  L.push("## The finding that matters most");
-  L.push("");
-  L.push(`**Almost nobody opens with a question. ${m.totals.opens_with_question} of ${m.posts} posts do.**`);
-  L.push("");
-  L.push("Josh's hook rule — a question may close a hook, never start one — is not a stylistic");
-  L.push(`preference. It is what ${Math.round((1 - m.totals.opens_with_question / m.posts) * 100)}% of the writers he chose already do.`);
-  L.push("");
-  L.push("Two more that corroborate his own rules:");
-  L.push("");
-  L.push(`- **${m.totals.engagement_asks} of ${m.posts} posts ask for engagement.**`);
-  L.push(`- **${m.totals.direct_asks} of ${m.posts} carry a direct ask** — about 1 in ` +
-    `${Math.round(m.posts / Math.max(m.totals.direct_asks, 1))}.`);
-  L.push("");
-  L.push("## Per account");
-  L.push("");
-  L.push("| Account | Posts | Median words | Above fold | Paragraphs | Lists | Variation |");
-  L.push("|---|---|---|---|---|---|---|");
-  // A dash where the corpus could not answer. A number nobody can source is worse than a gap.
-  const n = (v) => (v == null ? "—" : v);
-  for (const r of m.report) {
-    L.push(`| ${r.name} | ${r.posts_measured} | ${r.median_words} | ${n(r.above_fold_words_median)} | ` +
-      `${n(r.paragraphs_median)} | ${Math.round(r.list_rate * 100)}% | ${r.sd_median} |`);
-  }
-  L.push("");
-  L.push(`_Measured ${m.measured_at.slice(0, 10)} across ${m.accounts} accounts and ${m.posts} posts. ` +
-    `Their words are not stored anywhere in this system._`);
-  if (m.shape_basis != null && m.shape_basis < m.posts) {
-    L.push("");
-    L.push(`_Above-fold and paragraph counts come from the ${m.shape_basis} of those posts that still ` +
-      `had their line breaks when they were collected. A dash means the rest of that row could not be ` +
-      `measured, rather than measuring as one long paragraph._`);
-  }
-  L.push("");
-  L.push(END);
-  return L.join("\n");
-}
-
 /* ── Database ─────────────────────────────────────────────────────────────── */
 
 function credentials() {
@@ -285,6 +265,202 @@ function credentials() {
   const url = field("SUPABASE_URL"), key = field("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !key) { console.error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY."); process.exit(2); }
   return { url: url.replace(/\/+$/, ""), key };
+}
+
+/* ── Re-propose the span from the measurement already stored ──────────────── */
+
+/**
+ * WHY THIS PATH EXISTS, AND WHY IT MEASURES NOTHING.
+ *
+ * On 28 October the section's PROSE had to be corrected and the measurement had not changed. There
+ * was no way to do that:
+ *
+ *   `--posts <file> --apply` re-measures. The 1,899-post scrape of 20 October is not on disk — the
+ *   only files left are 112 posts and a 70-post one whose line breaks the scrape had stripped — so
+ *   it would have measured a smaller corpus, written it over `latest.json` as the new baseline, and
+ *   then found no material change and opened no proposal at all. Worse than nothing twice over.
+ *
+ *   `refresh_sentinels` measures from the stored corpus and would have worked, and it is an edge
+ *   function: it reaches Josh only once it is deployed, which is a separate decision.
+ *
+ *   The seeder writes `library_sections` directly, and it seeds at v1.0 — four of his sections have
+ *   moved past it, so `--apply` there reverts four to correct one.
+ *
+ * So: compose the span from the stored measurement, propose it, and touch neither the measurement
+ * nor the library. It re-measures nothing, writes no file, and cannot change a number — by
+ * construction, because it never sees a post. Clause 12.10 is where it always was: this writes one
+ * row to `library_proposals` and the section waits for Josh.
+ */
+if (REPROPOSE) {
+  const latestPath = join(DIR, "latest.json");
+  if (!existsSync(latestPath)) {
+    console.error("\n  No stored measurement. Run with --posts <scrape.json> --apply first.\n");
+    process.exit(2);
+  }
+  const stored = JSON.parse(readFileSync(latestPath, "utf8"));
+  const span = measurementSpan(stored);
+
+  const { url, key } = credentials();
+  const headers = { apikey: key, Authorization: "Bearer " + key, "Content-Type": "application/json" };
+
+  const [section] = await (await fetch(
+    url + "/rest/v1/library_sections?select=key,body,version&key=eq.reference_posts", { headers },
+  )).json();
+  if (!section) { console.error("\n  No reference_posts section.\n"); process.exit(1); }
+
+  let body = removeWriterReads(spliceSpan(section.body, span));
+  let rebuilt = false;
+  if (refusals(body).length) {
+    body = referencePostsBody(span);
+    rebuilt = true;
+  }
+
+  const found = refusals(body);
+  if (found.length) {
+    console.error("\n  REFUSING to propose this body:\n");
+    console.error(describeRefusals(found));
+    console.error("");
+    process.exit(1);
+  }
+  if (body.length > SECTION_BUDGET) {
+    console.error(`\n  REFUSING: ${body.length} characters, over the ${SECTION_BUDGET} budget.\n`);
+    process.exit(1);
+  }
+
+  console.log("\n  Re-propose reference_posts from the stored measurement\n");
+  console.log("  " + "─".repeat(66));
+  console.log(`  measured ${String(stored.measured_at).slice(0, 10)} — not re-measured here`);
+  console.log(`  v${section.version}: ${section.body.length} chars -> ${body.length} chars` +
+    `${rebuilt ? " (prose rebuilt, it still carried a count outside the markers)" : ""}`);
+  console.log(`  within the ${SECTION_BUDGET} budget, nothing addressed to Josh, no changelog`);
+
+  if (!APPLY) {
+    console.log("\n" + body + "\n");
+    console.log("  Dry run. No proposal opened.\n");
+    process.exit(0);
+  }
+
+  /*
+   * THE CLAIM LEADS WITH THE FACT THAT HE ALREADY REPORTED TWO OF THESE.
+   *
+   * His own approval note on version 8, 21 October: "Approved knowing three errors are outstanding
+   * and going to Naga: the 9% ask figure leaves out pitches in a P.S., 'second fewest above the
+   * fold' is wrong (he is fifth), and the intro still says Adam Treboutat returned no posts."
+   *
+   * Two of those were still live eight days later. He told us, we wrote down that he told us, and
+   * the section did not change — because the sentences were above the marker and no refresh could
+   * reach them. That is the honest framing and it is the strongest thing in this proposal: not "we
+   * found some stale text" but "you reported this and it sat there". It goes first.
+   */
+  const claim =
+    "You reported two of these yourself. Your note approving version 8 on 21 October said " +
+    "'second fewest above the fold' is wrong (he is fifth)' and 'the intro still says Adam " +
+    "Treboutat returned no posts'. Both were still live eight days later, because those sentences " +
+    "sat ABOVE the measurement marker and both refreshers preserve everything above it as yours — " +
+    "so no refresh could reach them however many times it ran. That is the defect; the stale " +
+    "sentences were the symptom. " +
+    "A factual correction, not a change to any rule of yours. The section contradicted itself " +
+    "inside one row: the prose said 59 posts across 7 accounts collected on 7 September and that " +
+    `adam-treboutat had returned nothing, four lines above a table of ${stored.posts} posts ` +
+    `across ${stored.accounts} accounts with 250 of his measured — and compare_to_references has ` +
+    "been ranking him on those 250 all along, so the tool was right and the prose was stale. The " +
+    "marker has moved up, so every count is now derived at refresh time and no sentence stating a " +
+    "quantity is left where a refresh cannot reach it. Also corrected: the Ryan Carlin figures in " +
+    "the scene/cut split (6/28/19, measured 8/23/21), the three cut writers that are now four, and " +
+    "the three corroborating fractions, which were counted over the 1,839 posts that kept their " +
+    "line breaks and printed over all 1,899. " +
+    "RESTORED, NOT CHANGED: four passages of your own reasoning were destroyed rather than " +
+    "removed — 'There is no house length', 'Sentence-length variation', 'Two structural modes' " +
+    "and 'The closest structural match'. All four were inside the measurement markers when the " +
+    "20 October refresh rewrote that span, so a mechanism built to replace numbers replaced " +
+    "argument, and nobody decided to. Two of them were load-bearing. 'Do not let a target length " +
+    "near the drafter' is the sentence that stops a drafter aiming at a median. And the " +
+    "sentence-length passage carried your 9-12 range for sentence variation, which we grepped the " +
+    "whole system for: it exists in NO other copy anywhere — not the library, not a script, not a " +
+    "comment, not data/josh. One record of what a draft of yours should aim at, deleted by a " +
+    "refresh, eight days before three of six drafters were handed the measured band with nothing " +
+    "about whether to hit it. You are approving the restoration of a number nothing else holds. " +
+    "All four are back as prose that states no corpus count, with their figures read off the " +
+    "table instead of typed — except 9-12 itself, which is kept verbatim because it is your " +
+    "judgement about your own voice rather than a measurement: the measured figures move on every " +
+    "refresh and your preference does not move with them. Nobody deleted any of this and you are " +
+    "approving a restoration, not a new rule. " +
+    "The 8,287-character Matt Barker read moves to its own section that no drafting brief reads — " +
+    "it was shipping on every brief whichever writer was named, and on one with no writer named at " +
+    "all. That is proposal 22. No rule of yours is touched by either.";
+
+  /*
+   * One open proposal per section, the rule maintenance.ts already applies and for the reason its
+   * own comment gives: "a proposal he does not act on teaches him to stop reading them". An
+   * existing open one is refreshed rather than stacked.
+   */
+  const open = await (await fetch(
+    url + "/rest/v1/library_proposals?section_key=eq.reference_posts&status=eq.open" +
+      "&order=id.asc&limit=1", { headers },
+  )).json();
+
+  const evidence = {
+    kind: "section_prose_correction",
+    measured_at: stored.measured_at,
+    posts: stored.posts,
+    accounts: stored.accounts,
+    shape_basis: stored.shape_basis,
+    // Named in Josh's own note approving version 8 on 2026-10-21, and still live on 2026-10-28.
+    he_reported_these_himself: [
+      "'second fewest above the fold' is wrong (he is fifth)",
+      "the intro still says Adam Treboutat returned no posts",
+    ],
+    corrected: [
+      "59 posts across 7 accounts, 7 September 2026 -> derived from the stored measurement",
+      "adam-treboutat returned zero posts -> 250 measured, 249 with line breaks",
+      "Ryan Carlin 6 words / 28 above fold / 19 paragraphs -> 8 / 23 / 21",
+      "three cut writers -> four, adam-treboutat joined them",
+      "Matt Barker 'second fewest above the fold' -> fifth, now a derived rank",
+      "opens_with_question printed over posts (1899) -> over totals.of (1839), which is what it counts",
+      "'92% of the writers he chose' -> 92% of those posts; it was a share of posts, not of writers",
+      "Matt Barker read (8,287 chars) -> section reference_writer_reads, in no view",
+    ],
+    // Destroyed by the 20 October refresh rather than removed by anyone: they were inside the
+    // markers, so the span that replaces numbers replaced argument.
+    restored: [
+      "There is no house length — 'do not let a target length near the drafter'",
+      "Sentence-length variation — his 9-12 target range, which existed in no other copy anywhere " +
+        "in the system; the only record of it, deleted by the 20 October refresh",
+      "Two structural modes, and they do not mix — now derived, four cut writers not three",
+      "The closest structural match, and the furthest",
+    ],
+    // Grepped 2026-10-28 across the library, scripts, comments and data/josh: no second copy.
+    restored_and_held_nowhere_else: ["9-12, the sentence-length variation target"],
+    re_measured: false,
+  };
+
+  const res = open.length
+    ? await fetch(url + `/rest/v1/library_proposals?id=eq.${open[0].id}`, {
+      method: "PATCH",
+      headers: { ...headers, Prefer: "return=representation" },
+      body: JSON.stringify({ claim, evidence, proposed_body: body }),
+    })
+    : await fetch(url + "/rest/v1/library_proposals", {
+      method: "POST",
+      headers: { ...headers, Prefer: "return=representation" },
+      body: JSON.stringify({
+        section_key: "reference_posts",
+        claim,
+        evidence,
+        proposed_body: body,
+        status: "open",
+      }),
+    });
+
+  if (!res.ok) {
+    console.error("\n  proposal failed: " + res.status + " " + (await res.text()).slice(0, 300));
+    process.exit(1);
+  }
+  const [row] = await res.json();
+  console.log(`\n  proposal #${row.id} ${open.length ? "refreshed" : "opened"} against ` +
+    "reference_posts");
+  console.log("  Nothing has changed in the library. It waits for Josh (12.10).\n");
+  process.exit(0);
 }
 
 /* ── Main ─────────────────────────────────────────────────────────────────── */
@@ -342,7 +518,7 @@ if (d.first_run) {
   }
 }
 
-const newBlock = block(next);
+const newBlock = measurementSpan(next);
 const leak = posts.find((p) => {
   const s = (p.text ?? "").trim().slice(0, 40);
   return s.length >= 40 && (newBlock + JSON.stringify(next)).includes(s);
@@ -382,10 +558,64 @@ if (!section?.body?.includes(START)) {
   process.exit(1);
 }
 
-const proposedBody =
-  section.body.slice(0, section.body.indexOf(START)) +
-  newBlock +
-  section.body.slice(section.body.indexOf(END) + END.length);
+/*
+ * THREE THINGS HAPPEN HERE, AND THE ORDER MATTERS.
+ *
+ * The span is spliced — unchanged behaviour, now through one shared function so the edge function
+ * cannot splice a differently-composed block into the same markers.
+ *
+ * Then one writer's structural read is cut out. 8,287 of version 8's 10,924 characters were Matt
+ * Barker's shape, spliced in BELOW the span on 20 October by matt-barker-structure.mjs, where no
+ * refresh could reach it — and shipped on every drafting brief whichever handle was passed. A
+ * control run with no handle read it as its shape target, which is Josh's complaint that "the
+ * default framework gets used anyway" arriving as the mechanism rather than the symptom. It moves to
+ * its own section, which is in no view; nothing load-bearing is lost, because a named writer's shape
+ * reaches a drafter through writerShapeBlock and his one exclusion is hardcoded beside it.
+ *
+ * Then the refusals, on the body as it would be STORED rather than on the block alone — because
+ * every failure this closes was in the prose around the block, not in the block.
+ */
+/*
+ * SPLICE WHERE THE PROSE IS SOUND, REBUILD IT WHERE IT IS NOT.
+ *
+ * Splicing the span and preserving everything around it is the right default and is the 20 October
+ * behaviour: the prose outside the markers is Josh's to write. It is also exactly how this section
+ * came to contradict itself, because the prose outside the markers was carrying counts no splice
+ * could reach.
+ *
+ * So the refusals decide. If the body as spliced still states a quantity outside the markers then
+ * the prose is the stale half, and preserving it is the bug rather than the courtesy — so the
+ * invariant prose is rebuilt from the one definition in `_shared/library-spans.ts`. If it does not,
+ * nothing outside the span is touched.
+ *
+ * It cannot be done by reseeding instead. `scripts/load-josh-library.mjs` seeds the library at
+ * v1.0 and four of Josh's sections have moved past it — audience v7, closes v6, gate_rules v5,
+ * formatting v4 — so `--apply` there would revert four sections in order to correct one.
+ */
+let proposedBody = removeWriterReads(spliceSpan(section.body, newBlock));
+let rebuilt = false;
+
+if (refusals(proposedBody).length) {
+  proposedBody = referencePostsBody(newBlock);
+  rebuilt = true;
+  console.log("\n  The prose outside the markers still states a count, so it is the stale half.");
+  console.log("  Rebuilding it from the one definition rather than preserving it.");
+}
+
+const found = refusals(proposedBody);
+if (found.length) {
+  console.error("\n  REFUSING to propose this body:\n");
+  console.error(describeRefusals(found));
+  console.error("");
+  process.exit(1);
+}
+if (proposedBody.length > SECTION_BUDGET) {
+  console.error(`\n  REFUSING: ${proposedBody.length} characters, over the ${SECTION_BUDGET} ` +
+    `budget for a section that ships on every drafting brief.\n`);
+  process.exit(1);
+}
+console.log(`  ${proposedBody.length} characters, within the ${SECTION_BUDGET} budget, ` +
+  `no count outside the markers${rebuilt ? ", prose rebuilt" : ""}`);
 
 const res = await fetch(url + "/rest/v1/library_proposals", {
   method: "POST",

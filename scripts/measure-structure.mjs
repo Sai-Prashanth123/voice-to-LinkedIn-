@@ -210,8 +210,27 @@ const turns = rows.map((r) => r.turn).filter((t) => t != null);
 console.log(`\n  Structure of the reference writers — sentence-wise\n`);
 console.log(`  ${rows.length} posts, ${new Set(rows.map((r) => r.handle)).size} writer(s).`);
 console.log(`  ${withBreaks} of ${rows.length} have line breaks (${pct(withBreaks, rows.length)}).`);
+/*
+ * WHICH DENOMINATOR THIS SCRIPT USES, SAID OUT LOUD.
+ *
+ * The rule the library now states, and the four quantities it disambiguates, are in the header of
+ * `supabase/functions/_shared/library-spans.ts`: a claim about shape counts over the posts that kept
+ * their line breaks, a claim about how many posts exist counts over all of them.
+ *
+ * THIS SCRIPT IS THE ONE EXCEPTION, AND IT IS THE REASON THE RULE NEEDS AN EXCEPTION CLAUSE.
+ *
+ * Every figure here is read from SENTENCES, and sentence boundaries survive a scrape that lost the
+ * paragraph breaks. So these count over every stored post — correctly — which is why the Matt Barker
+ * read quotes "180 of his 250 stored posts" for the turn and "99 of the 241 that kept their line
+ * breaks" for the close, on the same page. Two denominators, both right, and for eight days neither
+ * said which it was. Printed here so anyone quoting a number off this output quotes it with its
+ * basis attached.
+ */
 console.log(`  Every number below is measured from sentences, so the scrape's missing line breaks`);
-console.log(`  do not affect it. Not comparable with the stored opening_shape/close_shape columns.\n`);
+console.log(`  do not affect it, and all ${rows.length} posts are in every figure — including the`);
+console.log(`  ${rows.length - withBreaks} that arrived flat. That makes these the ONE set of figures here counted over`);
+console.log(`  every stored post rather than over the shape basis; quote them with that attached.`);
+console.log(`  Not comparable with the stored opening_shape/close_shape columns.\n`);
 
 console.log(`  HOW THEY OPEN  (first sentence)\n`);
 console.log(table(tally(rows, (r) => r.opening), rows.length));

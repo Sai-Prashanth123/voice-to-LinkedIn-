@@ -61,29 +61,50 @@ for (const p of posts) {
     ...measurePost(p.text),
     reactions: p.reaction_count ?? 0,
     posted_at: p.posted_at,
+    // Whether this post's shape can be measured at all. See the note in the roll-up below.
+    has_breaks: String(p.text ?? "").includes("\n"),
   });
 }
 
 const report = [];
 for (const [handle, { name, rows }] of [...byHandle].sort((a, b) => a[0].localeCompare(b[0]))) {
   const dates = rows.map((r) => r.posted_at).filter(Boolean).sort();
+  /*
+   * THE LINE-DERIVED MEASURES NEED THE LINE BREAKS, AND THIS SCRIPT WAS NOT CHECKING.
+   *
+   * `sentinel-refresh.mjs` learned this on 5 October and carries a long comment about it: a scrape
+   * that returns each post as one unbroken line collapses `paragraphs` and `above_fold_words` to
+   * one, makes `openingShape` classify the whole post as its own first line, and makes `uses_list`
+   * go false on a writer who bullets nearly every post. The refresh reported all of that as seven
+   * writers changing their habits; it was the scraper.
+   *
+   * This script is the older, standalone one that prints and writes nothing, so it never got the
+   * fix and would still reproduce the artefact exactly — against the same corpus, with the same
+   * field names, printed as though comparable. Same rule here now: length and rhythm survive a
+   * lost line break and are measured over every post; everything read from a line is measured over
+   * the posts that kept theirs, and `shape_basis` says how many that was.
+   */
+  const shaped = rows.filter((r) => r.has_breaks);
+  const shapeOf = (fn) => (shaped.length ? median(shaped.map(fn)) : null);
   report.push({
     handle,
     name,
     posts_measured: rows.length,
+    /** How many of this writer's posts the shape measures below actually rest on. */
+    shape_basis: shaped.length,
     window: dates.length ? { from: dates[0].slice(0, 10), to: dates[dates.length - 1].slice(0, 10) } : null,
     length_words: {
       median: median(rows.map((r) => r.words)),
       min: Math.min(...rows.map((r) => r.words)),
       max: Math.max(...rows.map((r) => r.words)),
     },
-    above_fold_words_median: median(rows.map((r) => r.above_fold_words)),
-    opening_words_median: median(rows.map((r) => r.opening_words)),
-    paragraphs_median: median(rows.map((r) => r.paragraphs)),
-    opening_shapes: tally(rows.map((r) => r.opening_shape)),
-    close_shapes: tally(rows.map((r) => r.close_shape)),
-    uses_a_list: rows.filter((r) => r.uses_list).length + "/" + rows.length,
-    colon_lines_median: median(rows.map((r) => r.colon_lines)),
+    above_fold_words_median: shapeOf((r) => r.above_fold_words),
+    opening_words_median: shapeOf((r) => r.opening_words),
+    paragraphs_median: shapeOf((r) => r.paragraphs),
+    opening_shapes: shaped.length ? tally(shaped.map((r) => r.opening_shape)) : null,
+    close_shapes: shaped.length ? tally(shaped.map((r) => r.close_shape)) : null,
+    uses_a_list: shaped.length ? shaped.filter((r) => r.uses_list).length + "/" + shaped.length : null,
+    colon_lines_median: shapeOf((r) => r.colon_lines),
     links: rows.filter((r) => r.has_link).length + "/" + rows.length,
     sentence_words: {
       mean_of_means: median(rows.map((r) => r.sentence_words_mean)),

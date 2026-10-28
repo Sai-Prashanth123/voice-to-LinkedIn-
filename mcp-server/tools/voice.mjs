@@ -31,6 +31,7 @@ import { renderLibrary } from "../../supabase/functions/_shared/views.ts";
 // The ninth gate check's own target function. Imported rather than reimplemented so the number a
 // draft is written to and the number it is judged against cannot differ.
 import { writerShapeTargets } from "../../supabase/functions/_shared/shape.ts";
+import { splitModes } from "../../supabase/functions/_shared/library-spans.ts";
 import { shapedWriterRows } from "../shape-rows.mjs";
 // The clean handle-to-name map. The scrape's own author_name carries whatever the writer has in
 // their profile — outboundphd's is stored as "🦾Eric Nowoslawski", and it reached a drafting brief
@@ -55,7 +56,14 @@ export function medianWordRange(rows) {
   return { low: Math.min(...xs), high: Math.max(...xs) };
 }
 
-const SCENE = new Set(["demandjen1", "juliacarter98", "outboundphd", "mattjbarker1"]);
+/*
+ * Derived, for the reasons spelled out at the matching set in `tools/measure.mjs`: the hardcoded
+ * copy said "the other three are the cut" when there are four, and cited a passage in the
+ * reference_posts section that the 20 October refresh had already deleted.
+ *
+ * Two copies of a judgement is how they come to disagree, so both now read the same function.
+ */
+const SCENE = new Set(splitModes(sentinels.report ?? []).scene.map((r) => r.handle));
 
 /** The display name, from the handle map rather than from the scrape. Never emoji. */
 export const writerName = (handle) =>
@@ -933,9 +941,12 @@ export const sentinelTools = [
             "whatever he has read in the meantime. get_reference_posts returns the posts themselves " +
             "for him to study.",
           the_split:
-            "The scene/cut split is a judgement recorded in the reference_posts library section, " +
-            "not something the numbers decided. measure_draft compares rhythm against the scene " +
-            "four only, because the other three are a different kind of post.",
+            `The scene/cut split is derived from the corpus's own median above-fold figures, which ` +
+            `divide the two modes with a clear gap rather than at a chosen threshold. ` +
+            `measure_draft compares rhythm against the ${SCENE.size} scene writers only, because ` +
+            `the other ${(sentinels.report ?? []).length - SCENE.size} are a different kind of ` +
+            `post. Both counts are read off the measurement: this sentence said "the other three" ` +
+            `until 28 October, by which time a fourth had joined them.`,
           not_a_target:
             `A range is what ${sentinels.report.length} people who all work happen to do. Their ` +
             `medians run from ${RANGE.low} to ${RANGE.high} words and every one of them works, so ` +

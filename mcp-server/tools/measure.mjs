@@ -42,6 +42,9 @@ import {
 } from "../../supabase/functions/_shared/shape.ts";
 import { corpusBand, medianWordRange, writerTarget } from "./voice.mjs";
 import { WRITER_CHOICES } from "../writers.mjs";
+// Import-free and type-stripped by Node, the shape.ts pattern — so this stays a tool that makes no
+// database call and no network call, which guards.test.mjs asserts by handing it an empty context.
+import { splitModes } from "../../supabase/functions/_shared/library-spans.ts";
 import voiceprint from "../../data/josh/law/voiceprint.json" with { type: "json" };
 import sentinels from "../../data/josh/sentinels/latest.json" with { type: "json" };
 
@@ -60,14 +63,31 @@ const MEASURED = sentinels.posts ??
 const WRITERS = (sentinels.report ?? []).length;
 
 /**
- * The four reference writers whose STRUCTURE matches what Josh's own rules describe — long, prose
- * rather than bullets, a scene before the fold. The other three are "the cut": very short openers,
- * heavy lists, everything below the fold. Both are in the corpus; only one is a useful comparison.
+ * The reference writers whose STRUCTURE matches what Josh's own rules describe — long, prose rather
+ * than bullets, a scene before the fold. The rest are "the cut": very short openers, heavy lists,
+ * everything below the fold. Both are in the corpus; only one is a useful comparison.
  *
- * Named here rather than derived because the split is a judgement recorded in the reference_posts
- * library section, not something the measurements decide on their own.
+ * DERIVED, AFTER TWO SEPARATE WAYS OF BEING WRONG ABOUT IT.
+ *
+ * This was a hardcoded set of four handles, and the comment said the split was "a judgement
+ * recorded in the reference_posts library section". Two things were wrong with that on 28 October:
+ *
+ *   1. It said "the other three are the cut". There are FOUR — `adam-treboutat` joined them when
+ *      the corpus went from seven accounts to eight, and nothing updated the sentence.
+ *   2. THE PASSAGE IT CITED NO LONGER EXISTED. The 20 October measurement refresh rewrote the whole
+ *      span between the markers in that section, and the scene/cut justification was inside it. So
+ *      a refresh built to replace numbers replaced the argument, and this comment pointed at a
+ *      deleted paragraph for the better part of a month.
+ *
+ * So the set is now computed from the corpus's own median above-fold figures, which separate the two
+ * modes with a clear gap (cut 20, 21, 23, 23; scene 39, 55.5, 63, 66). That is not a chosen
+ * threshold: it is where the measurement already divides. `library-spans.test.ts` asserts the
+ * derived roster still equals the four handles recorded in the section, so CI says so the day the
+ * corpus moves it rather than the day somebody notices a stale sentence.
  */
-const SCENE_WRITERS = new Set(["demandjen1", "juliacarter98", "outboundphd", "mattjbarker1"]);
+const SCENE_WRITERS = new Set(
+  splitModes(sentinels.report ?? []).scene.map((r) => r.handle),
+);
 
 function band(handles) {
   const values = (sentinels.report ?? [])

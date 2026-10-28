@@ -35,6 +35,19 @@ export const DRAFTING_SECTIONS = [
   // facts: 9.4 has no exception for it, and the claim ledger will not find a source span here.
   "voice_transcript",
   // 8.3 — structure borrowed from other writers, and nothing else about them.
+  //
+  // `reference_writer_reads` is DELIBERATELY NOT HERE, and it is the one absence in this file worth
+  // explaining. A deep structural reading of Matt Barker was spliced into `reference_posts` on
+  // 20 October: 8,287 of that section's 10,924 characters, one writer's shape, shipped on every
+  // brief this list produces — whichever handle had been passed, and whether one had been passed at
+  // all. A control run with no handle read it as its shape target. That is Josh's complaint that
+  // "the default framework gets used anyway" as a mechanism rather than a symptom, and it made the
+  // cadence 8.3 names as likeliest to leak into the default.
+  //
+  // It moved to its own key (migration 0057), and the protection is that this is an ALLOWLIST: a key
+  // in no view reaches no prompt, so nothing has to be maintained for it to stay out. A named
+  // writer's shape reaches a drafter through `writerShapeBlock`, which asks for the handle, with his
+  // exclusions in the same object. Adding the key here would undo all of that in one line.
   "reference_posts",
   "banned_phrases",
   "formatting",

@@ -25,6 +25,23 @@ import { storeVisual } from "../_shared/handlers/visual.ts";
 // Deno reads this Node module as-is, the way the mcp function reads mcp-server/.
 // @ts-types="./prose-types.d.ts"
 import { measurePost, median, tally } from "../../../scripts/lib/prose.mjs";
+/*
+ * The one composer of the measured span. This file used to carry its own copy of it, and the copy
+ * had already drifted on the thing a reader cannot check: it reported the three corroborating
+ * fractions over `totals.of` — the posts that kept their line breaks — where
+ * scripts/sentinel-refresh.mjs reported the identical sentence over every stored post. Same claim,
+ * same section, a different number depending on which door ran last. See the header of library-spans.ts.
+ */
+import {
+  describeRefusals,
+  measurementSpan,
+  refusals,
+  removeWriterReads,
+  SECTION_BUDGET,
+  spliceSpan,
+  START,
+  END,
+} from "../_shared/library-spans.ts";
 
 type Body = Record<string, unknown>;
 
@@ -226,13 +243,18 @@ export async function refreshSentinels(db: SupabaseClient, _body: Body): Promise
    * is NOT NULL — and the database was right. Josh approves a proposal by agreeing to a body; one
    * with nothing in it is a question dressed as a decision.
    *
-   * So the measurement block is composed here and spliced between the same two markers
-   * `scripts/sentinel-refresh.mjs` uses, leaving every word of the section he has written himself
-   * untouched. If the markers are missing, this refuses rather than appending to the end and hoping.
+   * THE SPAN IS NO LONGER COMPOSED HERE, AND THAT IS THE FIX.
+   *
+   * It was, in a hand-copy of scripts/sentinel-refresh.mjs's `block()` that neither file mentioned.
+   * The two disagreed about the denominator of the identical sentence, so the same corpus produced a
+   * different section depending on which door ran. Both now call `measurementSpan`.
+   *
+   * What also changed is WHERE the markers sit. They used to begin below the prose describing the
+   * measurement, and the comment that stood here said this left "every word of the section he has
+   * written himself untouched" — which was true, and was exactly how version 8 came to say an
+   * account had returned nothing above a table of 250 of its posts. The span now starts above that
+   * prose, so there is no sentence left outside it for a refresh to fail to reach.
    */
-  const START = "<!-- sentinel-measurements:start -->";
-  const END = "<!-- sentinel-measurements:end -->";
-
   const { data: section } = await db
     .from("library_sections")
     .select("body")
@@ -245,52 +267,37 @@ export async function refreshSentinels(db: SupabaseClient, _body: Body): Promise
       error: "The reference section has no measurement markers, so there is nowhere to put the " +
         "numbers without overwriting something Josh wrote.",
       measurement,
-      next: "Run scripts/sentinel-refresh.mjs, which reports the same figures and can rebuild the block.",
+      next: "Run scripts/load-josh-library.mjs --apply, which reseeds the section with the markers.",
     }, 409);
   }
 
-  const n = (v: number | null) => (v == null ? "—" : v);
-  const block = [
-    START,
-    "",
-    "## The finding that matters most",
-    "",
-    `**Almost nobody opens with a question. ${measurement.totals.opens_with_question} of ` +
-    `${measurement.totals.of} posts do.**`,
-    "",
-    "Josh's hook rule — a question may close a hook, never start one — is not a stylistic preference.",
-    "It is what most of the writers he chose already do.",
-    "",
-    `- **${measurement.totals.engagement_asks} of ${measurement.totals.of} ask for engagement.**`,
-    `- **${measurement.totals.direct_asks} of ${measurement.totals.of} carry a direct ask.**`,
-    "",
-    "## Per account",
-    "",
-    "| Account | Posts | Median words | Above fold | Paragraphs | Lists | Variation |",
-    "|---|---|---|---|---|---|---|",
-    ...report.map((r) =>
-      `| ${r.name} | ${r.posts_measured} | ${r.median_words} | ${n(r.above_fold_words_median)} | ` +
-      `${n(r.paragraphs_median)} | ${r.list_rate == null ? "—" : Math.round(r.list_rate * 100) + "%"} | ` +
-      `${r.sd_median} |`
-    ),
-    "",
-    `_Measured ${measurement.measured_at.slice(0, 10)} across ${measurement.accounts} accounts and ` +
-    `${measurement.posts} posts._`,
-    ...(shapedAll.length < posts.length
-      ? [
-        "",
-        `_Above-fold, paragraph and list figures rest on the ${shapedAll.length} posts that still had ` +
-        `their line breaks when collected. A dash means that row could not be measured, rather than ` +
-        `measuring as one long paragraph._`,
-      ]
-      : []),
-    "",
-    END,
-  ].join("\n");
+  let proposedBody: string;
+  try {
+    proposedBody = removeWriterReads(spliceSpan(current, measurementSpan(measurement)));
+  } catch (e) {
+    return json({ error: (e as Error).message, measurement }, 409);
+  }
 
-  const proposedBody = current.slice(0, current.indexOf(START)) +
-    block +
-    current.slice(current.indexOf(END) + END.length);
+  /*
+   * The same three refusals the scripts run, on the body as it would be STORED.
+   *
+   * Not a duplicate of the test: this is the one that fires in Josh's own session, against the
+   * section as it actually is rather than as the seed describes it. A number outside the markers,
+   * prose addressed to him in a section a drafter reads, or the section narrating its own history —
+   * each was live in version 8 after someone careful had looked at it.
+   */
+  const found = refusals(proposedBody);
+  if (found.length || proposedBody.length > SECTION_BUDGET) {
+    return json({
+      error: "The measured section would carry something it is not allowed to carry, so no " +
+        "proposal was opened.",
+      refused: found.length ? describeRefusals(found) : null,
+      characters: proposedBody.length,
+      budget: SECTION_BUDGET,
+      measurement,
+      next: "Run scripts/load-josh-library.mjs --apply to reseed the prose, then ask again.",
+    }, 409);
+  }
 
   /*
    * ONE OPEN PROPOSAL PER SECTION, NOT ONE PER ASKING.
