@@ -1,0 +1,214 @@
+{
+  "exported_at": "2026-10-28T06:53:29.342Z",
+  "project": "uzqvebxcxgmseqjhfpku",
+  "format": "jsonl — one JSON object per line, ordered by primary key, so a diff is readable",
+  "tables": [
+    {
+      "table": "settings",
+      "order": "key",
+      "rows": 31,
+      "bytes": 5909,
+      "why": "one_step_mode lives here, and 30 other decisions"
+    },
+    {
+      "table": "library_sections",
+      "order": "key",
+      "rows": 15,
+      "bytes": 65750,
+      "why": "THE STANDARD. Without this nothing can judge"
+    },
+    {
+      "table": "library_versions",
+      "order": "version",
+      "rows": 69,
+      "bytes": 22013,
+      "why": "what changed when"
+    },
+    {
+      "table": "reference_writer_posts",
+      "order": "activity_id",
+      "rows": 1900,
+      "bytes": 3538961,
+      "why": "the eight writers' 1,900 posts"
+    },
+    {
+      "table": "providers_seen",
+      "order": "provider",
+      "rows": 6,
+      "bytes": 1055,
+      "why": "which LLM providers have answered"
+    },
+    {
+      "table": "question_stats",
+      "order": "key",
+      "rows": 82,
+      "bytes": 38043,
+      "why": "which interview questions earn their place"
+    },
+    {
+      "table": "library_section_versions",
+      "order": "id",
+      "rows": 69,
+      "bytes": 167466,
+      "why": "every version of every section"
+    },
+    {
+      "table": "library_proposals",
+      "order": "id",
+      "rows": 15,
+      "bytes": 117302,
+      "why": "6 of these are waiting on his decision"
+    },
+    {
+      "table": "library_recordings",
+      "order": "id",
+      "rows": 2,
+      "bytes": 605,
+      "why": "his own recordings about the library"
+    },
+    {
+      "table": "moments",
+      "order": "id",
+      "rows": 111,
+      "bytes": 112471,
+      "why": "the idea bank: 111 of them"
+    },
+    {
+      "table": "conversation_state",
+      "order": "chat_id",
+      "rows": 4,
+      "bytes": 931,
+      "why": "where each conversation got to"
+    },
+    {
+      "table": "material",
+      "order": "moment_id",
+      "rows": 48,
+      "bytes": 72376,
+      "why": "the extracted ten fields. Drafting reads this"
+    },
+    {
+      "table": "moment_names",
+      "order": "id",
+      "rows": 43,
+      "bytes": 7632,
+      "why": "names he gave, and names needing clearance"
+    },
+    {
+      "table": "interview_turns",
+      "order": "id",
+      "rows": 198,
+      "bytes": 60272,
+      "why": "198 turns, in his own words"
+    },
+    {
+      "table": "raw_inputs",
+      "order": "id",
+      "rows": 93,
+      "bytes": 87358,
+      "why": "what arrived before anything was made of it"
+    },
+    {
+      "table": "posts",
+      "order": "id",
+      "rows": 23,
+      "bytes": 30954,
+      "why": "23 posts"
+    },
+    {
+      "table": "drafts",
+      "order": "id",
+      "rows": 89,
+      "bytes": 356120,
+      "why": "89 drafts, with their gate verdicts"
+    },
+    {
+      "table": "selection_runs",
+      "order": "id",
+      "rows": 306,
+      "bytes": 115660,
+      "why": "what the selector chose and why"
+    },
+    {
+      "table": "notices",
+      "order": "id",
+      "rows": 55,
+      "bytes": 22032,
+      "why": "things that happened while nobody was looking"
+    },
+    {
+      "table": "chat_messages",
+      "order": "id",
+      "rows": 230,
+      "bytes": 65601,
+      "why": "the conversation itself"
+    },
+    {
+      "table": "gate_runs",
+      "order": "id",
+      "rows": 694,
+      "bytes": 288608,
+      "why": "694 per-check verdicts. The quality history"
+    },
+    {
+      "table": "outcomes",
+      "order": "post_id",
+      "rows": 6,
+      "bytes": 10094,
+      "why": "what happened after publishing"
+    },
+    {
+      "table": "visuals",
+      "order": "id",
+      "rows": 8,
+      "bytes": 56846,
+      "why": "8 renders"
+    },
+    {
+      "table": "sent_messages",
+      "order": "telegram_message_id",
+      "rows": 134,
+      "bytes": 16637,
+      "why": "what was sent, to avoid resending"
+    }
+  ],
+  "excluded": [
+    {
+      "table": "linkedin_auth",
+      "reason": "SECRET — OAuth tokens. Never committed, at any size."
+    },
+    {
+      "table": "telegram_access",
+      "reason": "SECRET — the chat ids ARE the access control."
+    },
+    {
+      "table": "slack_state",
+      "reason": "SECRET-adjacent, and empty. Per-channel state."
+    },
+    {
+      "table": "reference_shingles",
+      "reason": "REGENERABLE — 398,803 rows / 32 MB, derived from reference_writer_posts. Rebuild with: node scripts/build-reference-shingles.mjs"
+    },
+    {
+      "table": "moment_embeddings",
+      "reason": "NEEDS PGVECTOR — vector(1024), and the local build substitutes a domain over float8[] with no index and no dimension enforcement. Restoring 6 rows would imply a similarity search that is not really there."
+    },
+    {
+      "table": "llm_calls",
+      "reason": "LOG — what the system did, not what it is."
+    },
+    {
+      "table": "system_events",
+      "reason": "LOG — 3,948 rows of operational history."
+    },
+    {
+      "table": "jobs",
+      "reason": "LOG — the worker queue. A clone starts with an empty one."
+    },
+    {
+      "table": "published_archive",
+      "reason": "EMPTY — nothing has ever published."
+    }
+  ],
+  "restore": "node local/load.mjs   (after the migrations have been applied)"
+}

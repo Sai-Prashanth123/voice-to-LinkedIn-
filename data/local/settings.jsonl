@@ -1,0 +1,31 @@
+{"key":"candidate_age_out_days","value":45,"note":"7.6 - unmined candidates age quietly to parked","updated_at":"2026-08-23T14:41:57.389383+00:00"}
+{"key":"candidates_per_session","value":3,"note":"7.5 - only the strongest few raised in any one session","updated_at":"2026-08-23T14:41:57.389383+00:00"}
+{"key":"cc_candidates_per_day","value":3,"note":"4.4.3 - ten a day is worse than no version at all","updated_at":"2026-08-23T14:41:57.389383+00:00"}
+{"key":"conversation_max_asks","value":2,"note":"12.8 - how many passes a post's conversation question is raised in before it drops away, answered or not. Two: one ask is early for a DM that arrives late, three is nagging.","updated_at":"2026-08-26T12:29:30.289035+00:00"}
+{"key":"decay_warning_days","value":3,"note":"6.1 - how many days ahead the daily message names a moment that is about to decay, so a wrong guess can be corrected before it parks rather than discovered afterwards.","updated_at":"2026-08-26T14:42:44.544182+00:00"}
+{"key":"dedupe_block_similarity","value":0.7,"note":"7.2 hard block: repeating the anecdote. Calibrated on BAAI/bge-m3 - same-incident pairs score 0.71-0.79, same-theme pairs top out at 0.64. RE-CALIBRATE if the embedding model changes.","updated_at":"2026-08-23T14:41:57.389383+00:00"}
+{"key":"dedupe_thresholds_model","value":"BAAI/bge-m3","note":"7.2 - which embedding model the thresholds above were measured against. If embedding_model differs from this, the thresholds are guesses and the selector says so.","updated_at":"2026-08-26T11:05:12.240521+00:00"}
+{"key":"dedupe_warn_similarity","value":0.62,"note":"7.2 warn: same territory, different story. The drafter is told to take a different angle rather than blocked. Calibrated on BAAI/bge-m3.","updated_at":"2026-08-23T14:41:57.389383+00:00"}
+{"key":"desk_paused","value":true,"note":null,"updated_at":"2026-10-05T10:37:32.783688+00:00"}
+{"key":"desk_paused_reason","value":"The desk has been retired. Everything now runs through Claude Code.","note":null,"updated_at":"2026-10-05T10:37:32.783688+00:00"}
+{"key":"draft_delivery","value":"batched","note":"9.5 - \"batched\" (one digest listing what is ready) or \"immediate\" (a message per draft as it passes). Batched by default: a burst of ten from one selection run should be one message.","updated_at":"2026-08-26T11:29:50.198687+00:00"}
+{"key":"draft_digest_minutes","value":45,"note":"9.5 - how long a passing draft waits for others to join its digest. Short enough that a draft written just after a session still feels immediate.","updated_at":"2026-08-26T11:29:50.198687+00:00"}
+{"key":"embedding_dimensions","value":1024,"note":"7.2 - must match the vector() column width in migration 0018.","updated_at":"2026-08-26T10:51:49.179452+00:00"}
+{"key":"embedding_model","value":"BAAI/bge-m3","note":"7.2 - the model vectors are produced with. Changing it invalidates every stored vector.","updated_at":"2026-08-26T10:51:49.179452+00:00"}
+{"key":"gate_runs_in_claude","value":true,"note":null,"updated_at":"2026-10-05T10:36:06.006+00:00"}
+{"key":"interview_max_questions","value":8,"note":"5.8 - a session that runs to fifteen questions gets abandoned","updated_at":"2026-08-23T14:41:57.389383+00:00"}
+{"key":"max_unreviewed_drafts","value":6,"note":"7.3 - drafts Josh has not passed on yet do NOT count as queue depth, but they must not pile up either. At this many, selection stops and he is told there is a weekly pass waiting.","updated_at":"2026-08-26T10:51:49.179452+00:00"}
+{"key":"nudge_after_hours","value":36,"note":null,"updated_at":"2026-09-08T11:56:22.308171+00:00"}
+{"key":"nudge_enabled","value":true,"note":null,"updated_at":"2026-09-08T11:56:22.308171+00:00"}
+{"key":"nudge_max_listed","value":3,"note":null,"updated_at":"2026-09-08T11:56:22.308171+00:00"}
+{"key":"one_step_mode","value":true,"note":"Set to one_step on 2026-10-13 — Josh asked on 13 Oct: scrap the interview and the idea bank for the time being","updated_at":"2026-10-13T06:56:10.83+00:00"}
+{"key":"posts_per_week_target","value":4.5,"note":"clause 1 - quality wins over quantity, every time","updated_at":"2026-08-23T14:41:57.389383+00:00"}
+{"key":"queue_target_posts","value":10,"note":"7.3 - roughly two weeks of approved posts at 4-5/week","updated_at":"2026-08-23T14:41:57.389383+00:00"}
+{"key":"recency_spacing_weight","value":12,"note":"7.1 - how hard a candidate is pushed down for resembling what went out recently. Below the dedupe_warn threshold this is spacing, not a block.","updated_at":"2026-08-26T10:51:49.179452+00:00"}
+{"key":"seed_target","value":25,"note":"Cold start (clause 6) — mined moments to aim for before the system is tuned against real material","updated_at":"2026-08-26T10:09:03.746831+00:00"}
+{"key":"silence_alert_days","value":4,"note":"13.1 - the agreed number of days. CONFIRM WITH JOSH.","updated_at":"2026-08-23T14:41:57.389383+00:00"}
+{"key":"slack_enabled","value":false,"note":"4.5.2 - off by default until Josh says otherwise","updated_at":"2026-08-23T14:41:57.389383+00:00"}
+{"key":"stale_candidate_days","value":7,"note":"7.6 / 5.8 - the same, for candidates raised by the automatic inputs. Shorter, because these are what 7.6 is worried about accumulating in front of him.","updated_at":"2026-08-26T14:56:14.276224+00:00"}
+{"key":"stale_own_days","value":14,"note":"7.6 / 5.8 - days of silence before an unanswered interview on a moment JOSH created is closed off by taking what it has. Longer than a machine-raised candidate: he stopped his day to record it.","updated_at":"2026-08-26T14:56:14.276224+00:00"}
+{"key":"voice_guide_min_words","value":400,"note":"8.1 - words of transcript needed before the system will propose a voice guide built from it. Below this there is not enough of him talking to summarise honestly.","updated_at":"2026-08-26T15:07:42.346979+00:00"}
+{"key":"weekly_sweep_enabled","value":true,"note":null,"updated_at":"2026-09-22T07:38:28.671381+00:00"}

@@ -1,0 +1,6 @@
+{"provider":"deepgram","purposes":["transcription"],"first_seen_at":"2026-09-04T09:32:22.395555+00:00","last_seen_at":"2026-10-05T03:06:03.245174+00:00","announced_at":null}
+{"provider":"gemini","purposes":["drafting","visual"],"first_seen_at":"2026-09-01T10:13:58.820668+00:00","last_seen_at":"2026-10-28T03:24:53.269215+00:00","announced_at":null}
+{"provider":"groq","purposes":["drafting"],"first_seen_at":"2026-08-27T07:36:04.5421+00:00","last_seen_at":"2026-08-31T16:01:02.847608+00:00","announced_at":null}
+{"provider":"huggingface","purposes":["embeddings"],"first_seen_at":"2026-08-27T07:35:12.443776+00:00","last_seen_at":"2026-10-05T20:00:05.353558+00:00","announced_at":null}
+{"provider":"openrouter","purposes":["drafting"],"first_seen_at":"2026-09-16T11:33:09.918492+00:00","last_seen_at":"2026-09-19T04:39:08.697502+00:00","announced_at":"2026-09-17T08:00:05.803+00:00"}
+{"provider":"telegram","purposes":["messaging"],"first_seen_at":"2026-08-27T07:33:42.322099+00:00","last_seen_at":"2026-10-05T03:05:51.021221+00:00","announced_at":null}
