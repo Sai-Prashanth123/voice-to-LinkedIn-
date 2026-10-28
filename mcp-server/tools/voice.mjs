@@ -32,6 +32,7 @@ import { renderLibrary } from "../../supabase/functions/_shared/views.ts";
 // draft is written to and the number it is judged against cannot differ.
 import { writerShapeTargets } from "../../supabase/functions/_shared/shape.ts";
 import { splitModes } from "../../supabase/functions/_shared/library-spans.ts";
+import { FUNCTION_WORDS } from "../../scripts/lib/stopwords.mjs";
 import { shapedWriterRows } from "../shape-rows.mjs";
 // The clean handle-to-name map. The scrape's own author_name carries whatever the writer has in
 // their profile — outboundphd's is stored as "🦾Eric Nowoslawski", and it reached a drafting brief
@@ -192,6 +193,35 @@ export const voiceTools = [
       // silently blank — no error, just three empty strings where the voice guide should be.
       const { sections } = renderLibrary(rows, "drafting");
 
+      /*
+       * The peer list, filtered, and which of its entries the library has carved out.
+       *
+       * Computed here rather than inline in the return so the carve-out scan reads the same
+       * `sections` the rest of the brief is built from — one read of the library, one answer.
+       */
+      const peerWords = wordsOf(voiceprint.contrast?.peer_words_he_avoids)
+        .filter((w) => !FUNCTION_WORDS.has(w))
+        .slice(0, 25);
+      const allowedLines = String(sections.banned_phrases ?? "")
+        .split("\n")
+        .filter((l) => /^\s*-\s*(?:allowed|extends the)\b/i.test(l));
+      /*
+       * Matched as a WHOLE WORD, not as a substring.
+       *
+       * `includes` reported `ai` and `ads` as carved out, because "ai" sits inside "said" and "ads"
+       * inside "leads" in the allowed lines. Three words claimed where one is true — a loose match
+       * reporting more than it knows, which is the shape of defect this whole pass has been about.
+       *
+       * The trailing boundary is `(?![\w'’])` rather than `\b`, because `here's` ends in `s` and a
+       * plain `\b` would also match the `here'` of a longer token; and the leading one excludes an
+       * apostrophe so `here's` is not matched inside a word that ends with it.
+       */
+      const wholeWord = (w) =>
+        new RegExp(`(?<![\\w'’])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w'’])`, "i");
+      const carvedPeerWords = peerWords.filter((w) =>
+        allowedLines.some((l) => wholeWord(w).test(l))
+      );
+
       const sceneRows = (sentinels.report ?? []).filter((r) => SCENE.has(r.handle));
       const sds = sceneRows.map((r) => r.sd_median).sort((a, b) => a - b);
 
@@ -199,7 +229,56 @@ export const voiceTools = [
         transfers_from_speech: {
           what: "The lexicon and the surface habits.",
           signature_terms: wordsOf(voiceprint.contrast?.signature_terms).slice(0, 25),
-          peer_words_he_avoids: wordsOf(voiceprint.contrast?.peer_words_he_avoids).slice(0, 25),
+          /*
+           * FILTERED AT READ TIME, because the stored artefact still carries function words.
+           *
+           * `build-voiceprint.mjs`'s `contrast()` applies its stopword set to `signature_terms` and
+           * to the spoken filler, and applied NOTHING to `peer_words_he_avoids` — that list is
+           * purely rate-based (12+ occurrences in their corpus, and his rate under a third of
+           * theirs), and function words pass that trivially because written register uses more
+           * subordination and possessives than speech does. So the live list shows Josh `your`,
+           * `by`, `who`, `every`, `last`, `same`, `down` and `before` as "words the reference
+           * writers use far more than he does", which is true and useless.
+           *
+           * The filter is in the script now too, before its top-25 slice. But the artefact could
+           * not be regenerated: the 59-post September corpus it was computed from is not on disk,
+           * and the two scrapes that survive are different corpora, so a rebuild would SWAP the
+           * comparison rather than filter the list. Read-time filtering is the honest half.
+           *
+           * One consequence worth stating rather than hiding: the stored list was already cut to 25
+           * before any filter could run, so removing eight leaves SEVENTEEN. The missing slots are
+           * real peer words that were ranked 26th and below and are not recoverable without a
+           * regeneration. Seventeen true entries beat twenty-five with eight lies in them.
+           *
+           * `signature_terms` is deliberately NOT filtered with this set: `aitells.mjs`'s
+           * EXEMPTIONS cite four of those terms as evidence and a test asserts the citation.
+           */
+          peer_words_he_avoids: peerWords,
+          /*
+           * Derived from the live section, not written here, so it dies with the rule.
+           *
+           * A peer word is a MEASUREMENT — these writers use it more than he does, which is true of
+           * `here's`. But he added a carve-out to `banned_phrases` himself on 13 October allowing
+           * `here's my system:` as a lead-in to a list, in his own words, and a drafter reading this
+           * list without that caveat would avoid the exact construction he asked for.
+           *
+           * So any peer word that appears on an "Allowed" line of the live banned-phrases section is
+           * named here. If he withdraws the carve-out, the sentence disappears on the next read with
+           * no deploy — which is the same discipline `prefile.mjs` states for itself: this can only
+           * ever be NARROWER than the library, never broader.
+           *
+           * `measure_draft` suppresses the flag outright, but only when the body earns it — every
+           * occurrence inside the allowed phrase. That needs a body. This tool has none, so it
+           * states the caveat instead of acting on it.
+           */
+          ...(carvedPeerWords.length > 0 && {
+            peer_words_with_a_carve_out: carvedPeerWords,
+            peer_words_caveat:
+              `${carvedPeerWords.join(", ")} appears above as a peer word, and that measurement is ` +
+              `real — but the banned-phrases section carries a carve-out he wrote allowing a ` +
+              `specific construction using it. Read that section before avoiding it. A peer word is ` +
+              `a count, not a rule, and only he changes the rules (12.10).`,
+          }),
           em_dashes: voiceprint.surface?.em_dashes,
           i_vs_we: voiceprint.register?.i_vs_we,
           note: "He speaks as himself, not for a company. Em dashes are zero across 11,022 words " +
