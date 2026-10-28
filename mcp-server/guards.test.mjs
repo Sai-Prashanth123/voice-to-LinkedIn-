@@ -214,14 +214,42 @@ test("the turn detector is spelled once, and a draft can reach it", () => {
 });
 
 test("the gate is described as nine checks, because it is nine", () => {
-  // A ninth was added on 14 October. Every surface that still said eight was telling a reader —
-  // and a model — to stop at eight, which is how gate_passed stayed null for five days.
-  for (const file of [
-    "./instructions.mjs",
-    "./tools/brief.mjs",
-    "../README.md",
-  ]) {
-    const src = readFileSync(new URL(file, import.meta.url), "utf8");
+  /*
+   * A ninth was added on 14 October. Every surface that still said eight was telling a reader —
+   * and a model — to stop at eight, which is how gate_passed stayed null for five days.
+   *
+   * THIS TEST USED TO NAME THREE FILES, AND THE ENUMERATION WAS THE BUG.
+   *
+   * It listed instructions.mjs, tools/brief.mjs and README.md. On 28 October a drafter reported
+   * being told the gate had eight checks, and the string was in
+   * `supabase/functions/worker-select/index.ts` — a NOTICE SENT DIRECTLY TO JOSH, saying "every
+   * draft is checked eight ways before you see it". It had been wrong since 14 October and this
+   * test could not see it, because the one surface that talks to him was not on the list.
+   *
+   * A guard that only checks where somebody remembered to look is the defect class this repo keeps
+   * finding: it reports success over the files it was pointed at. So it now walks the source
+   * instead. A new surface is covered the day it is written rather than the day someone adds it
+   * here.
+   */
+  const ROOT = new URL("../", import.meta.url);
+  const SKIP = /node_modules|[\\/]\.git|[\\/]data[\\/]|[\\/]eval[\\/]|\.test\.(mjs|ts)$/;
+
+  const walk = (dir) => {
+    const out = [];
+    for (const entry of readdirSync(new URL(dir, ROOT), { withFileTypes: true })) {
+      const rel = `${dir}${entry.name}${entry.isDirectory() ? "/" : ""}`;
+      if (SKIP.test(rel)) continue;
+      if (entry.isDirectory()) out.push(...walk(rel));
+      else if (/\.(mjs|ts|md)$/.test(entry.name)) out.push(rel);
+    }
+    return out;
+  };
+
+  const files = walk("");
+  assert.ok(files.length > 50, `only ${files.length} source files found — the walk is not walking`);
+
+  for (const file of files) {
+    const src = readFileSync(new URL(file, ROOT), "utf8");
     assert.doesNotMatch(
       src,
       /eight (?:ways|independent checks)|the eight checks for/i,

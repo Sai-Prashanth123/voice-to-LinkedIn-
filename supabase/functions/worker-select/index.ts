@@ -335,7 +335,7 @@ Deno.serve(async () => {
         "ready_to_write",
         `${wrote === 1 ? "An idea is" : `${wrote} ideas are`} ready to write.\n\n` +
           `Say "write the next one" — it will pick ${wrote === 1 ? "it" : "them"} up with ` +
-          `everything you told me, and every draft is checked eight ways before you see it.`,
+          `everything you told me, and every draft is checked nine ways before you see it.`,
         { actedOn: ["next_work"] },
       );
     } catch (err) {

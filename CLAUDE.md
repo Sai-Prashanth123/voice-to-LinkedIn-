@@ -108,9 +108,18 @@ eight. What the six showed was his postscript habit: one post in five, where nob
 - He hedges hardest immediately before his most useful sentence. Compress the hedge; never delete it.
   It is the voice.
 
-The voice-guide section is **thin and currently empty**. If he ever offers a transcript, or talks at
-length about anything he would argue for, `append_voice_transcript` it. It is the most valuable thing
-he can give this system.
+The empty section is **`voice_transcript`, not `voice_guide`** — this said the wrong one until 28
+October, and three separate drafters reported it. `voice_guide` is full: 8,341 characters, built on 7
+September from six recorded calls, and it carries its own caveat — *"Derived, not supplied. Josh has
+not confirmed this yet."* What is empty is the transcript the guide is derived FROM, which the
+library itself labels *"the SOURCE OF TRUTH for the voice guide"* and which renders as *"(Not yet
+supplied by Josh. Do not invent one — work without it.)"*
+
+So every voice judgement this system makes rests on an unconfirmed reading of six calls in which his
+job was to ask questions rather than to argue for anything. If he ever offers a transcript, or talks
+at length about something he would defend, `append_voice_transcript` it. The guide's own closing line
+is that one fifteen-minute recording of him making a case would improve it more than another six
+calls of discovery. It is still the most valuable thing he can give this system.
 
 ## Working in this repo
 
