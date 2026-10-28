@@ -205,7 +205,7 @@ export const inspectTools = [
               name: writerShape.name,
               basis: writerShape.basis,
               targets: writerShape.lines,
-              not_from_him: writerShape.excludes,
+              not_from_this_writer: writerShape.excludes,
             },
         }),
 

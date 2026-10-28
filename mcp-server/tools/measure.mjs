@@ -40,7 +40,8 @@ import {
   FOLD_CHARS_PER_LINE,
   FOLD_LINES,
 } from "../../supabase/functions/_shared/shape.ts";
-import { medianWordRange } from "./voice.mjs";
+import { corpusBand, medianWordRange, writerTarget } from "./voice.mjs";
+import { WRITER_CHOICES } from "../writers.mjs";
 import voiceprint from "../../data/josh/law/voiceprint.json" with { type: "json" };
 import sentinels from "../../data/josh/sentinels/latest.json" with { type: "json" };
 
@@ -50,6 +51,13 @@ const RANGE = medianWordRange(sentinels.report) ?? { low: 0, high: 0 };
 /** Read from the measurements rather than written out. See the note in voice.mjs. */
 const MEASURED = sentinels.posts ??
   (sentinels.report ?? []).reduce((n, r) => n + (r.posts_measured ?? 0), 0);
+
+/*
+ * How many writers there are, counted rather than written down. A field here was called
+ * `against_all_seven` until 28 October, by which time there were eight — see the note where it is
+ * now interpolated instead.
+ */
+const WRITERS = (sentinels.report ?? []).length;
 
 /**
  * The four reference writers whose STRUCTURE matches what Josh's own rules describe — long, prose
@@ -70,12 +78,40 @@ function band(handles) {
   return values.length ? { low: values[0], high: values[values.length - 1] } : null;
 }
 
-/** Where a value sits relative to a measured range, said in words rather than as a verdict. */
+/**
+ * Where a value sits relative to a measured range, said in words rather than as a verdict.
+ *
+ * "WITHIN THEIR RANGE" WAS DOING THE WORK OF A PASS, and that is what broke on 28 October: a draft
+ * written for ryanscarlin (sd_median 14.9) scoring 9.8 read "within their range (7.1–18.8)" and
+ * nobody looked again. A range is eight people who all work disagreeing with each other, so every
+ * one of these now says that out loud. The number is the answer; this sentence is the context.
+ */
 function placement(value, range) {
   if (!range) return "no reference range available";
-  if (value < range.low) return `below all of them (${range.low}–${range.high})`;
-  if (value > range.high) return `above all of them (${range.low}–${range.high})`;
-  return `within their range (${range.low}–${range.high})`;
+  const where = value < range.low
+    ? `below all of them`
+    : value > range.high
+    ? `above all of them`
+    : `inside the spread`;
+  return `${value} against their ${range.low}–${range.high} — ${where}. A range is not a target ` +
+    "and the middle of it is nobody's habit.";
+}
+
+/**
+ * ONE WRITER, SAID AS THREE NUMBERS AND NO VERDICT — the fix for the false pass.
+ *
+ * `"sd 9.8; Carlin's median is 14.9, so 5.1 below him; the eight run 7.1–18.8"` is three
+ * measurements. `"within their range"` was a verdict wearing a measurement's clothes, and it
+ * passed a draft five points from its target. Naming the writer makes this tool MORE of a
+ * measurement, not less — which is the ground its own description stands on.
+ */
+function againstWriter(value, target, key, unit) {
+  if (typeof target?.[key] !== "number") {
+    return `${target?.name ?? target?.handle} has no measured ${key}.`;
+  }
+  const gap = +(value - target[key]).toFixed(1);
+  return `${value} against ${target.name}'s median of ${target[key]}${unit ? ` ${unit}` : ""} — ` +
+    `${Math.abs(gap)} ${gap === 0 ? "exactly on it" : gap > 0 ? "above" : "below"}.`;
 }
 
 export const measureTools = [
@@ -91,6 +127,11 @@ export const measureTools = [
         "and not a verdict: nothing here passes or fails a draft, and the gate still decides.",
       inputSchema: {
         body: z.string().min(1).describe("The post as it would be published"),
+        writer_handle: z.string().optional().describe(
+          `The reference writer this draft was written for, if one was named in the brief: ` +
+            `${WRITER_CHOICES}. Their own measured figures are then reported beside the corpus ` +
+            `ones — the corpus view never goes away. Omit when no writer was asked for.`,
+        ),
       },
     },
 
@@ -98,8 +139,25 @@ export const measureTools = [
       const body = args.body;
       const m = measurePost(body);
 
+      /*
+       * THE TARGET WAS NAMED IN THE BRIEF AND THIS TOOL COULD NOT HEAR IT — fixed 28 October.
+       *
+       * Reported BESIDE the corpus view and never instead of it: the corpus range is the honest
+       * context, and this tool's own description says it is a measurement and not a verdict. An
+       * unknown handle refuses rather than falling back to the default silently, which is what
+       * writerShapeBlock already does and what a caller can act on.
+       *
+       * WHY THE CORPUS BAND IS NOT THE FIX. `allBand` was computed here and never read, and waking
+       * it would have changed nothing: sd across all eight is 7.1–18.8, identical to the scene
+       * four, because every cut writer (10.9, 10.6, 13.9, 14.9) falls inside the scene four's
+       * spread. A draft at 9.8 aimed at Carlin's 14.9 reads "inside the spread" either way. Only
+       * the named writer's own median catches it, so the dead line is gone rather than woken.
+       */
+      const target = args.writer_handle ? writerTarget(args.writer_handle) : null;
+      if (target?.refused) return { refused: target.refused, handle: target.handle };
+
       const sceneBand = band(SCENE_WRITERS);
-      const allBand = band(new Set((sentinels.report ?? []).map((r) => r.handle)));
+      const sdBand = corpusBand("sd_median");
 
       /*
        * The writers' shape, from the same stored measurements as every other band here.
@@ -287,18 +345,91 @@ export const measureTools = [
           sentence_words_sd: m.sentence_words_sd,
           shortest: m.shortest_sentence,
           longest: m.longest_sentence,
+          counted_with: "words() from scripts/lib/prose.mjs — the counter the stored sentinel " +
+            "medians were produced with, so these are comparable with the corpus. scrub_draft " +
+            "reports the same number from the same counter; until 28 October it used the lexicon " +
+            "tokeniser and the two disagreed by a word.",
+          ...(target && { against_the_writer_asked_for: againstWriter(m.sentence_words_sd, target, "sd", "words") }),
           against_the_scene_writers: placement(m.sentence_words_sd, sceneBand),
+          against_the_corpus: placement(m.sentence_words_sd, sdBand),
+          /*
+           * Both bands are reported, and on the 2026-10-20 measurements they are the SAME band:
+           * 7.1 (demandjen1) to 18.8 (juliacarter98), with all four cut writers inside it. Said
+           * out loud because it is the whole argument for naming a writer — widening the
+           * comparison from four writers to eight changes nothing at all, and the only figure that
+           * can catch a draft five points from its target is that writer's own.
+           */
+          ...(sceneBand && sdBand && sceneBand.low === sdBand.low && sceneBand.high === sdBand.high
+            ? {
+              the_two_bands_coincide: `The scene four and all ${WRITERS} span the same ` +
+                `${sdBand.low}–${sdBand.high}, because every cut writer falls inside the scene ` +
+                "four's spread. Neither band can tell you whether this draft hits the writer it " +
+                "was written for. Only writer_handle can.",
+            }
+            : {}),
           note: `Compared with the ${MEASURED} measured reference posts, NOT with his voiceprint. That is ` +
             "computed from speech, and the voiceprint says outright that its rhythm figures do " +
-            "not transfer to writing.",
+            "not transfer to writing." +
+            (target
+              ? ""
+              : " No writer was named, so there is no target here — only two ranges. If the brief " +
+                "named one, pass writer_handle: a range this wide passes almost anything."),
         },
 
         length: {
           words: m.words,
-          against_all_seven: placement(m.words, RANGE),
-          note: `Their medians run from ${RANGE.low} to ${RANGE.high} words and all of it works. ` +
-            "There is no target length, and the formatting section says nothing gets padded to " +
-            "reach one.",
+          ...(target && { against_the_writer_asked_for: againstWriter(m.words, target, "words", "words") }),
+          /*
+           * `against_all_seven` until 28 October, while the corpus had been eight since
+           * adam-treboutat joined. A number in a field NAME cannot be derived, so it went stale
+           * silently and said "seven" to every caller. The count now lives in the sentence, where
+           * it is interpolated from the measurements like every other figure here.
+           */
+          against_the_corpus: placement(m.words, RANGE),
+          note: `All ${WRITERS} of their medians run from ${RANGE.low} to ${RANGE.high} words and ` +
+            "all of it works. There is no target length, and the formatting section says nothing " +
+            "gets padded to reach one.",
+        },
+
+        /*
+         * WHICH MOVE THE OPENING MAKES, AND WHETHER THE WRITERS MAKE IT.
+         *
+         * `surface.opening_shape` has always been reported with nothing to compare it against, so
+         * a drafter was told "first_person" and could not tell whether that was the writer's
+         * commonest move or one they make seven times in 145 posts. One taxonomy, not two:
+         * openingShape() in prose.mjs produced the writers' stored buckets and this draft's, so
+         * the seven names mean the same thing on both sides. latest.json already carries the
+         * per-writer tally, so this costs no database call.
+         */
+        opening: {
+          yours: m.opening_shape,
+          ...(target && {
+            their_commonest: target.opening_shapes[0]?.[0] ?? null,
+            yours_in_their_posts: (() => {
+              const i = target.opening_shapes.findIndex(([s]) => s === m.opening_shape);
+              const all = target.opening_shapes.reduce((t, [, c]) => t + c, 0);
+              if (i === -1) {
+                return `${m.opening_shape} does not appear in ${target.name}'s measured openings.`;
+              }
+              return `${m.opening_shape} is their #${i + 1} opening — ` +
+                `${target.opening_shapes[i][1]} of ${all} posts.`;
+            })(),
+          }),
+          across_the_corpus: (() => {
+            const tally = {};
+            for (const r of sentinels.report ?? []) {
+              for (const [shape, n] of r.opening_shapes ?? []) tally[shape] = (tally[shape] ?? 0) + n;
+            }
+            const ranked = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+            const total = ranked.reduce((t, [, n]) => t + n, 0);
+            const i = ranked.findIndex(([s]) => s === m.opening_shape);
+            return i === -1
+              ? `${m.opening_shape} appears in none of their measured posts.`
+              : `${m.opening_shape} is #${i + 1} of ${ranked.length} across the corpus — ` +
+                `${ranked[i][1]} of ${total} posts. Their commonest is ${ranked[0][0]}.`;
+          })(),
+          not_a_target: "A rank is not an instruction. The one hard rule is the library's: never " +
+            "open with a question.",
         },
 
         surface: {
@@ -339,8 +470,46 @@ export const measureTools = [
           hook_lands_above_it: m.hook_above_fold,
           rendered_lines: m.rendered_lines,
           words_above_it: m.above_fold_rendered_words,
+          /*
+           * LABEL BOTH, BECAUSE BOTH ARE PRINTED AND THEY DISAGREE BY A FACTOR OF THREE.
+           *
+           * Measured pairs from one run on 28 October: 14/28, 16/22, 19/72, 21/65 — this field and
+           * `shape.above_fold_words` below, with nothing on either saying which one the brief's
+           * "23 words above the fold" means. It is the OTHER one: writerShapeBlock builds the
+           * target from writerShapeTargets over the `above_fold_words` column, which is the
+           * authored count. So nothing should ever be judged against this number, and the brief's
+           * target is never this number.
+           */
+          words_above_it_is: "SIMULATED. The words in the first three lines a narrow screen DRAWS, " +
+            "gaps counted. Not the brief's target and not what the ninth check judges — that is " +
+            "shape.above_fold_words, the authored count. Never compare this one to a corpus median.",
           what_he_would_see: m.above_fold_rendered,
-          cuts_mid_sentence: m.cut_mid_sentence,
+          /*
+           * COMPUTED HERE, FROM THE PREVIEW PRINTED BESIDE IT — 28 October.
+           *
+           * measureShape reports `cut_mid_sentence` from `rendered[FOLD_LINES - 1]`, and
+           * renderedLines pushes an empty string for a blank gap, so that slot is frequently the
+           * empty string and the regex tests nothing. The symptom: `cuts_mid_sentence: true`
+           * printed beside a `what_he_would_see` ending in a full stop and a newline, while a
+           * longer draft also ending on a period reported false. It was keyed on where the
+           * character budget landed rather than on what the preview shows.
+           *
+           * So this reads the last NON-EMPTY line of the preview above, which is the only thing
+           * here a reader can check. It is a duplicate on purpose and a temporary one: the fix
+           * belongs at shape.ts:280 (test the last non-empty line of rendered.slice(0, FOLD_LINES))
+           * and this block goes back to one reader the day that lands. `cut_mid_sentence` is
+           * reported and never judged — it is in no rubric and no check — so correcting it here
+           * cannot move a verdict.
+           */
+          cuts_mid_sentence: m.rendered_lines > FOLD_LINES &&
+            !/[.!?:"”]\s*$/.test(
+              m.above_fold_rendered.split("\n").map((l) => l.trim()).filter(Boolean).at(-1) ?? "",
+            ),
+          cuts_mid_sentence_is: "Read off the last non-empty line of what_he_would_see above, so " +
+            "the boolean and the preview cannot contradict each other. measureShape's own " +
+            "cut_mid_sentence tests the third rendered slot, which is the empty string whenever " +
+            "the third line is a blank gap — that is the one-line bug, and it is reported, never " +
+            "judged.",
           measured_with: `${FOLD_CHARS_PER_LINE} characters a line, a blank line costing ` +
             `${FOLD_BLANK_COST}, cut after ${FOLD_LINES} lines`,
           how_much_to_trust_it: "PROVISIONAL. LinkedIn does not publish where the cut falls and it " +
@@ -385,7 +554,18 @@ export const measureTools = [
           paragraphs: m.paragraphs,
           lines: m.lines,
           above_fold_words: m.above_fold_words,
+          above_fold_words_is: "AUTHORED. The words in the first three lines AS WRITTEN. This is " +
+            "the number the drafting brief's target is built from and the one the ninth gate " +
+            "check judges, because both come from writerShapeTargets over the above_fold_words " +
+            "column. fold.words_above_it is the wrap simulation and is a different quantity.",
           bullet_lines: m.bullet_lines,
+          ...(target && {
+            against_the_writer_asked_for: {
+              paragraphs: againstWriter(m.paragraphs, target, "paragraphs"),
+              above_fold_words: againstWriter(m.above_fold_words, target, "above_fold_words", "words"),
+              basis: target.basis,
+            },
+          }),
           against_the_writers: {
             paragraphs: shapeTargets.paragraphs.length
               ? `they run ${Math.min(...shapeTargets.paragraphs)} to ${Math.max(...shapeTargets.paragraphs)}`
@@ -407,6 +587,9 @@ export const measureTools = [
         ai_tells: {
           total: tells.counts.total,
           by_rule: tells.counts.by_rule,
+          mechanical: tells.counts.mechanical,
+          judgement_calls: tells.counts.judgement_calls,
+          in_quoted_text: tells.counts.in_quoted_text,
           in_flags_above: loud.length,
           note: tells.counts.total > loud.length
             ? `${tells.counts.total - loud.length} further finding(s) are reported by scrub_draft, ` +
@@ -416,10 +599,46 @@ export const measureTools = [
 
         flags,
 
-        verdict: flags.length === 0
-          ? "Nothing mechanical to fix. Whether it is a post only Josh could have written is the " +
-            "gate's question, not this one's."
-          : `${flags.length} thing(s) worth fixing before spending a gate run.`,
+        /*
+         * A VERDICT THAT COUNTS EVERYTHING IT IS ABOUT TO SHOW — corrected 28 October.
+         *
+         * It counted `flags` only, and `flags` carries the HIGH_CONFIDENCE subset. Observed in one
+         * run: `ai_tells.total: 4` and one flag, then "1 thing(s) worth fixing before spending a
+         * gate run." Three findings were on the page and outside the count, so a caller who read
+         * the verdict and stopped — which is what a verdict is for — was told the draft was nearly
+         * clean by the same response that listed the four.
+         *
+         * Both numbers now, and they are different kinds of thing: the flags are the ones that are
+         * mechanically wrong, the rest need a reader. Saying "4" and nothing else would be the
+         * opposite error, because scrub_draft's own discipline is that a judgement call may be
+         * left alone.
+         */
+        verdict: (() => {
+          const others = Math.max(0, tells.counts.total - loud.length);
+          if (flags.length === 0 && others === 0) {
+            return "Nothing mechanical to fix, and nothing further for scrub_draft either. " +
+              "Whether it is a post only Josh could have written is the gate's question, not " +
+              "this one's.";
+          }
+          if (flags.length === 0) {
+            return `Nothing mechanically wrong. ${others} further finding(s) need a reader rather ` +
+              "than a fix — they are in ai_tells.by_rule and scrub_draft carries them with their " +
+              "standing and their lines.";
+          }
+          /*
+           * TWO COUNTS AND DELIBERATELY NO SUM. They overlap: an em dash is reported as a flag in
+           * its own right AND found by rule 2C-1, so adding them would announce a total larger
+           * than the number of things wrong with the draft — which is the same class of error as
+           * the undercount it replaces, in the other direction.
+           */
+          return `${flags.length} thing(s) worth fixing before spending a gate run` +
+            (others > 0
+              ? `, and ${others} further finding(s) beyond the flags below that need a reader ` +
+                "rather than a fix. scrub_draft lists every one of them with its standing and " +
+                "its line. (The two counts overlap where a flag and a rule describe the same " +
+                "thing, so they are not added up.)"
+              : ".");
+        })(),
       };
     },
   },

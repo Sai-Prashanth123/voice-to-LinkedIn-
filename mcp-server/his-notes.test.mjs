@@ -305,7 +305,7 @@ test("a Sentinel ask hands over the eight as a range and names no one as the mod
 
   // Barker is in the set, so the one construction Josh's library forbids must travel with it.
   assert.ok(
-    s.not_from_him.some((e) => /renames the reader's problem/.test(e)),
+    s.not_from_this_writer.some((e) => /renames the reader's problem/.test(e)),
     "the group target dropped the exclusion that matters most",
   );
 });

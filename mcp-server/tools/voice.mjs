@@ -32,6 +32,10 @@ import { renderLibrary } from "../../supabase/functions/_shared/views.ts";
 // draft is written to and the number it is judged against cannot differ.
 import { writerShapeTargets } from "../../supabase/functions/_shared/shape.ts";
 import { shapedWriterRows } from "../shape-rows.mjs";
+// The clean handle-to-name map. The scrape's own author_name carries whatever the writer has in
+// their profile — outboundphd's is stored as "🦾Eric Nowoslawski", and it reached a drafting brief
+// as "BUILD THIS ONE IN 🦾ERIC NOWOSLAWSKI'S SHAPE." through .toUpperCase().
+import { REFERENCE_WRITERS, WRITER_CHOICES } from "../writers.mjs";
 import voiceprint from "../../data/josh/law/voiceprint.json" with { type: "json" };
 import sentinels from "../../data/josh/sentinels/latest.json" with { type: "json" };
 import law from "../../data/josh/law/law.json" with { type: "json" };
@@ -52,6 +56,88 @@ export function medianWordRange(rows) {
 }
 
 const SCENE = new Set(["demandjen1", "juliacarter98", "outboundphd", "mattjbarker1"]);
+
+/** The display name, from the handle map rather than from the scrape. Never emoji. */
+export const writerName = (handle) =>
+  REFERENCE_WRITERS.find((w) => w.handle === handle)?.name ?? handle;
+
+/**
+ * ONE WRITER'S MEASURED FIGURES, OR A REFUSAL — added 28 October.
+ *
+ * WHY A TOOL NEEDS THIS AT ALL
+ *
+ * `measure_draft` and `compare_to_references` both judged every draft against the same four-writer
+ * default, with no way to say which writer the draft was aimed at. Measured on 28 October: a draft
+ * written for ryanscarlin (sd_median 14.9) scoring 9.8 was told "within their range (7.1–18.8)" —
+ * 5.1 away from its actual target, and Carlin is not in that band at all. A false pass, and a false
+ * pass is worse than a false fail because nothing prompts a second look.
+ *
+ * AND WIDENING THE BAND DOES NOT FIX IT. The band across all eight is also 7.1–18.8: every one of
+ * the four cut writers (10.9, 10.6, 13.9, 14.9) falls inside the scene four's range. Only the named
+ * writer's own figure catches it, which is why this returns the figure and not a verdict.
+ *
+ * REFUSES RATHER THAN DEGRADES, on the same two grounds as writerShapeBlock: an unknown handle is
+ * never answered with the corpus by way of a silent fallback, and a writer whose shape rests on too
+ * few readable posts gets no target at all. Both said out loud.
+ */
+export function writerTarget(handle) {
+  const row = (sentinels.report ?? []).find((r) => r.handle === handle);
+  if (!row) {
+    return {
+      handle,
+      refused: `Nothing measured for "${handle}". The measured writers are: ` +
+        `${(sentinels.report ?? []).map((r) => r.handle).join(", ")}.`,
+    };
+  }
+
+  const name = writerName(handle);
+  const basis = row.shape_basis ?? 0;
+  const measured = row.posts_measured ?? 0;
+
+  /*
+   * The same threshold writerShapeBlock refuses on — under 12 readable posts, or under 60% of the
+   * writer's corpus. Repeated here because this path reads latest.json directly and so bypasses
+   * that refusal entirely; a tool that reads the stored report instead of the database would
+   * otherwise hand out a confident median off eight posts where the brief would not.
+   *
+   * It fires for none of the eight today (the thinnest is outboundphd at 232 of 250). That is the
+   * honest reason this is safe, and also why it must stay.
+   */
+  if (basis < 12 || (measured > 0 && basis / measured < 0.6)) {
+    return {
+      handle,
+      name,
+      refused: `${basis} of ${measured} of ${name}'s measured posts can be read for shape, which ` +
+        "is not enough to call any of it a habit of theirs. No per-writer target was given. Read " +
+        "the posts themselves with get_reference_posts.",
+    };
+  }
+
+  return {
+    handle,
+    name,
+    group: SCENE.has(handle) ? "scene" : "cut",
+    sd: row.sd_median,
+    words: row.median_words,
+    above_fold_words: row.above_fold_words_median,
+    opening_words: row.opening_words_median,
+    paragraphs: row.paragraphs_median,
+    opening_shapes: row.opening_shapes ?? [],
+    close_shapes: row.close_shapes ?? [],
+    list_rate: row.list_rate,
+    basis: `Measured across ${measured} posts, ${basis} of them readable for shape` +
+      `${row.window ? `, ${row.window.from} to ${row.window.to}` : ""}.`,
+  };
+}
+
+/** The low and high of one measured column across the whole corpus. Context, never a verdict. */
+export function corpusBand(key) {
+  const xs = (sentinels.report ?? [])
+    .map((r) => r[key])
+    .filter((n) => typeof n === "number")
+    .sort((a, b) => a - b);
+  return xs.length ? { low: xs[0], high: xs[xs.length - 1] } : null;
+}
 
 /** Read once at load, from the measurements themselves, so no description can go stale on its own. */
 const RANGE = medianWordRange(sentinels.report) ?? { low: 0, high: 0 };
@@ -185,15 +271,38 @@ export const voiceTools = [
         "structural modes: opening length, how much sits above the fold, paragraph count, list " +
         "use and sentence variation. Answers 'am I writing in the shape Josh's own rules point " +
         "at, or the one that would fight them?'. Structure only — no words are compared, because " +
-        "none are held (8.3).",
+        "none are held (8.3). " +
+        "Pass writer_handle when the draft was written for one named writer: it then reports the " +
+        "distance to THAT writer's measured shape as well as the ranking, because a draft aimed at " +
+        "one of the eight is not trying to land in the default neighbourhood.",
       inputSchema: {
         body: z.string().min(1).describe("The draft to place"),
+        writer_handle: z.string().optional().describe(
+          `The writer this draft was written for, if any: ${WRITER_CHOICES}. Omit when the draft ` +
+            "was not aimed at anyone in particular.",
+        ),
       },
     },
 
     async handler(args) {
       const { measurePost } = await import("../../scripts/lib/prose.mjs");
       const m = measurePost(args.body);
+
+      /*
+       * THE BRIEF SAID WHICH WRITER, AND THIS TOOL HAD NOWHERE TO PUT IT — fixed 28 October.
+       *
+       * The verdict keyed on `nearest.mode` and nothing else. Measured on one moment, same
+       * material, with ryanscarlin in the brief: the draft that MISSED Carlin by four places
+       * (nearest Barker, 0.71) was told "that is the right neighbourhood", and the draft that hit
+       * Carlin first (0.94) was told "this shape would fight them". The grading was against the
+       * default the brief had explicitly overridden — the drafting brief says in as many words
+       * that "where the two disagree about structure, the measured shape wins for this post".
+       *
+       * An unknown handle refuses rather than quietly falling back to the default reading, which
+       * is the behaviour writerShapeBlock already has and the one a caller can act on.
+       */
+      const target = args.writer_handle ? writerTarget(args.writer_handle) : null;
+      if (target?.refused) return { refused: target.refused, handle: target.handle };
 
       // Distance on the four dimensions that actually separate the cut from the scene. Scaled by
       // each dimension's own spread so paragraph count does not drown out list rate.
@@ -218,7 +327,8 @@ export const voiceTools = [
         }
         return {
           handle: r.handle,
-          name: r.name,
+          // writerName, not r.name: the stored name for outboundphd is "🦾Eric Nowoslawski".
+          name: writerName(r.handle),
           mode: SCENE.has(r.handle) ? "scene" : "cut",
           distance: +distance.toFixed(2),
         };
@@ -226,7 +336,60 @@ export const voiceTools = [
 
       const nearest = scored[0];
 
+      /*
+       * DISTANCE TO THE WRITER THAT WAS ASKED FOR. Four differences and no verdict.
+       *
+       * Every number here is "yours, theirs, and the gap", because the only honest answer to "am I
+       * writing like Carlin" is the four gaps. Deliberately NOT scored into a pass: this tool
+       * reports where a draft sits, and the sentence that said "the right neighbourhood" is
+       * exactly the pass/fail word that produced the false pass.
+       */
+      const against = target
+        ? {
+          handle: target.handle,
+          name: target.name,
+          their_mode: target.group,
+          rank: scored.findIndex((s) => s.handle === target.handle) + 1,
+          of: scored.length,
+          distance: scored.find((s) => s.handle === target.handle)?.distance ?? null,
+          dimensions: [
+            ["sentence_words_sd", m.sentence_words_sd, target.sd],
+            ["above_fold_words", m.above_fold_words, target.above_fold_words],
+            ["paragraphs", m.paragraphs, target.paragraphs],
+            ["opening_words", m.opening_words, target.opening_words],
+          ].map(([what, yours, theirs]) => ({
+            what,
+            yours,
+            their_median: theirs,
+            gap: typeof theirs === "number" && typeof yours === "number"
+              ? +(yours - theirs).toFixed(1)
+              : null,
+          })),
+          their_commonest_opening: target.opening_shapes[0]?.[0] ?? null,
+          your_opening: m.opening_shape,
+          /*
+           * The opening bucket against their own tally, which latest.json already carries, so no
+           * database call is needed to say whether the move a draft makes is one this writer
+           * makes. openingShape() in prose.mjs produced both sides, so the buckets are the same
+           * seven and the comparison is like for like.
+           */
+          your_opening_in_their_posts: (() => {
+            const i = target.opening_shapes.findIndex(([shape]) => shape === m.opening_shape);
+            if (i === -1) {
+              return `${m.opening_shape} does not appear in ${target.name}'s measured openings ` +
+                "at all";
+            }
+            const [, n] = target.opening_shapes[i];
+            const all = target.opening_shapes.reduce((t, [, c]) => t + c, 0);
+            return `${m.opening_shape} is their #${i + 1} opening — ${n} of ${all} posts`;
+          })(),
+          basis: target.basis,
+        }
+        : null;
+
       return {
+        ...(against && { against_the_writer_asked_for: against }),
+
         yours: {
           words: m.words,
           opening_words: m.opening_words,
@@ -239,12 +402,39 @@ export const voiceTools = [
         nearest,
         ranked: scored,
 
-        reading: nearest.mode === "scene"
+        /*
+         * TWO READINGS, AND WHICH ONE APPLIES IS DECIDED BY WHETHER A WRITER WAS NAMED.
+         *
+         * The scene/cut reading is correct when nobody was named: the default IS the scene, and a
+         * draft drifting into the cut mode by accident is worth saying so about. It is wrong the
+         * moment a writer has been asked for, because then the measured shape is the target and
+         * the default is the thing being overridden — and four of the eight are cut writers, so
+         * the old reading told a draft aimed at one of them that it was fighting Josh's rules for
+         * hitting exactly what the brief asked it to hit.
+         */
+        reading: against
+          ? `Aimed at ${against.name}, and ${against.rank === 1
+            ? `nearest to them of the ${against.of}`
+            : `${against.rank}th of ${against.of} — nearest is ${nearest.name}`}` +
+            `. The four gaps are under against_the_writer_asked_for, and they are the answer: ` +
+            `${against.dimensions
+              .filter((d) => d.gap !== null)
+              .map((d) => `${d.what} ${d.yours} against their ${d.their_median}`)
+              .join(", ")}. ` +
+            (against.their_mode === "cut"
+              ? `${against.name} writes in the cut mode rather than the scene, which is what was ` +
+                "asked for here, so the default shape is not the standard for this draft. The " +
+                "drafting brief says the measured shape wins where the two disagree."
+              : `${against.name} writes in the scene mode, the same one the default describes.`)
+          : nearest.mode === "scene"
           ? `Closest to ${nearest.name}, who writes in the scene mode Josh's own rules point at. ` +
-            `That is the right neighbourhood.`
+            `That is the right neighbourhood. No writer was named, so this is measured against the ` +
+            `default and nothing else.`
           : `Closest to ${nearest.name}, who writes in the CUT mode — a very short opener with ` +
             `the substance below the fold. Josh's rules point at the scene: a five-element hook ` +
-            `with stakes, a time and a person. This shape would fight them.`,
+            `with stakes, a time and a person. This shape would fight them. (No writer was named. ` +
+            `If this draft was written for one of the four cut writers, say so with ` +
+            `writer_handle and this reading does not apply.)`,
 
         caution: nearest.handle === "mattjbarker1"
           ? "And Matt Barker is where Josh's rules came from rather than a peer, so resembling " +
@@ -512,7 +702,14 @@ export async function writerShapeBlock(db, handle) {
   const read = await writerShapeFor(db, handle);
   if (read.note) return { handle, refused: read.note };
 
-  const name = (sentinels.report ?? []).find((r) => r.handle === handle)?.name ?? handle;
+  /*
+   * THE NAME COMES FROM THE HANDLE MAP, NOT FROM THE SCRAPE — 28 October.
+   *
+   * This read `name` off the stored report, where outboundphd is "🦾Eric Nowoslawski" because that
+   * is what his profile says. The brief renders it through .toUpperCase(), so a drafter was handed
+   * "BUILD THIS ONE IN 🦾ERIC NOWOSLAWSKI'S SHAPE." writers.mjs carries the clean name once.
+   */
+  const name = writerName(handle);
 
   /*
    * REFUSE RATHER THAN DEGRADE.
@@ -530,8 +727,8 @@ export async function writerShapeBlock(db, handle) {
       handle,
       name,
       refused: `${read.shape_basis.posts} of ${read.shape_basis.of} of ${name}'s stored posts can ` +
-        "be read for shape, which is not enough to call any of it his habit. No target was given " +
-        "for this draft. Read his posts with get_reference_posts instead.",
+        "be read for shape, which is not enough to call any of it a habit of theirs. No target " +
+        "was given for this draft. Read their posts with get_reference_posts instead.",
     };
   }
 
@@ -554,7 +751,7 @@ export async function writerShapeBlock(db, handle) {
   if (opens.length) {
     const [shape, n] = opens[0];
     lines.push(
-      `HOW HE GETS IN: his commonest opening is ${shape.replace(/_/g, " ")} — ${n} of ` +
+      `HOW THEY GET IN: the commonest opening is ${shape.replace(/_/g, " ")} — ${n} of ` +
         `${basisPosts} posts (${pct(n)}). The next is ${opens[1]?.[0]?.replace(/_/g, " ") ?? "—"}.`,
     );
   }
@@ -565,20 +762,44 @@ export async function writerShapeBlock(db, handle) {
   lines.push(
     `PARAGRAPHS: ${one(mine.paragraphs)}, where the eight run ${band(all.paragraphs)}.`,
   );
+  /*
+   * SENTENCE VARIATION, WHICH THIS BLOCK HANDED OVER EVERY NUMBER BUT.
+   *
+   * opening, fold, paragraphs, close, lists and length all travelled; sd did not. So the one
+   * rhythm figure a drafter aims at never reached them from the brief, and it is the figure
+   * measure_draft reports and the figure that separates the eight most sharply — 7.1 to 18.8, more
+   * than a factor of two. It came only from analyse_reference_writer or get_sentinels, neither of
+   * which the drafting path calls.
+   *
+   * Read from the stored report rather than from `rows`, because `shapedWriterRows` selects
+   * handle, paragraphs and above_fold_words only — the sd is not in those rows at all, and adding
+   * it to that query would change what the ninth gate check loads. Same measurements, one call
+   * less, and the figure is the one get_sentinels returns.
+   */
+  const measuredSd = writerTarget(handle);
+  if (typeof measuredSd.sd === "number") {
+    const sdBand = corpusBand("sd_median");
+    lines.push(
+      `SENTENCE VARIATION: their median post has an sd of ${measuredSd.sd} words, where the eight ` +
+        `run ${sdBand.low} to ${sdBand.high}. measure_draft reports this number for a draft, so it ` +
+        "is the one to check against before the gate. It is a spread, not a length: a run of " +
+        "same-sized sentences is what it catches.",
+    );
+  }
   if (closes.length) {
     const [shape, n] = closes[0];
     lines.push(
-      `HOW HE LANDS: most often ${shape.replace(/_/g, " ")} — ${n} of ${basisPosts} (${pct(n)}).`,
+      `HOW THEY LAND: most often ${shape.replace(/_/g, " ")} — ${n} of ${basisPosts} (${pct(n)}).`,
     );
   }
   if (typeof read.body?.list_rate === "number") {
     lines.push(
-      `LISTS: ${Math.round(read.body.list_rate * 100)}% of his posts use one. A list is a choice ` +
-        "he makes some of the time, not his default shape.",
+      `LISTS: ${Math.round(read.body.list_rate * 100)}% of these posts use one. A list is a ` +
+        "choice made some of the time, not the default shape.",
     );
   }
   if (typeof read.length?.median_words === "number") {
-    lines.push(`LENGTH: his median post is ${read.length.median_words} words. Not a target.`);
+    lines.push(`LENGTH: the median post here is ${read.length.median_words} words. Not a target.`);
   }
 
   /*
@@ -599,9 +820,9 @@ export async function writerShapeBlock(db, handle) {
     excludes: excludes.length
       ? excludes
       : [`No exclusions are recorded for ${name}. That is not the same as "nothing to avoid" — it ` +
-        "means nobody has read him structurally yet. The banned-phrases section still applies in " +
-        "full."],
-    basis: `Measured across ${basisPosts} of ${read.posts_read} stored posts of his — the ones ` +
+        "means nobody has read this writer structurally yet. The banned-phrases section still " +
+        "applies in full."],
+    basis: `Measured across ${basisPosts} of ${read.posts_read} stored posts of theirs — the ones ` +
       `that kept their line breaks${read.window ? `, ${read.window.from} to ${read.window.to}` : ""}.`,
   };
 }
@@ -654,7 +875,7 @@ export async function corpusShapeBlock(db) {
         "is not automatically wrong, and the check is told so.",
       "WHAT TO TAKE FROM THEM is where the post gets in, where it turns and how it lands — not a " +
         "length. If you want one writer's habits rather than the range, that is a different ask " +
-        "and it needs his name.",
+        "and it needs their name.",
     ],
     excludes: [
       "Not one of their sentences. Every seven-word run of this draft is checked against every " +

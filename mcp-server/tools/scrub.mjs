@@ -36,6 +36,9 @@ import { z } from "zod";
 import { scan } from "../aitells.mjs";
 import { willRefuse } from "../prefile.mjs";
 import { renderLibrary } from "../../supabase/functions/_shared/views.ts";
+import { sd as stdev, sentences, words } from "../../scripts/lib/prose.mjs";
+import { corpusBand, writerTarget } from "./voice.mjs";
+import { WRITER_CHOICES } from "../writers.mjs";
 
 /**
  * The five rubric dimensions, split by what can honestly be computed.
@@ -45,7 +48,7 @@ import { renderLibrary } from "../../supabase/functions/_shared/views.ts";
  * Scoring those here with a formula would produce a number that looks like a measurement and is
  * actually a guess, which is the worst of both.
  */
-function rubric(measured, findings, body) {
+function rubric(measured, findings, body, { sd = null, target = null, band = null } = {}) {
   const spread = measured.longest_sentence - measured.shortest_sentence;
 
   return {
@@ -57,6 +60,34 @@ function rubric(measured, findings, body) {
           : spread >= 8
             ? "some variation, but the range is narrow"
             : "flat — nearly every sentence is the same length",
+        /*
+         * WHAT THE THRESHOLDS ABOVE ARE WORTH, CHECKED ON 28 OCTOBER AND SAID PLAINLY.
+         *
+         * Two separate problems, and only one of them is now fixed.
+         *
+         * The counter was wrong: `longest_sentence` and `shortest_sentence` came from the LEXICON
+         * tokeniser, which drops "I", "a" and every number, so a spread compared against anything
+         * measured with `words()` was comparing two different quantities. aitells.mjs now counts
+         * with `words()`, the counter every stored sentinel median rests on, so these are
+         * comparable with the corpus for the first time.
+         *
+         * The thresholds are still NOT corpus-derived, and 15 and 8 were nobody's measurement.
+         * They cannot be: the corpus stores sd_median — the standard deviation of a post's
+         * sentence lengths — and a spread (longest minus shortest) is a different statistic, with
+         * no stored counterpart to calibrate against. Two long sentences and one short one give a
+         * wide spread and a modest sd.
+         *
+         * So the spread reading is kept and labelled, and the MEASURED statistic is reported
+         * beside it, where it can be compared with the writers properly. The reading is a
+         * description; the sd is the number.
+         */
+        spread_thresholds: "15 and 8 are not measured. The corpus stores sd_median, not a spread, " +
+          "so these two readings have no stored counterpart to be calibrated against — they are " +
+          "a description, not a target. sentence_words_sd below is the measured statistic.",
+        sentence_words_sd: sd,
+        ...(target && { against_the_writer_asked_for: target }),
+        ...(band && { against_the_corpus: band }),
+        counted_with: measured.counted_with,
         uniform_runs: findings.filter((f) => f.rule === "2C-5").length,
       },
       density: {
@@ -118,6 +149,11 @@ export const scrubTools = [
         include_library: z.boolean().optional()
           .describe("Include the full banned-phrases and voice-guide text to rewrite against. " +
             "Default true — leave it on unless you already hold them in context."),
+        writer_handle: z.string().optional().describe(
+          `The reference writer this draft was written for, if one was named: ${WRITER_CHOICES}. ` +
+            "Their measured sentence variation is then reported beside the corpus range. Omit " +
+            "when no writer was asked for.",
+        ),
       },
     },
 
@@ -125,6 +161,11 @@ export const scrubTools = [
       const { db } = context;
       const body = args.body;
       const result = scan(body);
+
+      // Same refusal as measure_draft and compare_to_references: an unknown handle is never
+      // answered with the default by way of a silent fallback.
+      const target = args.writer_handle ? writerTarget(args.writer_handle) : null;
+      if (target?.refused) return { refused: target.refused, handle: target.handle };
 
       // The same rows the briefs read, rendered through the same function, so this tool and the
       // gate cannot be looking at different rules.
@@ -159,8 +200,27 @@ export const scrubTools = [
        * Counted in LINES touched rather than findings, because ten flags on one sentence is one
        * sentence to fix, and the question being asked is how much of the post survives.
        */
+      /*
+       * ONE BASE FOR THE RATIO, AND BOTH NUMBERS NAMED IN THE OUTPUT — 28 October.
+       *
+       * The denominator was the NON-BLANK lines and the numerator was finding line numbers, which
+       * count raw newlines including blanks. Two consequences, and the visible one is the smaller:
+       *
+       *  - It printed "3 of 21 lines carry a finding" and then put findings on line 25 and line
+       *    36. A line number outside its own total is not a number a reader can use.
+       *  - The re-voice threshold itself was computed on mismatched bases, so a post with many
+       *    blank lines under-counted its share and a dense one over-counted — and that ratio is
+       *    what decides between "fix these lines" and "throw it away and write it again".
+       *
+       * So the share is counted in NON-BLANK lines on both sides: `non_blank_line` comes off each
+       * finding, from the one map in aitells.mjs. Both bases are reported because both are real —
+       * the raw number is what an editor shows and is how a writer finds the line.
+       */
       const bodyLines = body.split(/\n/).map((l) => l.trim()).filter(Boolean);
       const touched = new Set(
+        result.findings.map((f) => f.non_blank_line).filter((n) => Number.isInteger(n)),
+      );
+      const touchedRaw = new Set(
         result.findings.map((f) => f.line).filter((n) => Number.isInteger(n)),
       );
       const share = bodyLines.length > 0 ? touched.size / bodyLines.length : 0;
@@ -224,12 +284,33 @@ export const scrubTools = [
             `get_voice_brief and the idea's material, then write it again whole, in one go.`,
         lines_touched: touched.size,
         lines_total: bodyLines.length,
+        line_base: `Both counts above are NON-BLANK lines, which is the base the share is ` +
+          `computed on: ${touched.size} of ${bodyLines.length}. Every finding also carries a ` +
+          `raw "line" — blank lines included, the number an editor shows — and a ` +
+          `"non_blank_line" to match it back here. The raw lines run to ${result.measured.lines_raw}` +
+          `, so a finding on raw line ${result.measured.lines_raw} is not outside its own total.`,
+        lines_touched_raw: touchedRaw.size,
 
         findings: result.findings,
         counts: result.counts,
         measured: result.measured,
+        quoted_text: result.quoted_text,
 
-        rubric: rubric(result.measured, result.findings, body),
+        rubric: rubric(result.measured, result.findings, body, {
+          // The same counter the findings were measured with and the stored medians rest on, so
+          // this sd is comparable with the writers' sd_median rather than merely near it.
+          sd: stdev(sentences(body).map(words).filter((n) => n > 0)),
+          target: target
+            ? `${target.name}'s median post has an sd of ${target.sd} words. ${target.basis}`
+            : null,
+          band: (() => {
+            const b = corpusBand("sd_median");
+            return b
+              ? `The writers run ${b.low} to ${b.high}. A range is not a target, and it is wide ` +
+                "enough to pass almost anything — if a writer was named, pass writer_handle."
+              : null;
+          })(),
+        }),
 
         judgement_rules: result.judgement,
 

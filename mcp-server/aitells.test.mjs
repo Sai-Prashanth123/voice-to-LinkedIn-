@@ -242,13 +242,24 @@ test("all-positive tone is only judged on a whole post", () => {
 
 /* ── Structural integrity of the rule set ────────────────────────────────────────────────────── */
 
-test("every rule declares an id, a reason and a fix", () => {
+test("every rule declares an id, a standing, a reason and a fix", () => {
   for (const r of RULES) {
     assert.ok(r.id, "a rule has no id");
     assert.ok(r.name, `${r.id} has no name`);
     assert.ok(r.why && r.why.length > 30, `${r.id} does not say why it matters`);
     assert.ok(r.fix && r.fix.length > 10, `${r.id} does not say how to fix it`);
     assert.equal(typeof r.detect, "function", `${r.id} has no detector`);
+    /*
+     * `standing`, added 28 October. scrub_draft's rewrite_discipline has always said "when a flag
+     * is a judgement call, say so and leave it", and no finding carried a field that could say so
+     * — the only machine-readable instruction was an imperative `fix` string, which is how "say
+     * the plain thing instead" was applied to a client's verbatim words. judges.test.mjs holds the
+     * rest of the invariant, including that no rule in HIGH_CONFIDENCE rests on a judgement.
+     */
+    assert.ok(
+      r.standing === "mechanical" || r.standing === "judgement",
+      `${r.id} declares standing "${r.standing}" — it must be mechanical or judgement`,
+    );
   }
 });
 

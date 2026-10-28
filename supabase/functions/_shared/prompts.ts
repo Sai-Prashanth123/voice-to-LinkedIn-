@@ -345,7 +345,11 @@ export const DRAFT_USER = (opts: {
         : `\n---\n\nBUILD THIS ONE IN ${w.name.toUpperCase()}'S SHAPE.\n\n`) +
         `${w.basis}\n\n` +
         `${w.lines.map((l) => `  - ${l}`).join("\n")}\n\n` +
-        `NOT FROM HIM, whatever the shape suggests:\n` +
+        // Pronoun-free, because four of the eight are women and this block renders for all of
+        // them. `writer_handle: "demandjen1"` used to produce "BUILD THIS ONE IN JEN ALLEN-KNUTH'S
+        // SHAPE" followed by "HOW HE GETS IN" and "NOT FROM HIM".
+        (corpus ? `NOT FROM THEM` : `NOT FROM THIS WRITER`) +
+        `, whatever the shape suggests:\n` +
         `${w.excludes.map((e) => `  - ${e}`).join("\n")}\n\n` +
         // The precedence sentence. This is what actually overrides the frameworks section's "the
         // right default when nothing else obviously fits" for this one post, without editing a
@@ -353,10 +357,10 @@ export const DRAFT_USER = (opts: {
         `The framework still names what the body argues, and it is still recorded (9.3). This shape ` +
         `decides how the post gets in, where it turns, how much sits above the fold, and how it ` +
         `lands. Where the two disagree about structure, the measured shape wins for this post.\n\n` +
-        (corpus ? `Their sentences are not available to you` : `His sentences are not available to you`) +
-        ` and never will be. Every seven-word run of your draft is checked against every stored ` +
-        `post of ` + (corpus ? `all eight` : `his`) + ` before this draft is filed, and a ` +
-        `borrowed run is refused. Take the shape; write the words yourself.`,
+        `Their sentences are not available to you and never will be. Every seven-word run of your ` +
+        `draft is checked against every stored post of ` + (corpus ? `all eight` : `theirs`) +
+        ` before this draft is filed, and a borrowed run is refused. Take the shape; write the ` +
+        `words yourself.`,
     );
   }
 

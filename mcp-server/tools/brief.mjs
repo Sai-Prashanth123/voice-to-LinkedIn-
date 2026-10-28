@@ -478,7 +478,7 @@ export const briefTools = [
               name: writerShape.name,
               basis: writerShape.basis,
               targets: writerShape.lines,
-              not_from_him: writerShape.excludes,
+              not_from_this_writer: writerShape.excludes,
               /*
                * Where the target came from, because a shape nobody asked for in THIS call needs to
                * announce itself. "his_note" means it was read out of his own pushback — tell him

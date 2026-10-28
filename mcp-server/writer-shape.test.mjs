@@ -155,6 +155,40 @@ test("the exclusions cannot be separated from the target", async () => {
   assert.match(other.excludes.join(" "), /No exclusions are recorded/);
 });
 
+test("the writer's name comes from the handle map, not from his profile", async () => {
+  /*
+   * ADDED 28 OCTOBER. outboundphd's stored author_name is "🦾Eric Nowoslawski" — his own profile —
+   * and writerShapeBlock read the display name off the scraped report. prompts.ts renders it
+   * through .toUpperCase(), so the brief instructed a drafter to "BUILD THIS ONE IN 🦾ERIC
+   * NOWOSLAWSKI'S SHAPE." writers.mjs has carried the clean name all along.
+   *
+   * Asserted on the brief rather than on the block, because the brief is where it was visible.
+   */
+  const brief = await tools.find((t) => t.name === "get_drafting_brief")
+    .handler({ moment_id: 111, writer_handle: "outboundphd" }, { db, url: creds.url });
+
+  assert.match(brief.user, /BUILD THIS ONE IN ERIC NOWOSLAWSKI'S SHAPE/);
+  assert.doesNotMatch(brief.user, /[\u{1F300}-\u{1FAFF}]/u, "an emoji reached the drafting brief");
+
+  const src = readFileSync(join(HERE, "tools", "voice.mjs"), "utf8");
+  assert.doesNotMatch(
+    src,
+    /const name = \(sentinels\.report/,
+    "writerShapeBlock reads the display name off the scrape again",
+  );
+});
+
+test("the rhythm figure travels with the rest of the shape", async () => {
+  // writerShapeBlock handed over opening, fold, paragraphs, close, lists and length — and not sd.
+  // So the one rhythm figure a drafter aims at never reached them from the brief, while
+  // measure_draft reported it against a range nobody had chosen.
+  const block = await writerShapeBlock(db, "mattjbarker1");
+  const sd = block.lines.find((l) => l.startsWith("SENTENCE VARIATION:"));
+  assert.ok(sd, `no sentence-variation line in ${JSON.stringify(block.lines)}`);
+  assert.match(sd, /sd of 9\.3 words/, "the figure is not Barker's measured one");
+  assert.match(sd, /7\.1 to 18\.8/, "the corpus range is missing from it");
+});
+
 test("an unknown handle refuses instead of inventing a shape", async () => {
   const block = await writerShapeBlock(db, "not-a-writer");
   assert.ok(block.refused, "an unknown handle produced a target");

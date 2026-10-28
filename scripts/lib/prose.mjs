@@ -150,6 +150,16 @@ export function measurePost(text) {
  * "don't" and "dont" are the same word and "its" and "it's" are not, so the apostrophe stays in.
  * Numbers are dropped: a writer's distinctive vocabulary is not the figures they happen to cite,
  * and keeping them would make every transcript look distinctive for saying "2021".
+ *
+ * THIS IS THE LEXICON TOKENISER AND IT IS NOT A LENGTH. The pattern needs a leading a-z and at
+ * least two characters, so it drops "I", "a" and every numeral — correct for a vocabulary
+ * contrast, wrong for "how long is this sentence". `words()` at the top of this file is the length,
+ * and it is what every stored sentinel median, writerShapeTargets and the ninth gate check rest on.
+ *
+ * aitells.mjs counted sentence length with this until 28 October, so scrub_draft reported 23 words
+ * where measure_draft reported 24 on the same body, and the spread thresholds in scrub's rubric
+ * were compared against a corpus measured the other way. Both now use `words()`. If a length ever
+ * needs computing again, it is `words()`; this one is for deciding WHICH words, never HOW MANY.
  */
 export const tokens = (text) =>
   (text ?? "").toLowerCase().match(/[a-z][a-z'’-]{1,}/g) ?? [];

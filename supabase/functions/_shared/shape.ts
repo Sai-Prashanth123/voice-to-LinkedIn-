@@ -276,9 +276,26 @@ export function measureShape(text: string | null | undefined): Shape {
     above_fold_rendered: fold,
     above_fold_rendered_words: words(foldFlat),
     hook_above_fold: hookFits,
-    // Only meaningful when there is more post after the cut.
+    /*
+     * Only meaningful when there is more post after the cut.
+     *
+     * TESTED ON THE LAST NON-EMPTY LINE OF THE PREVIEW, NOT ON THE THIRD SLOT.
+     *
+     * This read `rendered[FOLD_LINES - 1]`, and `renderedLines()` pushes `""` for a blank gap — so
+     * on a post whose first paragraph is two lines, the third slot is the BLANK LINE and the regex
+     * tested the empty string. It therefore reported `true` beside an `above_fold_rendered` that
+     * visibly ended on a full stop. Measured 28 October 2026: "My holidays used to have client
+     * meetings / in them. / " came back `cut_mid_sentence: true`, while a longer draft that also
+     * ended on a period came back `false`. The boolean was set by where the character budget landed
+     * rather than by what the preview showed, so it contradicted the field printed next to it.
+     *
+     * It is reported and never judged — no rubric reads it — so this cannot change a verdict. It
+     * can only stop the payload disagreeing with itself.
+     */
     cut_mid_sentence: rendered.length > FOLD_LINES &&
-      !/[.!?:"”]\s*$/.test(rendered[FOLD_LINES - 1] ?? ""),
+      !/[.!?:"”]\s*$/.test(
+        rendered.slice(0, FOLD_LINES).map((l) => l.trim()).filter(Boolean).at(-1) ?? "",
+      ),
     opening_words: words(lines[0] ?? ""),
     bullet_lines: bullets.length,
     uses_list: bullets.length >= 2,

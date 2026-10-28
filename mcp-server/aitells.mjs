@@ -39,7 +39,7 @@
  * standards, and then the question "which one is right" has no answer.
  */
 
-import { sentences, tokens } from "../scripts/lib/prose.mjs";
+import { sentences, tokens, words } from "../scripts/lib/prose.mjs";
 // What a bullet is, spelled once. See the note on BULLET_MARKER: this file and shape.ts each had
 // their own answer, the two disagreed, and neither could see the marker Josh's drafts use.
 import { BULLET_MARKER, PUNCTUATION_DASH } from "../supabase/functions/_shared/shape.ts";
@@ -80,7 +80,58 @@ export const EXEMPTIONS = [
   },
 ];
 
-const EXEMPT = new Set(EXEMPTIONS.map((e) => e.term));
+export const EXEMPT = new Set(EXEMPTIONS.map((e) => e.term));
+
+/*
+ * WHETHER EACH EXEMPTION ACTUALLY DOES ANYTHING — computed, never asserted.
+ *
+ * Measured 28 October: not one of `potentially`, `might`, `guys` or `appreciate` appears in any
+ * VOCAB list, and 2C-31 — the rule three of them cite — lives in JUDGEMENT and has no detector. So
+ * `scan("We might potentially do it guys and I appreciate that.")` returns nothing, and would
+ * return nothing with this whole list deleted. The test that guarded it asserted exactly that
+ * empty result, so it passed whether the mechanism worked or the terms were never reachable.
+ *
+ * A safeguard that reads as active and is not is worse than none. The list STAYS — it holds the
+ * recorded reasoning, and if a padding-hedge detector is ever written these are the words it must
+ * not touch. But each entry now says whether it is load-bearing TODAY, and the answer is computed
+ * from the rules as they stand rather than written down, so it cannot go stale on its own:
+ *
+ *   active   — some executing rule would match this term, and the exemption is what stops it.
+ *   reserved — nothing in RULES can match it, so the exemption changes no output at all.
+ *
+ * Deliberately NOT fixed by inventing a detector for 2C-31. It is a judgement rule on purpose: his
+ * guide says he hedges hardest immediately before his most useful sentence, and the instruction is
+ * to compress the hedge, never to delete it. A regex that strips hedges would be the exact
+ * regression this list was written to prevent.
+ */
+export function exemptionStanding() {
+  const bare = new Set();
+  return EXEMPTIONS.map((e) => {
+    // The honest probe: run the rules with this term UNPROTECTED and see whether any of them
+    // actually reaches for it. Anything else would be a claim about the mechanism rather than a
+    // reading of it.
+    const probe = `We ${e.term} did it and the number held.`;
+    const would = RULES.some((r) =>
+      r.detect(probe, { exempt: bare }).some((hit) =>
+        String(hit.matched ?? "").toLowerCase().includes(e.term.toLowerCase())
+      )
+    );
+    return {
+      ...e,
+      status: would ? "active" : "reserved",
+      ...(would
+        ? {}
+        : {
+          means: `No rule in this file matches "${e.term}", so this exemption suppresses nothing ` +
+            `today. ${e.rule} ` +
+            (RULES.some((r) => r.id === e.rule)
+              ? "runs, but its word list does not carry the term"
+              : "is a judgement rule and has no detector") +
+            ". Kept because it records why the word must survive if one is ever written.",
+        }),
+    };
+  });
+}
 
 /* ── Vocabulary (scrubber 2A and 2B) ─────────────────────────────────────────────────────────── */
 
@@ -157,11 +208,75 @@ function matches(body, re) {
   return out;
 }
 
+/*
+ * WHAT SITS INSIDE QUOTATION MARKS — found 28 October, and DOWNGRADED rather than suppressed.
+ *
+ * A draft that carries a client's own sentence was told "say the plain thing instead" about the
+ * client's words. The construction really is there, so suppressing the finding would be a lie; the
+ * fix is what is wrong, because the only honest choice about a verbatim quote is whether to carry
+ * it at all.
+ *
+ * Suppression would also open a laundering channel: wrap a generic paragraph in quotes and the
+ * scanner goes quiet with nothing reporting that it had. So a quoted finding keeps its rule and its
+ * line, and gains `in_quote` plus a fix that names the real decision.
+ *
+ * THREE RULES, EACH STOPPING A SPECIFIC FAILURE:
+ *
+ *  - Pairs are matched in DOCUMENT ORDER across the whole body, not per line. Draft 95 quotes a
+ *    multi-paragraph email inside one pair of marks, and per-line pairing would see none of it.
+ *  - Only when the count of marks is EVEN. One stray `"` must mark nothing rather than silence
+ *    every finding after it.
+ *  - Capped at 60% of the body, and the cap is reported rather than applied silently. Past that
+ *    point the "quote" is the post and there is nothing left to judge.
+ *
+ * THE CAP NEEDS A POST'S WORTH OF TEXT TO MEAN ANYTHING, the same way the re-voice ratio in
+ * scrub_draft needs three lines: `She put it plainly: "It is not the tools, it is the people."` is
+ * 65% quoted and perfectly ordinary. A share is a claim about a post, so below three non-blank
+ * lines the cap does not apply — otherwise one quoted sentence in a one-line draft would be read
+ * as a post made of somebody else's words.
+ *
+ * `>` is deliberately NOT treated as a block-quote marker: it is in BULLET_MARKER on purpose, and
+ * overloading it would break 2C-17 and uses_list.
+ */
+const QUOTE_MARK = /["“”]/g;
+export const QUOTED_SHARE_CAP = 0.6;
+const QUOTED_CAP_MIN_LINES = 3;
+
+export function quotedRanges(body) {
+  const text = String(body ?? "");
+  const marks = [...text.matchAll(QUOTE_MARK)].map((m) => m.index);
+  if (marks.length < 2 || marks.length % 2 !== 0) {
+    return { ranges: [], share: 0, ...(marks.length % 2 !== 0 && { unpaired: marks.length }) };
+  }
+
+  const ranges = [];
+  let covered = 0;
+  for (let i = 0; i + 1 < marks.length; i += 2) {
+    ranges.push([marks[i], marks[i + 1]]);
+    covered += marks[i + 1] - marks[i];
+  }
+  const share = text.length ? +(covered / text.length).toFixed(2) : 0;
+  const postLines = text.split(/\n/).filter((l) => l.trim()).length;
+  if (share > QUOTED_SHARE_CAP && postLines >= QUOTED_CAP_MIN_LINES) {
+    return { ranges: [], share, over_cap: true };
+  }
+  return { ranges, share };
+}
+
+/** Which raw lines (1-based) any quoted run touches. A finding is located by line, not by offset. */
+function quotedLines(body, ranges) {
+  const out = new Set();
+  for (const [from, to] of ranges) {
+    for (let line = lineAt(body, from); line <= lineAt(body, to); line++) out.add(line);
+  }
+  return out;
+}
+
 /** Any of a list of literal phrases, whole-word where the phrase is a single word. */
-function anyOf(body, list) {
+function anyOf(body, list, exempt = EXEMPT) {
   const out = [];
   for (const phrase of list) {
-    if (EXEMPT.has(phrase)) continue;
+    if (exempt.has(phrase)) continue;
     const esc = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = /\s/.test(phrase) ? new RegExp(esc, "gi") : new RegExp(`\\b${esc}\\b`, "gi");
     out.push(...matches(body, re));
@@ -170,14 +285,87 @@ function anyOf(body, list) {
 }
 
 const paragraphs = (body) => body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+
+/*
+ * THE LINE BASE, DECLARED ONCE AND NAMED IN THE OUTPUT.
+ *
+ * `lineAt` counts RAW newlines, blanks included, because that is what a writer sees in an editor
+ * and a finding has to be findable. `scrub_draft` built its denominator from the non-blank lines
+ * only, so on 28 October it printed "3 of 21 lines carry a finding" and then put findings on line
+ * 25 and line 36 — numbers outside their own total.
+ *
+ * Both numbers are real and neither replaces the other: the raw number locates the line, the
+ * non-blank number is the one a share can be computed against. So every finding carries both, each
+ * labelled, and `nonBlankIndexes` is the one map between them.
+ */
 const lines = (body) => body.split(/\n/);
-const wordCount = (s) => tokens(s).length;
+
+/**
+ * For each raw line number (1-based), the non-blank line it counts against.
+ *
+ * A blank line maps to the NEXT non-blank one rather than to null. Two rules anchor a whole-post
+ * finding at `line: 1` — 2C-16 for a wall of text, 2C-18 for an opening question — and on a body
+ * that begins with a newline that line is blank. Dropping those from the count would quietly shrink
+ * the numerator of the re-voice ratio, which is the kind of correction that looks like a fix.
+ */
+function nonBlankIndexes(body) {
+  const raw = lines(body);
+  const map = new Map();
+  let n = 0;
+  raw.forEach((text, i) => {
+    if (text.trim()) map.set(i + 1, ++n);
+  });
+  // Walk backwards so each blank line inherits the next real line's index.
+  let next = null;
+  for (let i = raw.length; i >= 1; i--) {
+    if (map.has(i)) next = map.get(i);
+    else if (next !== null) map.set(i, next);
+  }
+  return { map, total: n };
+}
+
+/*
+ * ONE TOKENISER FOR EVERY REPORTED LENGTH — changed 28 October.
+ *
+ * This was `tokens(s).length`. `tokens` is the LEXICON tokeniser: it requires a leading a-z and at
+ * least two characters, so it drops "I", "a" and every number on purpose, because a writer's
+ * distinctive vocabulary is not the figures they happen to cite.
+ *
+ * As a sentence length that is simply wrong, and wrong in two directions at once. measure_draft
+ * reported longest 24 on the same body where scrub_draft reported 23, and — the part that matters —
+ * every sentinel median in data/josh/sentinels/latest.json was produced by `words()` through
+ * `measurePost`, so `rubric()`'s thresholds were comparing a shorter count against a corpus
+ * measured with a longer one.
+ *
+ * `words()`, therefore: the counter the stored medians rest on. It is deliberately ONE-DIRECTIONAL.
+ * `tokens` and `words` are both unchanged, because `writerShapeTargets`, `shapeAgainst` and the
+ * ninth gate check all rest on `words` already and harmonising the other way would mean
+ * re-measuring 1,899 posts for nothing.
+ */
+const wordCount = (s) => words(s);
 
 /* ── The rules ───────────────────────────────────────────────────────────────────────────────
  *
- * Each is { id, name, why, fix, detect }. `detect` returns [{ matched, line }] and nothing else —
- * no severity, no score. Whether three em dashes matter more than one rule-of-three is a judgement,
- * and this file does not make judgements.
+ * Each is { id, standing, name, why, fix, detect }. `detect` returns [{ matched, line }] and
+ * nothing else — no severity, no score. Whether three em dashes matter more than one
+ * rule-of-three is a judgement, and this file does not make judgements.
+ *
+ * WHAT `standing` IS, AND WHY IT WAS ADDED ON 28 OCTOBER
+ *
+ * `mechanical` — the construction is simply wrong and the fix does not need a reader. An em dash,
+ * a hashtag, a semicolon, "let me explain". Every id in HIGH_CONFIDENCE is one of these, and a
+ * test asserts that, because a rule that can REFUSE a draft must not rest on a heuristic.
+ *
+ * `judgement` — the detector is a proxy for something a person decides. Three nouns in a row may
+ * be three real things; a narrow sentence spread may be three deliberate short sentences; "say the
+ * plain thing instead" is wrong advice about a verbatim quote.
+ *
+ * It exists because scrub_draft's own rewrite_discipline already says "when a flag is a judgement
+ * call, say so and leave it" — and until now no finding carried a field that could say so. The
+ * only machine-readable thing on a finding was an imperative `fix` string, so on 28 October a
+ * drafter obeyed "Say the plain thing instead" on a line that was a client's own words. A rule's
+ * standing is per-RULE; a detector with one weaker arm may lower its own finding to "judgement",
+ * the same way it may already lower `blocking` — only ever downwards.
  */
 
 /**
@@ -219,6 +407,7 @@ const NEGATIVE_PARALLELISM = [
 export const RULES = [
   {
     id: "2C-2",
+    standing: "mechanical",
     name: "Negative parallelism (Not X but Y)",
     why: "AI's most recognisable structural tell. It announces a reframe instead of stating the "
       + "point. Real writers state Y; AI stages the reveal.",
@@ -228,6 +417,7 @@ export const RULES = [
 
   {
     id: "2C-17",
+    standing: "mechanical",
     name: "Repeated bullet sentences",
     why: "Three bullets that open with the same word, run to the same length, or land on the same "
       + "grammatical shape read as generated. Real lists are uneven because real items are.",
@@ -300,6 +490,7 @@ export const RULES = [
 
   {
     id: "2C-22",
+    standing: "mechanical",
     name: "Throat-clearing opener",
     why: "Announcing that something is about to be said, instead of saying it. `here's` is also on "
       + "the list of words the reference writers use far more than Josh does.",
@@ -312,6 +503,7 @@ export const RULES = [
 
   {
     id: "2C-8",
+    standing: "mechanical",
     name: "Formulaic reveal",
     why: "\"Let me explain\" is a sentence that explains nothing. Just explain.",
     fix: "Cut the line. Keep what follows it.",
@@ -323,6 +515,7 @@ export const RULES = [
 
   {
     id: "2C-7",
+    standing: "mechanical",
     name: "Unearned profundity",
     why: "Weight applied to a moment that has not earned it. If the previous line carried a specific "
       + "detail, the reader already feels the weight and does not need to be told.",
@@ -335,6 +528,7 @@ export const RULES = [
 
   {
     id: "2C-10",
+    standing: "mechanical",
     name: "Vague attribution",
     why: "An unnamed authority is not evidence. It is the shape of evidence.",
     fix: "Name the source, or cut the claim.",
@@ -346,6 +540,7 @@ export const RULES = [
 
   {
     id: "2C-24",
+    standing: "mechanical",
     name: "Copulative avoidance",
     why: "AI dodges \"is\" and \"has\" with inflated linking verbs, because editors flag repetition. "
       + "The cure is worse than the disease — real writing uses \"is\" freely.",
@@ -358,6 +553,7 @@ export const RULES = [
 
   {
     id: "2C-25",
+    standing: "mechanical",
     name: "Participle trap",
     why: "A vague \"-ing\" clause gives the reader the rhythm of insight without committing to a "
       + "claim. It sounds conclusive and says nothing.",
@@ -370,6 +566,7 @@ export const RULES = [
 
   {
     id: "2C-26",
+    standing: "mechanical",
     name: "Puffery",
     why: "When every fact is pivotal and every change is major, none of it lands.",
     fix: "State what happened with a number or a detail. If you cannot, it was not pivotal.",
@@ -381,6 +578,7 @@ export const RULES = [
 
   {
     id: "2C-27",
+    standing: "mechanical",
     name: "False range",
     why: "A real range narrows the claim. An AI range spans everything, which says nothing.",
     fix: "Name the specific cohort the claim actually applies to.",
@@ -392,6 +590,7 @@ export const RULES = [
 
   {
     id: "2C-14",
+    standing: "mechanical",
     name: "Correlative crutch",
     why: "A two-part scaffold holding up a one-part idea.",
     fix: "Rewrite as a direct statement.",
@@ -403,6 +602,7 @@ export const RULES = [
 
   {
     id: "2C-6",
+    standing: "mechanical",
     name: "Semicolon as connector",
     why: "Almost nobody uses semicolons in a LinkedIn post. They read as edited prose, not speech.",
     fix: "Replace with a full stop and a new sentence.",
@@ -421,6 +621,7 @@ export const RULES = [
      * positive that gets a check switched off.
      */
     id: "2C-32",
+    standing: "mechanical",
     name: "Hashtag",
     why: "His banned-phrases section says no hashtags. They mark a post as written for an "
       + "algorithm rather than for the person reading it.",
@@ -430,6 +631,7 @@ export const RULES = [
 
   {
     id: "2C-1",
+    standing: "mechanical",
     name: "Em dash",
     why: "The single most recognisable AI punctuation tell. Josh's count across 11,022 words of "
       + "recorded speech is zero.",
@@ -441,6 +643,7 @@ export const RULES = [
 
   {
     id: "2C-29",
+    standing: "judgement",
     name: "Title case header",
     why: "Title case is corporate-deck formatting. Sentence case reads human.",
     fix: "Lower-case everything after the first word.",
@@ -458,14 +661,16 @@ export const RULES = [
 
   {
     id: "2C-30",
+    standing: "mechanical",
     name: "Knowledge-cutoff disclaimer",
     why: "A pure model artefact. No human writes this in a post.",
     fix: "Cut on sight.",
-    detect: (body) => anyOf(body, VOCAB.cutoff),
+    detect: (body, { exempt } = {}) => anyOf(body, VOCAB.cutoff, exempt),
   },
 
   {
     id: "2C-18",
+    standing: "mechanical",
     name: "Question as opening hook",
     why: "17% of AI posts open with a question, and the hook rules forbid it outright.",
     fix: "Open with a specific claim or a scene.",
@@ -477,6 +682,7 @@ export const RULES = [
 
   {
     id: "2C-19",
+    standing: "judgement",
     name: "Opens with \"I\"",
     why: "Signals self-focus before the reader has a reason to care.",
     fix: "Start with the scene, the other person, or the thing that happened.",
@@ -488,6 +694,7 @@ export const RULES = [
 
   {
     id: "2C-5",
+    standing: "judgement",
     name: "Uniform sentence length",
     why: "Uniform 15–25 word sentences is the strongest statistical signal of generated text.",
     fix: "Break one in half. Let another run long. The variance is the point.",
@@ -531,6 +738,7 @@ export const RULES = [
 
   {
     id: "2C-16",
+    standing: "judgement",
     name: "Uniform paragraph length",
     why: "Every paragraph the same size is a layout, not a piece of writing.",
     fix: "Vary them. A one-line paragraph next to a six-line one is what real writing looks like.",
@@ -570,29 +778,62 @@ export const RULES = [
 
   {
     id: "2C-3",
+    standing: "judgement",
     name: "Rule of three",
     why: "AI defaults to triplets. \"Simple, practical, and powerful\" is a rhythm, not three ideas.",
     fix: "Pick one. Two if both earn it.",
-    detect: (body) => matches(body, /\b(\w+),\s+(\w+),?\s+and\s+(\w+)\b/gi)
-      .filter((f) => f.matched.split(/[\s,]+/).length === 4),
+    /*
+     * THE CAPTURE WIDENED, THE FILTER DROPPED — 28 October.
+     *
+     * It matched one bare word per item and then threw away anything longer than four tokens, so
+     * "counties, cities and public hospitals" was reported as "cities and public" — a truncated
+     * fragment that is not the triplet, and which teaches a drafter to reorder the list until the
+     * regex loses it. That is a false fix: the construction is unchanged.
+     *
+     * So each item may now run to two words, with the cap in the pattern rather than in a filter
+     * on the matched text. A leading conjunction is excluded, because "Frustrated, and hangry, and
+     * wanting to fight about it" (draft 53, the hand-checked good one) is a list of two joined by
+     * repetition rather than a triplet, and the old filter happened to miss it for the wrong
+     * reason.
+     *
+     * No attempt is made to tell a triplet from an enumeration. That needs to know what the words
+     * are, and this file's header is right that a regex guessing at it produces confident
+     * nonsense. Hence standing: judgement — three real things in a row is a real sentence.
+     *
+     * WHAT THE SPAN IS AND IS NOT. Where the item boundaries are genuinely ambiguous mid-sentence
+     * the two-word window can take a word either side — "It covers counties, cities and public
+     * hospitals in three states" reports as "covers counties, cities and public". All three heads
+     * are in it, which is what a reader needs to find the line; the span is a locator, not a
+     * quotation of the construction, and it is never short of an item the way the old filter was.
+     */
+    detect: (body) =>
+      matches(
+        body,
+        // The final item takes a second word only where the clause ends after it, so
+        // "counties, cities and public hospitals" is reported whole while
+        // "Tools, process and people all broke at once" does not swallow the verb.
+        /\b(?!and\b|or\b|but\b)[\w'’-]+(?:\s+(?!and\b|or\b)[\w'’-]+)?,\s+(?!and\b|or\b)[\w'’-]+(?:\s+(?!and\b|or\b)[\w'’-]+)?,?\s+and\s+(?!and\b|or\b)[\w'’-]+(?:\s+[\w'’-]+(?=\s*(?:[.,!?;:)\n]|$)))?\b/gi,
+      ),
   },
 
   {
     id: "2A",
+    standing: "judgement",
     name: "Filler word",
     why: "Delete it and the meaning is identical. That is the whole test.",
     fix: "Delete the word and read the sentence again. If it means the same thing, leave it deleted.",
-    detect: (body) => anyOf(body, VOCAB.filler),
+    detect: (body, { exempt } = {}) => anyOf(body, VOCAB.filler, exempt),
   },
 
   {
     id: "2B",
+    standing: "judgement",
     name: "Banned vocabulary",
     why: "The consultant register. These words are the ones a reader has seen in a thousand posts.",
     fix: "Say the plain thing instead.",
-    detect: (body) => anyOf(body, [
+    detect: (body, { exempt } = {}) => anyOf(body, [
       ...VOCAB.verbs, ...VOCAB.adjectives, ...VOCAB.nouns, ...VOCAB.phrases, ...VOCAB.meta,
-    ]),
+    ], exempt),
   },
 ];
 
@@ -650,24 +891,46 @@ export const JUDGEMENT = [
  * Run every rule. Returns findings in document order so a reader works top to bottom rather than
  * jumping around a post fixing rule 24 before rule 2.
  */
-export function scan(body) {
+export function scan(body, { exempt = EXEMPT } = {}) {
   const text = String(body ?? "");
   const findings = [];
 
+  // Both line bases, computed once. See the note on nonBlankIndexes: the raw number locates the
+  // line and the non-blank number is the only one a share may be divided by.
+  const { map: nonBlank, total: nonBlankTotal } = nonBlankIndexes(text);
+  const quoted = quotedRanges(text);
+  const inQuote = quotedLines(text, quoted.ranges);
+
   for (const rule of RULES) {
-    for (const hit of rule.detect(text)) {
+    // `exempt` is passed rather than read from module scope so a test can run the rules with the
+    // voice exemptions removed and prove the mechanism does something. It was inert for weeks and
+    // the test that guarded it could not have told.
+    for (const hit of rule.detect(text, { exempt })) {
+      const quotedHit = inQuote.has(hit.line);
       findings.push({
         rule: rule.id,
         name: rule.name,
         line: hit.line,
+        line_of: "raw lines, blank lines included — the number an editor shows",
+        // The line this finding counts against in scrub_draft's share. A whole-post finding
+        // anchored on a blank line counts against the next real line rather than against nothing.
+        non_blank_line: nonBlank.get(hit.line) ?? null,
         matched: hit.matched,
         why: rule.why,
-        fix: rule.fix,
+        // `standing` is per RULE and may only be lowered by a finding, never raised. A mechanical
+        // rule with one weak arm says so on the arm.
+        standing: hit.standing === "judgement" ? "judgement" : rule.standing,
+        fix: quotedHit
+          ? "This sits inside quoted text. If the quote is verbatim, leave the words alone — the " +
+            "choice is whether to carry the quote at all, not how to word it."
+          : rule.fix,
+        ...(quotedHit && { in_quote: true, rule_fix_if_not_quoted: rule.fix }),
         // Severity is per FINDING, not per rule, and only ever downwards. HIGH_CONFIDENCE decides
         // which rules may refuse a draft; a detector that knows one of its own arms is weaker than
         // the others says so here. Absent means "whatever the rule says", so every existing rule
-        // behaves exactly as it did.
-        ...(hit.blocking === false && { blocking: false }),
+        // behaves exactly as it did. A quoted hit is one of those cases: the construction is
+        // really there, so it is reported, but it cannot refuse a draft over somebody's own words.
+        ...((hit.blocking === false || quotedHit) && { blocking: false }),
       });
     }
   }
@@ -683,15 +946,43 @@ export function scan(body) {
 
   return {
     findings,
-    counts: { total: findings.length, by_rule: byRule },
+    counts: {
+      total: findings.length,
+      by_rule: byRule,
+      // Counted so a caller can report "4 findings, 1 of them mechanical" rather than deciding
+      // for itself which of the two numbers to print. measure_draft's verdict said "1 thing" over
+      // a body with four findings, because it counted only the ones it had promoted.
+      mechanical: findings.filter((f) => f.standing === "mechanical").length,
+      judgement_calls: findings.filter((f) => f.standing === "judgement").length,
+      in_quoted_text: findings.filter((f) => f.in_quote).length,
+    },
     measured: {
       sentences: s.length,
       shortest_sentence: lens.length ? Math.min(...lens) : 0,
       longest_sentence: lens.length ? Math.max(...lens) : 0,
       paragraphs: paras.length,
+      lines_raw: lines(text).length,
+      lines_non_blank: nonBlankTotal,
+      counted_with: "words() from scripts/lib/prose.mjs — the same counter the stored sentinel " +
+        "medians were produced with, so these are comparable with the corpus",
+    },
+    quoted_text: {
+      share_of_body: quoted.share,
+      lines: [...inQuote].sort((a, b) => a - b),
+      ...(quoted.over_cap && {
+        ignored: `Quotation marks cover ${Math.round(quoted.share * 100)}% of the body, over the ` +
+          `${Math.round(QUOTED_SHARE_CAP * 100)}% cap, so nothing was treated as quoted. Past ` +
+          "that point the quote is the post.",
+      }),
+      ...(quoted.unpaired && {
+        ignored: `${quoted.unpaired} quotation marks is an odd number, so nothing was treated as ` +
+          "quoted. One stray mark must not silence the rest of the post.",
+      }),
+      means: "A finding inside a quote keeps its rule and its line and carries in_quote. It is " +
+        "never suppressed: wrapping a paragraph in quotation marks is not a fix.",
     },
     judgement: JUDGEMENT,
-    exemptions: EXEMPTIONS,
+    exemptions: exemptionStanding(),
   };
 }
 
