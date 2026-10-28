@@ -891,8 +891,46 @@ export const JUDGEMENT = [
  * Run every rule. Returns findings in document order so a reader works top to bottom rather than
  * jumping around a post fixing rule 24 before rule 2.
  */
+/*
+ * TYPOGRAPHIC APOSTROPHES AND QUOTES, NORMALISED BEFORE ANY RULE RUNS.
+ *
+ * Measured 28 October 2026, and it is the worst thing found in a day of looking:
+ *
+ *     "It's not about the tools. It's about the people."   -> 2C-2 fires, and 2C-2 BLOCKS a draft
+ *     "It’s not about the tools. It’s about the people."   -> ZERO FINDINGS
+ *
+ * Seven rules embed a straight `'` in their pattern and SIX of them had no curly alternative —
+ * `2C-2`, `2C-17`, `2C-22`, `2C-8`, `2C-10`, `2C-1`, `2C-5`. Four of those are in
+ * HIGH_CONFIDENCE, which means they can refuse a draft outright. So the single most recognisable
+ * AI cadence on LinkedIn — the one the library gives its own heading — walked past the refusal
+ * whenever the text carried a smart apostrophe.
+ *
+ * And a smart apostrophe is the DEFAULT. Word, Google Docs, macOS and LinkedIn's own composer all
+ * produce U+2019. A draft pasted from any of them lost four blocking rules, silently, with nothing
+ * in the payload hinting a rule had been skipped. It is the defect class in its purest form: a
+ * check with nothing to check, reporting success.
+ *
+ * Normalising here rather than widening seven patterns, for two reasons. It fixes every rule at
+ * once, including any rule written later by somebody who does not know about this. And the mapping
+ * is strictly one character to one character, so EVERY OFFSET IS PRESERVED — line numbers and match
+ * positions still point at the right place in the author's text.
+ *
+ * The one visible consequence: a `matched` string reports the straight form of what the author
+ * typed curly. That is a cosmetic difference in a field used to locate the problem, and it is worth
+ * it to stop a blocking rule going quiet.
+ *
+ * Quote marks are folded for the same reason — `quotedRanges` already pools both forms, and folding
+ * keeps it that way if either side is ever rewritten.
+ */
+const TYPOGRAPHIC = /[‘’‛]/g;
+const TYPOGRAPHIC_DOUBLE = /[“”‟]/g;
+
+export function normaliseMarks(s) {
+  return String(s ?? "").replace(TYPOGRAPHIC, "'").replace(TYPOGRAPHIC_DOUBLE, '"');
+}
+
 export function scan(body, { exempt = EXEMPT } = {}) {
-  const text = String(body ?? "");
+  const text = normaliseMarks(body);
   const findings = [];
 
   // Both line bases, computed once. See the note on nonBlankIndexes: the raw number locates the

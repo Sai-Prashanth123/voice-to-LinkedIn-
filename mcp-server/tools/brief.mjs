@@ -39,7 +39,7 @@ import { shapedWriterRows } from "../shape-rows.mjs";
 // Module-level, not via the tool registry: voice.mjs does not import this file, so there is no
 // cycle, and tools/index.mjs warns that a registry lookup needs the tool imported last.
 import { corpusShapeBlock, writerShapeBlock } from "./voice.mjs";
-import { WRITER_CHOICES, writerAskFrom } from "../writers.mjs";
+import { REFERENCE_WRITERS, WRITER_CHOICES, writerAskFrom } from "../writers.mjs";
 import { joshNote, JOSH_NOTE_PREFIX } from "../../supabase/functions/_shared/notes.ts";
 /*
  * ONE RULE FOR WHETHER A NAME IS CLEARED, AND THESE TWO BRIEFS WERE THE LAST READERS NOT USING IT.
@@ -166,14 +166,44 @@ function libraryPointers(rows, view) {
 
   const sections = keys.filter((key) => byKey.has(key)).map((key) => {
     const row = byKey.get(key);
-    // isSupplied, not body.length — seven sections hold prose addressed to Josh explaining what he
-    // should put there, and a length test calls those filled in. See views.ts.
-    const body = isSupplied(row.body) ? String(row.body ?? "").trim() : "";
+    /*
+     * TWO SEPARATE FACTS, because one number cannot carry both.
+     *
+     * `placeholder` uses isSupplied() rather than a length test, and that distinction is the
+     * important one: seven sections hold prose addressed to Josh explaining what he should put
+     * there, and a length test calls those filled in. See views.ts.
+     *
+     * `chars` is the length of WHAT get_library HANDS BACK, untrimmed.
+     *
+     * It used to be the trimmed length of the supplied body, which made it wrong in two ways at
+     * once — measured 28 October against the live project. The trim cost a trailing newline, so
+     * five sections were reported one character short of what a drafter receives: `core_rules` said
+     * 543 where get_library returns 544. And a placeholder was reported as `chars: 0` while
+     * get_library returns 187 characters of "not yet supplied by Josh, do not invent one".
+     *
+     * Neither gap would mislead anybody into a bad draft. Both are still a number that does not
+     * describe the thing it labels, in a field whose only job is to tell a reader how big something
+     * is before they fetch it — and this project has spent a fortnight on numbers that measured
+     * something adjacent to what they claimed. `placeholder` carries the "there is no standard
+     * here" signal, so `chars` is free to be the plain truth about size.
+     */
     return {
       key,
       title: row.title ?? key,
-      chars: body.length,
-      placeholder: body.length === 0,
+      /*
+       * The length of what get_library WILL HAND BACK — which is nothing at all for a placeholder.
+       *
+       * My first pass at this reported the raw row length unconditionally. That fixed the five
+       * off-by-one sections and broke the one placeholder: it then claimed 1,205 characters for
+       * `voice_transcript`, which is 1,205 characters of "FOR JOSH, put your transcript here" that
+       * get_library correctly declines to serve as standard. A pointer promising 1,205 characters
+       * of a section that returns none is a worse lie than the newline it replaced.
+       *
+       * So: 0 when there is nothing to fetch, the exact untrimmed length when there is. Verified
+       * against get_library for all eleven sections rather than reasoned about.
+       */
+      chars: isSupplied(row.body) ? String(row.body ?? "").length : 0,
+      placeholder: !isSupplied(row.body),
       uri: `library://${key}`,
     };
   });
@@ -631,6 +661,43 @@ export const briefTools = [
        * A target is an input to a better draft, not a precondition for one. If it cannot be read,
        * the draft is written without it and the caller is told that is what happened.
        */
+      /*
+       * A HANDLE THE CALLER TYPED AND THIS CANNOT RESOLVE IS A REFUSAL, NOT A QUIET OMISSION.
+       *
+       * Measured 28 October on the deployed build. Four inputs — `"nobody"`, `"MATTJBARKER1"`,
+       * `"Matt Barker"` and `""` — each returned a SUCCESSFUL brief with the whole
+       * `BUILD THIS ONE IN …` block simply absent from the prose, no error, and in the empty-string
+       * case not even a `no_target` field. The three judging tools refuse the same inputs loudly and
+       * name all eight valid handles. The brief, which is the artefact that actually steers the
+       * writing, did not.
+       *
+       * So a drafter that mistypes the case, or writes the NAME where the handle goes, gets a brief
+       * with no shape and nothing saying one was asked for and lost — and then falls back to the
+       * library's default framework. That is Josh's recorded complaint, "the default framework gets
+       * used anyway", still reachable: no longer by a hardcoded Barker read, but by one character of
+       * case.
+       *
+       * Case is normalised first, because `MATTJBARKER1` is a slip rather than a different ask.
+       *
+       * THE DISTINCTION THAT MATTERS: this refuses only a handle the CALLER PASSED. A handle parsed
+       * out of one of his dictated notes keeps the soft `no_target` path, because the parse is ours
+       * and a brief must never fail on our reading of his words — `next_work` returns the first
+       * unparked moment's brief, so a throw there stops the whole writing queue.
+       */
+      const typed = typeof args.writer_handle === "string" ? args.writer_handle.trim() : "";
+      if (typed && ask?.handle && ask.handle.toLowerCase() === typed.toLowerCase()) {
+        // The canonical eight, static — no database call, so a refusal cannot itself fail.
+        const known = REFERENCE_WRITERS.map((w) => w.handle.toLowerCase());
+        if (!known.includes(typed.toLowerCase())) {
+          throw new Error(
+            `No measured writer "${typed}". The measured writers are: ${known.join(", ")}. ` +
+              `A handle that cannot be resolved is refused rather than dropped, because a brief ` +
+              `with the shape silently missing is how the default framework gets used anyway.`,
+          );
+        }
+        ask.handle = typed.toLowerCase();
+      }
+
       let shapeUnavailable = null;
       try {
         if (ask?.handle) {

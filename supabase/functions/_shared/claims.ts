@@ -313,11 +313,43 @@ export function verifyDraft(
     (q) => !speechOnly.includes(quoteKey(q)),
   );
 
+  /*
+   * MATCHED AS WHOLE WORDS, because a substring test now refuses ordinary prose.
+   *
+   * This was `draftNormalised.includes(normalise(n.name))`, and the substring behaviour was
+   * deliberate — it catches `Thermal's` and spacing variants that a naive equality test would miss.
+   * It became a liability the moment short names entered the table. Measured 28 October, after 21
+   * names were backfilled onto moments that had none:
+   *
+   *     name "Thermal" recorded  ->  "We looked at geothermal tooling."   REFUSED
+   *     name "Dan" recorded      ->  "A redundant step in the pipeline."  REFUSED
+   *
+   * `Thermal` is recorded on moment 110, whose material is about detecting technology; `Dan` is
+   * recorded on moment 9. So a draft could be refused for naming a client it never mentioned, in
+   * the one place the system is supposed to be most trustworthy — and the drafter would be told
+   * "The draft names Thermal without clearance" about the word geothermal. A guard that cries wolf
+   * on its own vocabulary is a guard somebody learns to route around.
+   *
+   * Word boundaries lose almost nothing of what the substring test was for. An apostrophe, a comma,
+   * a bracket and an em dash are all non-word characters, so `Thermal's`, `(Thermal)` and
+   * `—Thermal—` still match. What stops matching is a name buried inside a longer word, which was
+   * never the thing being caught.
+   *
+   * What this does NOT fix, and it is reported rather than papered over: a recorded `Hardy
+   * Relations` does not catch `Hardy` on its own, and no exact matcher catches a figure plus a
+   * niche plus a date with no name in it at all — which is the half of the rule CLAUDE.md says
+   * matters most. That half is the `identifiable` gate check's job, and it is a model read.
+   */
   const draftNormalised = normalise(draftBody);
   const unclearedNames = names
     .filter((n) => !n.cleared)
     .filter((n) => n.name.trim().length > 0)
-    .filter((n) => draftNormalised.includes(normalise(n.name)))
+    .filter((n) => {
+      const needle = normalise(n.name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      // Non-word on both sides rather than \b, so a name that begins or ends in punctuation still
+      // anchors correctly instead of failing to match at all.
+      return new RegExp(`(?<![\\p{L}\\p{N}])${needle}(?![\\p{L}\\p{N}])`, "u").test(draftNormalised);
+    })
     .map((n) => n.name);
 
   const borrowedPhrases = borrowedRuns(draftBody, referenceShingles);

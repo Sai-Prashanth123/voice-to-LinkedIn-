@@ -654,3 +654,63 @@ test("the write happens before the response is measured, so a size refusal canno
     "write that stops the re-gate loop, which is more expensive than a long response",
   );
 });
+
+/*
+ * THE POINTER'S NUMBER IS THE NUMBER get_library WILL HAND BACK.
+ *
+ * Measured against the live project on 28 October, after the index shipped: SIX of eleven pointers
+ * disagreed with the section they named. Five were short by exactly one character, because the
+ * index trimmed the body before counting and the rows end in a newline — `core_rules` advertised
+ * 543 where get_library returns 544. The sixth was the placeholder, advertised as 0.
+ *
+ * Then the first repair made it worse in the other direction: counting the raw row unconditionally
+ * fixed the five and made the placeholder claim 1,205 characters of "FOR JOSH, put your transcript
+ * here" that get_library correctly declines to serve. A pointer promising 1,205 characters of a
+ * section that returns none is a worse lie than the newline it replaced.
+ *
+ * Neither gap would have produced a bad draft. Both were a number that did not describe the thing
+ * it labelled, in a field whose only job is to say how big something is before a drafter fetches
+ * it — and the fixture could not catch either, because its bodies are built to an exact length and
+ * never end in a newline. These two cases are the ones that would have.
+ */
+test("a trailing newline is counted, because get_library returns it", async () => {
+  const withNewline = "A section that ends in a newline, as every row in the live library does.\n";
+  /*
+   * The raw body has to be injected through `state`, not through `drafting`'s first argument —
+   * those are the TOOL's arguments, and `librarySections` always builds its body to an exact
+   * length from `{title, chars}`, so there is no way to give it a trailing newline except by
+   * replacing the rows wholesale. My first version passed it as a tool argument, where it was
+   * ignored, and the test then asserted against the fixture's own 543 rather than the 73 I meant.
+   */
+  const brief = await drafting(
+    {},
+    state({
+      state: {
+        library_sections: librarySections().map((s) =>
+          s.key === "core_rules" ? { ...s, body: withNewline } : s
+        ),
+      },
+    }),
+  );
+  const pointer = brief.library_pointers.sections.find((s) => s.key === "core_rules");
+
+  assert.equal(
+    pointer.chars,
+    withNewline.length,
+    "the index trimmed before counting, so it advertises one character fewer than a drafter gets",
+  );
+  assert.equal(pointer.placeholder, false, "a real section read as a placeholder");
+});
+
+test("a placeholder advertises nothing, however much prose it holds for Josh", async () => {
+  const brief = await drafting();
+  const pointer = brief.library_pointers.sections.find((s) => s.key === "voice_transcript");
+
+  assert.equal(pointer.placeholder, true, "a placeholder read as filled in");
+  assert.equal(
+    pointer.chars,
+    0,
+    "the index advertised the length of prose addressed to Josh as though it were standard a " +
+      "drafter could fetch",
+  );
+});

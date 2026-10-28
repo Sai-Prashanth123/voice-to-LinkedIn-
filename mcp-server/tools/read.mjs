@@ -236,6 +236,26 @@ export const readTools = [
       },
     },
     async handler(args, { db }) {
+      /*
+       * AN EMPTY KEY IS A SLIP, NOT A REQUEST FOR EVERYTHING.
+       *
+       * `args.key ? …` treats `""` as absent, so `key: ""` returned the ENTIRE 64,600-character
+       * library. Measured 28 October on the deployed build. On the client Josh uses — which
+       * previews about 2 KB and cannot say it cut anything — one stray character silently
+       * reproduces the exact defect the pointer index was built to remove. And this tool carries no
+       * `read_this_first` and no `brief_is_complete`, so there is nothing in the response to tell a
+       * reader it was cut.
+       *
+       * Omitting the argument is still how you ask for all of them. Passing it empty is refused.
+       */
+      if (typeof args.key === "string" && args.key.trim() === "") {
+        throw new Error(
+          "get_library was given an empty key. Omit the argument to read every section, or pass " +
+            "one key. An empty string used to return the whole library, which on a client that " +
+            "previews two kilobytes is the same as returning nothing.",
+        );
+      }
+
       const sections = await db.select("library_sections", {
         select: "key,title,body,version,immutable,sort_order,updated_at",
         order: "sort_order.asc",

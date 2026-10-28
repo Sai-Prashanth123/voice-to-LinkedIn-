@@ -881,15 +881,59 @@ export const measureTools = [
          */
         verdict: (() => {
           const others = Math.max(0, tells.counts.total - loud.length);
+
+          /*
+           * SPLIT BY STANDING, because "outside the flags" is not the same as "needs a reader".
+           *
+           * The previous version said "Nothing mechanically wrong" whenever `flags` was empty, and
+           * called everything else a finding that "need[s] a reader rather than a fix". But `flags`
+           * carries only the HIGH_CONFIDENCE subset, so a mechanical rule that is not high
+           * confidence lands in `others` and was described as a judgement call.
+           *
+           * Measured 28 October on the deployed build, on ordinary prose with one semicolon:
+           *
+           *     ai_tells.mechanical:      1
+           *     ai_tells.judgement_calls: 0
+           *     verdict: "Nothing mechanically wrong. 1 further finding(s) need a reader
+           *               rather than a fix"
+           *
+           * Three statements, all false against the counters printed beside them — and
+           * `scrub_draft` classifies that same 2C-6 finding as `standing: "mechanical"` with the
+           * fix "Replace with a full stop and a new sentence." There was a fix, and it was stated.
+           *
+           * This matters more than its size. This tool is step one of the documented writing path,
+           * its own description promises it "catches the mechanical faults that otherwise take a
+           * full gate run to discover", and the verdict is the one sentence a caller is most likely
+           * to act on. A single semicolon triggers it, so it fires on real drafts rather than on
+           * probes — and in one_step mode, which is the live mode, the checks no longer hold a post
+           * back.
+           */
+          const mechanicalOutside = Math.max(0, (tells.counts.mechanical ?? 0) - loud.length);
+          const judgement = tells.counts.judgement_calls ?? 0;
+
           if (flags.length === 0 && others === 0) {
             return "Nothing mechanical to fix, and nothing further for scrub_draft either. " +
               "Whether it is a post only Josh could have written is the gate's question, not " +
               "this one's.";
           }
           if (flags.length === 0) {
-            return `Nothing mechanically wrong. ${others} further finding(s) need a reader rather ` +
-              "than a fix — they are in ai_tells.by_rule and scrub_draft carries them with their " +
-              "standing and their lines.";
+            const parts = [];
+            if (mechanicalOutside > 0) {
+              parts.push(
+                `${mechanicalOutside} mechanical finding(s) with a stated fix, below the ` +
+                  `threshold that raises a flag here`,
+              );
+            }
+            if (judgement > 0) {
+              parts.push(
+                `${judgement} finding(s) that need a reader rather than a fix`,
+              );
+            }
+            // Fall back to the undifferentiated count rather than claiming a split the counters do
+            // not support — an older scan with no standing on its findings must not read as clean.
+            if (parts.length === 0) parts.push(`${others} further finding(s)`);
+            return `${parts.join(", and ")}. scrub_draft lists every one with its standing and ` +
+              "its line.";
           }
           /*
            * TWO COUNTS AND DELIBERATELY NO SUM. They overlap: an em dash is reported as a flag in
