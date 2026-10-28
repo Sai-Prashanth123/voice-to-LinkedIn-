@@ -35,6 +35,9 @@ import { z } from "zod";
 
 import { scan } from "../aitells.mjs";
 import { willRefuse } from "../prefile.mjs";
+// The carve-outs measure_draft applies from a static mirror. This tool loads the library, so it is
+// the one that can say whether Josh still allows them — see lexicon_carve_outs below.
+import { carveOutsFor } from "./measure.mjs";
 import { renderLibrary } from "../../supabase/functions/_shared/views.ts";
 import { sd as stdev, sentences, words } from "../../scripts/lib/prose.mjs";
 import { corpusBand, writerTarget } from "./voice.mjs";
@@ -262,8 +265,48 @@ export const scrubTools = [
           : null,
       });
 
+      /*
+       * THE LIBRARY HALF OF THE LEXICON CARVE-OUT — 28 October.
+       *
+       * measure_draft suppresses its `here's` flag for "Here's my system:", which Josh added to
+       * `banned_phrases` himself on 13 October. It has to apply that from a static mirror, because
+       * it makes no database call by design (guards.test.mjs hands it an empty context and asserts
+       * it still works). This tool DOES load the library, so it is the one that can say whether the
+       * line the mirror copies is still there.
+       *
+       * THE DIRECTION OF THE RISK IS WHY THIS EXISTS AT ALL. prefile.mjs's rule is that a check can
+       * only be narrower than the library, never broader, because "a refusal that outlived the rule
+       * it came from would be the system inventing a standard of its own". A CARVE-OUT that
+       * outlived its line fails the same rule with the sign flipped: it would go on ignoring
+       * something Josh had re-banned, and nothing anywhere would say so. Same device as
+       * RULE_PRESENT, matched as loosely, for the same reason — he rewords these sections himself.
+       *
+       * Reported, never a refusal. A withdrawn carve-out means measure_draft's mirror is stale, and
+       * the fix is a code change; refusing a draft over it would punish the writer for it.
+       */
+      const carveOuts = carveOutsFor(body).map((c) => {
+        const live = library ? c.library.test(library.banned_phrases ?? "") : null;
+        return {
+          term: c.term,
+          matched: c.matched,
+          allowed_by: `${c.section}, Josh ${c.added}. His words: "${c.his_words}".`,
+          still_in_the_library: live,
+          means: live === null
+            ? "include_library was off on this call, so the live section was not read. Pass it on " +
+              "to have this checked."
+            : live
+            ? `Confirmed against the live ${c.section}. measure_draft is right to suppress its ` +
+              `lexicon flag for "${c.term}" on this body.`
+            : `GONE from the live ${c.section}. Josh has withdrawn the carve-out, so ` +
+              `measure_draft's static mirror is now broader than the library and is suppressing a ` +
+              `flag for "${c.term}" that should fire. Fix LEXICON_CARVE_OUTS in ` +
+              `mcp-server/tools/measure.mjs; do not work around it here.`,
+        };
+      });
+
       return {
         action,
+        ...(carveOuts.length > 0 && { lexicon_carve_outs: carveOuts }),
         will_refuse: willNotFile.length > 0
           ? {
             count: willNotFile.length,

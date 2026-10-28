@@ -20,6 +20,8 @@ import { z } from "zod";
 import { gatherAll } from "../../eval/gather.mjs";
 import { score, overall, summarise } from "../../supabase/functions/_shared/acceptance.ts";
 import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
+// One rule for clearance expiry, shared with the Deno side. See clearanceSurvivesReopen.
+import { needsAClearanceDecision } from "../../supabase/functions/_shared/names.ts";
 import { isSupplied } from "../../supabase/functions/_shared/views.ts";
 
 /*
@@ -151,7 +153,10 @@ export const readTools = [
         db.select("moment_names", {
           // `id` so a caller can be precise. clear_names matches on the name as he says it, which is
           // right for a conversation, but two people called Ben on one idea need the id to separate.
-          select: "id,name,kind,cleared,cleared_note",
+          // `cleared_at` for the expiry rule: clearance is per post (9.10), and this tool read the
+          // `cleared` boolean straight off the row, so a permission granted before the last
+          // re-open came back here as live.
+          select: "id,name,kind,cleared,cleared_at,cleared_note",
           moment_id: `eq.${id}`,
           order: "created_at.asc",
         }),
@@ -172,7 +177,14 @@ export const readTools = [
         }),
       ]);
 
-      const uncleared = names.filter((n) => !n.cleared && n.kind !== "not_a_name");
+      // `moment` is selected with `*` above, so `reopened_at` is already in hand — the column was
+      // there and nothing on this path read it.
+      const uncleared = names.filter((n) =>
+        n.kind !== "not_a_name" && needsAClearanceDecision(moment.reopened_at, n)
+      );
+      // Named separately, because "never cleared" and "cleared for the post this used to be" are
+      // different things to say to Josh and only one of them is a question he has already answered.
+      const expired = uncleared.filter((n) => n.cleared);
 
       return {
         moment,
@@ -194,6 +206,15 @@ export const readTools = [
           ? "These are NOT cleared and must not appear in a draft: " +
             uncleared.map((n) => n.name).join(", ")
           : "No uncleared names on this moment.",
+        ...(expired.length > 0 && {
+          clearance_expired_on_reopen: {
+            names: expired.map((n) => ({ name: n.name, previously_cleared_at: n.cleared_at ?? null })),
+            why: `This moment was re-opened at ${moment.reopened_at}, which 9.10 makes a different ` +
+              "post. Permission given for the earlier one does not carry into this one, so these " +
+              "need asking about again — they are not a refusal Josh has never seen, they are a " +
+              "yes he gave to a different post.",
+          },
+        }),
         drafts,
       };
     },

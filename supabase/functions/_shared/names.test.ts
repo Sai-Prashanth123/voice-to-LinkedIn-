@@ -49,3 +49,52 @@ test("when genuinely ambiguous it keeps the name", () => {
   assert.equal(isRealName("Major"), true);
   assert.equal(isRealName("Bishop"), true);
 });
+
+/* ── The clearance expiry, from the shared case list (9.10) ──────────────────────────────────── */
+
+/**
+ * THE SAME CASES ARE ASSERTED FROM NODE, in mcp-server/clearance.test.mjs.
+ *
+ * That is the point of the fixture rather than a tidiness preference. The expiry rule was written
+ * here, inside two `async` functions taking a Deno client, and so could not be called from Node —
+ * where six readers answer the same question and all six read the `cleared` boolean straight off
+ * the row. The rule passed its Deno tests for weeks while being dead on the only path Josh uses.
+ *
+ * Two suites over one list is what makes that visible: a change that suits one runtime fails the
+ * other. Cases go in clearance-cases.json, never into one of the two suites.
+ */
+import { clearanceSurvivesReopen, isClearedNow, needsAClearanceDecision } from "./names.ts";
+import cases from "./clearance-cases.json" with { type: "json" };
+
+test("clearance expiry, every shared case, under Deno", () => {
+  assert.ok(cases.cases.length >= 12, "the shared case list has shrunk");
+  for (const c of cases.cases) {
+    assert.equal(
+      isClearedNow(c.reopened_at, c.row),
+      c.expected_cleared_now,
+      `isClearedNow — ${c.name}`,
+    );
+    // The complement, asserted rather than assumed. The two readers are separate functions and a
+    // moment that is neither cleared nor awaiting a decision would fall out of the system.
+    assert.equal(
+      needsAClearanceDecision(c.reopened_at, c.row),
+      !c.expected_cleared_now,
+      `needsAClearanceDecision — ${c.name}`,
+    );
+  }
+});
+
+test("the predicate ignores the boolean and judges only the timestamps", () => {
+  // clearanceSurvivesReopen is the time half on its own: callers that have already checked
+  // `cleared` use it directly, and clearedNames does exactly that because its query filtered on
+  // `cleared = true` already.
+  assert.equal(clearanceSurvivesReopen(null, null), true, "never re-opened, nothing expires");
+  assert.equal(
+    clearanceSurvivesReopen("2026-11-03T00:00:00.000Z", "2026-08-14T02:00:00.000Z"),
+    false,
+  );
+  assert.equal(
+    clearanceSurvivesReopen("2026-10-01T00:00:00.000Z", "2026-10-02T00:00:00.000Z"),
+    true,
+  );
+});

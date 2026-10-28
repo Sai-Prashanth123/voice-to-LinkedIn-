@@ -1,0 +1,77 @@
+{
+  "_why": "ONE RULE, TWO RUNTIMES, ONE LIST OF CASES. Clause 9.10 makes clearance per post, and the expiry that enforces it lives in names.ts as clearanceSurvivesReopen / isClearedNow / needsAClearanceDecision. Deno runs it in the edge functions; Node runs it in six MCP-side readers. Before 28 October the rule was implemented twice inside two async Deno functions and the Node path never called it at all, so the two runtimes disagreed for weeks about who may be named — and Josh only ever uses the Node path. Asserting the same cases from both runtimes is the only arrangement in which that cannot happen quietly again: a change that suits one runtime fails the other's suite. Add a case here, never to one suite.",
+  "_fields": "reopened_at = moments.reopened_at, omitted on the last case on purpose. row = the two moment_names columns the rule reads. expected_cleared_now = what isClearedNow must return; needsAClearanceDecision must return its exact complement.",
+  "cases": [
+    {
+      "name": "never re-opened, cleared — the ordinary case, and a rewrite inside one attempt chain keeps it",
+      "reopened_at": null,
+      "row": { "cleared": true, "cleared_at": "2026-08-14T02:00:00.000Z" },
+      "expected_cleared_now": true
+    },
+    {
+      "name": "never re-opened, never cleared — still the question nobody has answered",
+      "reopened_at": null,
+      "row": { "cleared": false, "cleared_at": null },
+      "expected_cleared_now": false
+    },
+    {
+      "name": "re-opened, then cleared — permission given for the post being written now",
+      "reopened_at": "2026-10-01T00:00:00.000Z",
+      "row": { "cleared": true, "cleared_at": "2026-10-02T09:30:00.000Z" },
+      "expected_cleared_now": true
+    },
+    {
+      "name": "cleared in August, re-opened in November — THE DEFECT. 9.10 says per post, and a re-open makes it a different post",
+      "reopened_at": "2026-11-03T00:00:00.000Z",
+      "row": { "cleared": true, "cleared_at": "2026-08-14T02:00:00.000Z" },
+      "expected_cleared_now": false
+    },
+    {
+      "name": "cleared at the same instant as the re-open — the boundary is inclusive, so it stands",
+      "reopened_at": "2026-10-20T11:00:00.000Z",
+      "row": { "cleared": true, "cleared_at": "2026-10-20T11:00:00.000Z" },
+      "expected_cleared_now": true
+    },
+    {
+      "name": "cleared one millisecond before the re-open — expired, because the comparison is a time and not a day",
+      "reopened_at": "2026-10-20T11:00:00.000Z",
+      "row": { "cleared": true, "cleared_at": "2026-10-20T10:59:59.999Z" },
+      "expected_cleared_now": false
+    },
+    {
+      "name": "re-opened, cleared true with no timestamp — a row from before cleared_at existed, treated as expired because asking again costs one tap",
+      "reopened_at": "2026-10-20T11:00:00.000Z",
+      "row": { "cleared": true, "cleared_at": null },
+      "expected_cleared_now": false
+    },
+    {
+      "name": "never re-opened, cleared true with no timestamp — nothing has made this a different post, so it stands",
+      "reopened_at": null,
+      "row": { "cleared": true, "cleared_at": null },
+      "expected_cleared_now": true
+    },
+    {
+      "name": "un-cleared after a re-open — setClearance wipes cleared_at, and a false boolean settles it either way",
+      "reopened_at": "2026-10-20T11:00:00.000Z",
+      "row": { "cleared": false, "cleared_at": null },
+      "expected_cleared_now": false
+    },
+    {
+      "name": "cleared false with a later timestamp — the boolean decides; a timestamp grants nothing on its own",
+      "reopened_at": "2026-10-20T11:00:00.000Z",
+      "row": { "cleared": false, "cleared_at": "2026-10-21T11:00:00.000Z" },
+      "expected_cleared_now": false
+    },
+    {
+      "name": "an unparseable cleared_at expires the clearance rather than granting it — every comparison with NaN is false, which is the direction this whole file errs in",
+      "reopened_at": "2026-10-20T11:00:00.000Z",
+      "row": { "cleared": true, "cleared_at": "not a date" },
+      "expected_cleared_now": false
+    },
+    {
+      "name": "reopened_at absent rather than null — undefined must read as 'never re-opened', the same as null, so a row shape cannot change the answer",
+      "row": { "cleared": true, "cleared_at": "2026-08-14T02:00:00.000Z" },
+      "expected_cleared_now": true
+    }
+  ]
+}

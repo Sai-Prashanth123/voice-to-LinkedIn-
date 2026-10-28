@@ -39,6 +39,11 @@ import { dirname, join, resolve } from "node:path";
 import { distinctive, freq, mean, median, per1k, sd, sentences, tally, tokens, words }
   from "./lib/prose.mjs";
 import { openingShape } from "./lib/prose.mjs";
+// ONE LIST, TWO READERS. measure.mjs filters the STORED artefact with this same set at read time,
+// because the 59-post September contrast this file produced cannot be rebuilt from anything on disk
+// — see the note there. A second copy of the list would diverge, and the two would then disagree
+// about which words count as function words while both claiming to be the measurement.
+import { FUNCTION_WORDS } from "./lib/stopwords.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
@@ -180,9 +185,16 @@ function contrast(joshText, posts) {
 
   // Words the peer group reaches for and Josh does not. Useful as a soft warning list: if a draft
   // is full of them, it is drifting toward the reference accounts rather than toward him.
+  //
+  // FILTERED BEFORE THE SLICE, not after, and that ordering is the whole of why it is written here
+  // rather than at the call site. `get_voice_brief` takes `peer_words_he_avoids.slice(0, 25)` off
+  // the stored artefact, so a filter applied downstream of a 25-entry list hands Josh however many
+  // of the 25 survived — 18 on the stored contrast — and nothing in the payload says a word was
+  // dropped. Filtering first means the 25 he reads are 25 words that passed.
   const avoided = [];
   for (const [word, n] of theirsF) {
     if (n < 12) continue;
+    if (FUNCTION_WORDS.has(word)) continue;
     const theirRate = per1k(n, theirs.length);
     const mineRate = per1k(mineF.get(word) ?? 0, mine.length);
     if (mineRate * 3 < theirRate) {
@@ -196,6 +208,15 @@ function contrast(joshText, posts) {
     signature_terms: signature,
     spoken_filler: spokenFiller,
     peer_words_he_avoids: avoided.slice(0, 25),
+    // Said in the artefact, because the list is read far from this file — by get_voice_brief and
+    // by measure_draft's lexicon flag — and a filtered list that does not say what it excludes
+    // reads as "these are all the words", which is how the unfiltered one came to be trusted.
+    peer_words_he_avoids_excludes: "Function words: articles, determiners, pronouns, " +
+      "prepositions, conjunctions, auxiliaries, modals and degree words. Written register uses " +
+      "more of them than speech for everybody, so they clear this list's rate test on the " +
+      "register gap alone rather than on anything about Josh. What remains is mostly the " +
+      "material's own domain vocabulary, which is a corpus mismatch and not a habit of his: his " +
+      "side is recorded calls, theirs is his market writing about his market.",
   };
 }
 
@@ -233,6 +254,8 @@ function render(fp, ctr) {
     L.push(`- **Peer words he avoids** (common in the reference accounts, rare or absent in him — ` +
       `a draft full of these is drifting toward them): ` +
       ctr.peer_words_he_avoids.map((t) => t.word).join(", "));
+    L.push(`  Function words are excluded — see peer_words_he_avoids_excludes. They cleared the rate`);
+    L.push(`  test on the speech/writing register gap, not on anything about Josh.`);
     L.push("");
     L.push(`- **Spoken filler — evidence, not instruction**: ` +
       ctr.spoken_filler.map((t) => t.word).join(", "));

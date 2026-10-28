@@ -96,6 +96,82 @@ export function isRealName(name: string, selfNames: string[] = ["josh"]): boolea
   return true;
 }
 
+/* ── The expiry rule, as a synchronous predicate both runtimes can call ─────────────────────── */
+
+/**
+ * Is a clearance still live for what is being written NOW?
+ *
+ * WHY THIS IS A SEPARATE, SYNCHRONOUS FUNCTION — 28 October.
+ *
+ * The rule below was implemented twice in this file, inside `clearedNames` and `unclearedNames`,
+ * and both of them are `async` and take a Deno `SupabaseClient`. So the rule could not be called
+ * from Node, and the five MCP-side readers that answer the same question — `create_draft`'s
+ * refusal, `get_moment`, `get_rewrite_brief`, `get_drafting_brief` and the `moment://` resource —
+ * each read `cleared` straight off the row and never looked at `reopened_at`.
+ *
+ * That made the expiry dead on the path that actually runs. Josh has never used a clone; every
+ * session he has ever run went through the hosted connector, which serves `mcp-server/`. A name
+ * cleared for a post, with the moment then re-opened in November for a different post, came back
+ * as cleared to the drafter, to the rewrite brief and to the bank page. 9.10 says "for that post",
+ * and nothing on the live path enforced it.
+ *
+ * Extracting the PURE part is the same move that already makes `isRealName` callable from Node:
+ * this file's only import is `import type`, which Node's type stripping erases. Given a
+ * `reopened_at` and a row, this answers the question with no client and no await, so one rule
+ * serves six readers.
+ *
+ * @param reopenedAt `moments.reopened_at` — null when the moment has never been re-opened.
+ * @param clearedAt `moment_names.cleared_at` — null when clearance was never recorded or was wiped.
+ */
+export function clearanceSurvivesReopen(
+  reopenedAt: string | null | undefined,
+  clearedAt: string | null | undefined,
+): boolean {
+  // Never re-opened: still the post the permission was given for, so it stands. A rewrite inside
+  // one attempt chain keeps clearance — being asked three times about one post is the nagging that
+  // makes the question stop working.
+  if (!reopenedAt) return true;
+
+  // Re-opened, and no timestamp to compare. `setClearance` wipes `cleared_at` when it un-clears, so
+  // a true `cleared` with no `cleared_at` is a row from before the column existed. Treated as
+  // expired: asking again costs one tap, and the other way round names someone without asking.
+  if (!clearedAt) return false;
+
+  const cleared = new Date(clearedAt).getTime();
+  const reopened = new Date(reopenedAt).getTime();
+  // An unparseable date gives NaN, and every comparison with NaN is false — so a bad timestamp
+  // expires the clearance rather than granting it. That is the direction this whole file errs in.
+  return cleared >= reopened;
+}
+
+/**
+ * Is this name cleared for what is being written now?
+ *
+ * The single question all six readers ask. Takes the row rather than two fields so a caller cannot
+ * pass `cleared` from one row and `cleared_at` from another, which is the mistake a two-argument
+ * version invites when the rows are being mapped.
+ */
+export function isClearedNow(
+  reopenedAt: string | null | undefined,
+  row: { cleared?: unknown; cleared_at?: string | null },
+): boolean {
+  return Boolean(row?.cleared) && clearanceSurvivesReopen(reopenedAt, row?.cleared_at);
+}
+
+/**
+ * Does this name still need a decision before anything can be drafted?
+ *
+ * Not simply `cleared = false`: a name cleared before the last re-open is back to needing one, and
+ * the question must be asked again rather than assumed. The exact complement of `isClearedNow`, so
+ * the two can never both be true or both be false about one row.
+ */
+export function needsAClearanceDecision(
+  reopenedAt: string | null | undefined,
+  row: { cleared?: unknown; cleared_at?: string | null },
+): boolean {
+  return !isClearedNow(reopenedAt, row);
+}
+
 /**
  * The names cleared for what is being written NOW.
  *
@@ -115,15 +191,10 @@ export async function clearedNames(db: SupabaseClient, momentId: number): Promis
     // Roles recorded before the filter existed. Kept in the bank (6.3), never a clearance question.
     .neq("kind", "not_a_name");
 
-  const reopened = moment?.reopened_at ? new Date(moment.reopened_at as string).getTime() : null;
-
+  // 9.10 — permission given before this became a different post does not carry into it. One
+  // predicate, shared with the MCP-side readers, so "cleared" means the same thing on both paths.
   return (names ?? [])
-    .filter((n) => {
-      if (!reopened) return true;
-      // 9.10 — permission given before this became a different post does not carry into it.
-      if (!n.cleared_at) return false;
-      return new Date(n.cleared_at as string).getTime() >= reopened;
-    })
+    .filter((n) => clearanceSurvivesReopen(moment?.reopened_at as string | null, n.cleared_at as string | null))
     .map((n) => n.name as string);
 }
 
@@ -197,15 +268,8 @@ export async function unclearedNames(
     .eq("moment_id", momentId)
     .neq("kind", "not_a_name");
 
-  const reopened = moment?.reopened_at ? new Date(moment.reopened_at as string).getTime() : null;
-
   return (names ?? [])
-    .filter((n) => {
-      if (!n.cleared) return true;
-      if (!reopened) return false;
-      const at = n.cleared_at ? new Date(n.cleared_at as string).getTime() : 0;
-      return at < reopened;
-    })
+    .filter((n) => needsAClearanceDecision(moment?.reopened_at as string | null, n))
     .map((n) => ({
       id: n.id as number,
       name: n.name as string,

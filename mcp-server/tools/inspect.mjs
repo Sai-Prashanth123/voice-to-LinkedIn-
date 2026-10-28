@@ -36,6 +36,8 @@ import { similarity } from "../../supabase/functions/_shared/diff.ts";
 // 9.1 — the exact set of fields a drafter may see. Reused so a rewrite is shown neither more nor
 // less than the first attempt was.
 import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
+// One rule for clearance expiry, shared with the Deno side. See clearanceSurvivesReopen.
+import { needsAClearanceDecision } from "../../supabase/functions/_shared/names.ts";
 import { isSupplied } from "../../supabase/functions/_shared/views.ts";
 // 9.3 — the recorded framework, compared on a key so one structure spelled two ways counts once.
 import { frameworkMix } from "../frameworks.mjs";
@@ -171,12 +173,23 @@ export const inspectTools = [
         moment_id: `eq.${draft.moment_id}`,
         limit: 1,
       });
+      // The moment row, for `reopened_at` alone. This tool had no `moments` select at all — it
+      // works from the draft — so the clearance expiry in names.ts had nothing to read here, and a
+      // rewrite brief written after a re-open told the writer a stale permission was live. One
+      // extra read against one column, on a call that already makes several.
+      const [reopenRow] = await db.select("moments", {
+        select: "reopened_at",
+        id: `eq.${draft.moment_id}`,
+        limit: 1,
+      });
       const names = await db.select("moment_names", {
-        select: "name,kind,cleared",
+        select: "name,kind,cleared,cleared_at",
         moment_id: `eq.${draft.moment_id}`,
       });
       const uncleared = names
-        .filter((n) => n.kind !== "not_a_name" && !n.cleared)
+        .filter((n) =>
+          n.kind !== "not_a_name" && needsAClearanceDecision(reopenRow?.reopened_at, n)
+        )
         .map((n) => n.name);
 
       const brief = {

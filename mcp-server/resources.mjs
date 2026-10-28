@@ -11,12 +11,29 @@
  * now was readable only by the local josh-voice skill — so a client drafting through the connector
  * on claude.ai could not see the measured fingerprint of how he writes. That was the largest gap
  * between what the local surface knew and what the remote one did.
+ *
+ * `library://{key}` IS NOW LOAD-BEARING, AND IT WAS NOT
+ *
+ * It was addressable from the day it was written, with a list callback so all fourteen appear in
+ * resources/list — and nothing in the repo pointed at it. From 28 October the drafting and gating
+ * briefs do: they name each section they are allowed to read by its URI and size instead of pasting
+ * 38,581 characters of bodies into a reply Josh's client truncates at ~2 KB. So a read that failed
+ * here used to cost a person a browse and now costs a draft its standard.
+ *
+ * Two consequences worth knowing. The brief names BOTH routes to a section — this resource and
+ * get_library with a key — because it is not verifiable from this side whether the connector
+ * surfaces resources/list to the model or only to the person, and naming both is free. And a key
+ * the brief prints has to resolve here: brief-size.test.mjs asserts that the URI set a brief prints
+ * is exactly its view's allowlist and that every one of them reads through resourcesFor without
+ * throwing, because a pointer index naming a section this cannot serve is worse than no index.
  */
 
 import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { isSupplied } from "../supabase/functions/_shared/views.ts";
 import { sourceEntry } from "../supabase/functions/_shared/entry.ts";
+// One rule for clearance expiry, shared with the Deno side. See clearanceSurvivesReopen.
+import { isClearedNow, needsAClearanceDecision } from "../supabase/functions/_shared/names.ts";
 import voiceprint from "../data/josh/law/voiceprint.json" with { type: "json" };
 import sentinels from "../data/josh/sentinels/latest.json" with { type: "json" };
 // The five markdown law files, bundled as JSON by build-law.mjs in the same run that writes them.
@@ -122,8 +139,11 @@ export function resourcesFor(context) {
           moment_id: `eq.${id}`,
           limit: 1,
         });
+        // `cleared_at` for the expiry rule (9.10 — clearance is per post). `moment` above is
+        // selected with `*`, so `reopened_at` was already in hand and this page read the `cleared`
+        // boolean past it: the bank page showed a name as cleared after the moment was re-opened.
         const names = await db.select("moment_names", {
-          select: "name,kind,cleared",
+          select: "name,kind,cleared,cleared_at",
           moment_id: `eq.${id}`,
         });
 
@@ -144,8 +164,12 @@ export function resourcesFor(context) {
           // sourceEntry, not the raw row: it is the exact set of fields a drafter may see (9.1),
           // and widening it here would widen it for everything downstream.
           material: sourceEntry(material),
-          must_not_name: real.filter((n) => !n.cleared).map((n) => n.name),
-          cleared_names: real.filter((n) => n.cleared).map((n) => n.name),
+          must_not_name: real
+            .filter((n) => needsAClearanceDecision(moment.reopened_at, n))
+            .map((n) => n.name),
+          cleared_names: real
+            .filter((n) => isClearedNow(moment.reopened_at, n))
+            .map((n) => n.name),
         });
       },
     },

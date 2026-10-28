@@ -48,6 +48,10 @@ import { GATE_CHECKS } from "../../supabase/functions/_shared/prompts.ts";
 import { z } from "zod";
 
 import { verifyDraft } from "../../supabase/functions/_shared/claims.ts";
+// The clearance-expiry rule, shared with the Deno side. Pure and synchronous, so this Node path
+// runs the same rule the edge functions do rather than its own reading of `cleared` — see
+// clearanceSurvivesReopen in that file for what was wrong with reading the boolean alone.
+import { isClearedNow, needsAClearanceDecision } from "../../supabase/functions/_shared/names.ts";
 // 8.3 — "Take the shape. Never the words." The index holds hashes of the reference writers' word
 // runs, never their sentences, so consulting it puts none of their text near a drafter.
 import { hashRun, shinglesOf } from "../../supabase/functions/_shared/shingles.ts";
@@ -224,8 +228,11 @@ export const writeTools = [
     },
     async handler(args, { db, url, key: contextKey }) {
       // 6.3 again: a killed moment is one Josh has already said no to.
+      // `reopened_at` because clearance is per POST (9.10), and re-opening is the point at which a
+      // moment becomes a different one. This select had four columns and the expiry rule in
+      // names.ts could not reach any of them — see the note on clearanceSurvivesReopen.
       const [moment] = await db.select("moments", {
-        select: "id,killed,status,title",
+        select: "id,killed,status,title,reopened_at",
         id: `eq.${args.moment_id}`,
         limit: 1,
       });
@@ -255,11 +262,15 @@ export const writeTools = [
       // The whole list, not just the uncleared half: verifyDraft below is handed every real name
       // with its clearance, because a name's absence from this array reads to it as "no such name
       // to worry about" rather than "cleared".
+      //
+      // `cleared_at` is here for the expiry rule. `cleared` alone was a permanent boolean on this
+      // path: a name cleared in August for one post came back cleared in November for a post
+      // written from the same moment after a re-open, and this refusal let it through.
       const realNames = (await db.select("moment_names", {
-        select: "name,kind,cleared",
+        select: "name,kind,cleared,cleared_at",
         moment_id: `eq.${args.moment_id}`,
       })).filter((n) => n.kind !== "not_a_name");
-      const uncleared = realNames.filter((n) => !n.cleared);
+      const uncleared = realNames.filter((n) => needsAClearanceDecision(moment.reopened_at, n));
 
       // Checked here as well as at the gate. The gate is a model reading prose and can miss one;
       // this is a string search and cannot. Clause 9.10 makes an uncleared name a hard stop, not a
@@ -307,7 +318,11 @@ export const writeTools = [
         args.body,
         args.claims,
         entry,
-        realNames.map((n) => ({ name: n.name, cleared: Boolean(n.cleared) })),
+        // The LIVE clearance, not the stored boolean. verifyDraft is the stricter of the two name
+        // checks here — it matches substrings where the guard above matches word boundaries — so
+        // handing it a clearance that expired at the last re-open would make the stricter check
+        // the more permissive one on exactly the drafts the expiry exists for.
+        realNames.map((n) => ({ name: n.name, cleared: isClearedNow(moment.reopened_at, n) })),
         borrowedIndex,
       );
       if (!verification.ok) {

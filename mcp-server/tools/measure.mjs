@@ -45,6 +45,10 @@ import { WRITER_CHOICES } from "../writers.mjs";
 // Import-free and type-stripped by Node, the shape.ts pattern — so this stays a tool that makes no
 // database call and no network call, which guards.test.mjs asserts by handing it an empty context.
 import { splitModes } from "../../supabase/functions/_shared/library-spans.ts";
+// The same set scripts/build-voiceprint.mjs now applies when it WRITES the peer list. Import-free,
+// so it costs this tool neither a database call nor a network call. See PEER_WORDS below for why
+// the filter has to happen again here.
+import { FUNCTION_WORDS } from "../../scripts/lib/stopwords.mjs";
 import voiceprint from "../../data/josh/law/voiceprint.json" with { type: "json" };
 import sentinels from "../../data/josh/sentinels/latest.json" with { type: "json" };
 
@@ -134,6 +138,122 @@ function againstWriter(value, target, key, unit) {
     `${Math.abs(gap)} ${gap === 0 ? "exactly on it" : gap > 0 ? "above" : "below"}.`;
 }
 
+/*
+ * THE PEER LIST, FILTERED AT READ TIME — 28 October.
+ *
+ * WHY HERE AND NOT IN THE ARTEFACT. The filter belongs in build-voiceprint.mjs, and it is there
+ * now. But the stored contrast was computed on 2026-09-08 against 59 posts, and that corpus is not
+ * on disk: clause 8.3 keeps the sentinel text out of the system, and the two scrapes that survive
+ * are a 112-post set from 5 October and a 70-post set from 9 October. Rebuilding against either
+ * would not filter the stored list, it would REPLACE the corpus underneath it — measured on 28
+ * October, the 112-post run returns `outbound, ad, week, deal, linkedin, spend` and drops `cpa,
+ * before, same, company`. A list of different words is not a cleaner version of this list.
+ *
+ * So the artefact keeps the list it measured and this reads it through the same set the builder now
+ * applies. The day a 59-post rebuild is possible, or Josh accepts a corpus swap, this filter
+ * becomes a no-op rather than a disagreement.
+ *
+ * WHAT IT REMOVES, measured on the stored artefact: 7 of 25 — `your, by, who, every, same, down,
+ * before`. Every one cleared the list's rate test on the register gap alone. The test is raw rate
+ * — count >= 12 in their corpus and `mineRate * 3 < theirRate` — with no ratio floor, so written
+ * register's heavier subordination and possessives were enough on their own. A draft was told it
+ * was "drifting toward their voice" for containing the word "who".
+ *
+ * WHAT IT DOES NOT REMOVE, and this is reported to the caller rather than quietly pruned: most of
+ * what survives is the material's own domain vocabulary. That is a CORPUS MISMATCH, not a habit —
+ * his side is six calls about building this system, theirs is his market writing about his market.
+ * Cutting those would be a judgement about what his subject is, dressed as a measurement.
+ */
+const PEER_WORDS_RAW = (voiceprint.contrast?.peer_words_he_avoids ?? []).map((e) => ({
+  word: String(e?.word ?? e).toLowerCase(),
+  theirs_per_1k: Number(e?.theirs_per_1k ?? 0),
+}));
+const PEER_WORDS = PEER_WORDS_RAW.filter((e) => !FUNCTION_WORDS.has(e.word));
+const PEER_WORDS_DROPPED = PEER_WORDS_RAW
+  .filter((e) => FUNCTION_WORDS.has(e.word))
+  .map((e) => e.word);
+
+/**
+ * How heavily the reference writers themselves carry this vocabulary, per thousand words.
+ *
+ * The measured counterpart a draft's own rate is compared against, summed from the `theirs_per_1k`
+ * the build already stored on every entry. It was in the data and nothing read it.
+ */
+const PEER_LOAD = +PEER_WORDS.reduce((t, e) => t + e.theirs_per_1k, 0).toFixed(2);
+
+/** How many signature terms were measured, so the note can say "n of m" rather than a bare count. */
+const SIGNATURE_TOTAL = (voiceprint.contrast?.signature_terms ?? []).length;
+
+/**
+ * Phrases Josh has ALLOWED in the library that a lexicon entry would otherwise flag.
+ *
+ * THE ONE THIS IS FOR. `here's my system:` is a carve-out Josh added to `banned_phrases` himself on
+ * 13 October 2026, in his own words — "I actually like ... my very simple system" — and extended the
+ * same day to cover bulleted lists as well as numbered ones. The regex engine already honours it by
+ * accident: rule 2C-22 matches `here's (the thing|what|why|how|something)` and never reaches
+ * `here's my system`. Only the lexicon flag broke it, because `here's` is a peer-list entry and the
+ * list matches a bare word with no idea what construction it sits in. So the only outstanding
+ * complaint on a finished draft was a phrase he had asked for.
+ *
+ * NARROWER THAN THE LIBRARY, NEVER BROADER — prefile.mjs's rule, and it applies with the sign
+ * flipped here. There, a check that outlived its library line would invent a standard. Here, a
+ * carve-out that outlived its line would keep IGNORING something Josh had re-banned. So:
+ *
+ *   - `allowed` requires the colon. The library says "as a colon lead-in to a numbered list" and
+ *     "before any list"; a bare "Here's my system" with no list after it is not what he described,
+ *     and the narrow reading is the safe one.
+ *   - the carve-out applies only when EVERY occurrence of the term in the body is inside the
+ *     allowed construction. A draft that says "Here's my system:" and also "Here's the thing:"
+ *     keeps its flag, and 2C-22 catches the second one separately.
+ *   - `library` is the line that must still be in `banned_phrases` for this to hold. measure_draft
+ *     makes no database call (see the header) so it cannot read it, and says so in the payload.
+ *     scrub_draft DOES load the library and checks it — the same device as prefile.mjs's
+ *     RULE_PRESENT, which is the only other library-gated check in the system.
+ *
+ * Matched loosely, for RULE_PRESENT's reason: Josh edits these sections in his own words, and a
+ * carve-out that vanished because he reworded a sentence would be worse than one that outlived a
+ * deletion by a session.
+ */
+export const LEXICON_CARVE_OUTS = [
+  {
+    term: "here's",
+    allowed: /here['’]s\s+my\s+(?:very\s+simple\s+)?system\s*:/gi,
+    bare: /\bhere['’]s\b/gi,
+    library: /(?:allowed|carve-?out)[^\n]{0,160}here['’]s my (?:very simple )?system/i,
+    section: "banned_phrases",
+    added: "2026-10-13",
+    his_words: "I actually like ... my very simple system",
+    describes: '"here\'s my system:" or "here\'s my very simple system:" as a colon lead-in to a list',
+  },
+];
+
+/**
+ * Which carve-outs this body actually earns, and which term each one suppresses.
+ *
+ * Exported so scrub_draft, which loads the library, can confirm the same list against the live
+ * section rather than carrying its own idea of what Josh allowed.
+ */
+export function carveOutsFor(body) {
+  const text = String(body ?? "");
+  const out = [];
+  for (const c of LEXICON_CARVE_OUTS) {
+    const allowed = text.match(c.allowed) ?? [];
+    const bare = text.match(c.bare) ?? [];
+    if (allowed.length === 0 || allowed.length !== bare.length) continue;
+    out.push({
+      term: c.term,
+      matched: allowed[0].trim(),
+      occurrences: allowed.length,
+      section: c.section,
+      added: c.added,
+      his_words: c.his_words,
+      describes: c.describes,
+      library: c.library,
+    });
+  }
+  return out;
+}
+
 export const measureTools = [
   {
     name: "measure_draft",
@@ -212,8 +332,44 @@ export const measureTools = [
       const wordsFrom = (list) =>
         (list ?? []).map((e) => String(e?.word ?? e).toLowerCase()).filter((w) => used.has(w));
 
-      const avoided = wordsFrom(voiceprint.contrast?.peer_words_he_avoids);
       const signature = wordsFrom(voiceprint.contrast?.signature_terms);
+
+      /*
+       * THE PEER HALF, IN THREE STEPS, BECAUSE IT WAS WRONG IN THREE PLACES.
+       *
+       * One: the list is read through FUNCTION_WORDS (see PEER_WORDS above), so `who` and `last`
+       * are no longer evidence of anything.
+       *
+       * Two: a carve-out Josh wrote drops its term when the body only uses it the way he allowed.
+       *
+       * Three: what survives is counted as a DENSITY rather than a presence. The flag's own text
+       * has always said "One is nothing; several together is a draft drifting toward their voice",
+       * and then it fired on one — on `here's`, inside the phrase he asked for.
+       */
+      const carvedOut = carveOutsFor(body);
+      const carvedTerms = new Set(carvedOut.map((c) => c.term));
+      const peerHits = PEER_WORDS.filter((e) => used.has(e.word) && !carvedTerms.has(e.word));
+      const avoided = peerHits.map((e) => e.word);
+
+      /*
+       * HOW SATURATED THIS DRAFT IS WITH THEIR VOCABULARY, AGAINST HOW SATURATED THEIRS ARE.
+       *
+       * Both sides are rates over the same word list, so they are comparable: the draft's own
+       * occurrences per thousand words, against the writers' combined `theirs_per_1k` across the
+       * whole filtered list. That second number was already stored on every entry by
+       * build-voiceprint.mjs and nothing had ever read it.
+       *
+       * TWO CONDITIONS, NOT ONE, for scrub_draft's reason about its re-voice share. A rate on a
+       * post-length body is lumpy — one word in a 150-word draft is 6.7/1k — so a rate alone would
+       * fire on a single hit again by a different route. And a count alone would ignore how heavy
+       * the words are. So the flag needs at least two distinct entries AND a rate at or above the
+       * writers' own. Neither number is invented: one is measured off this draft, the other off
+       * their corpus.
+       */
+      const peerOccurrences = words.filter((w) => peerHits.some((e) => e.word === w)).length;
+      const peerRate = per1k(peerOccurrences, total);
+      const PEER_MIN_DISTINCT = 2;
+      const peerDrifting = avoided.length >= PEER_MIN_DISTINCT && peerRate >= PEER_LOAD;
 
       /*
        * Only what is genuinely decidable without judgement.
@@ -236,10 +392,23 @@ export const measureTools = [
           `${MEASURED} reference posts do not.`,
         );
       }
-      if (avoided.length > 0) {
+      /*
+       * THE SENTENCE THIS FLAG PRINTS IS NOW THE RULE IT RUNS ON — 28 October.
+       *
+       * It said "One is nothing; several together is a draft drifting toward their voice" and then
+       * fired on one, which on a finished draft that day meant the only outstanding complaint was
+       * `here's` inside "Here's my system:" — a phrase Josh added to the library himself. The words
+       * it matched were `who`, `last` and `here's`: two function words and a carve-out.
+       *
+       * The full list is still reported under `lexicon` whether this fires or not. Nothing is
+       * hidden; what changed is what counts as worth a writer's attention.
+       */
+      if (peerDrifting) {
         flags.push(
-          `Uses ${avoided.join(", ")} — words the reference writers use far more than he does. ` +
-          `One is nothing; several together is a draft drifting toward their voice.`,
+          `Uses ${avoided.join(", ")} — ${peerOccurrences} occurrence(s) of the peer list in ` +
+          `${total} words, ${peerRate} per 1k against the writers' own ${PEER_LOAD} per 1k across ` +
+          `the same list. That is their saturation or above it, across ${avoided.length} different ` +
+          `words, which is the drift the list exists to catch.`,
         );
       }
 
@@ -599,9 +768,86 @@ export const measureTools = [
             "scraper as a habit of the writer.",
         },
 
+        /*
+         * BOTH HALVES REPORTED, WHICH IS THE WHOLE POINT OF THE SECTION — 28 October.
+         *
+         * `signature_terms_used` was returned as a bare array and the only lexicon output that
+         * produced anything a writer would read was the NEGATIVE one. On one finished draft that
+         * day, zero of his 25 measured signature terms appeared and nothing said so, on a system
+         * whose first rule is "could anyone else have written this?".
+         *
+         * A NOTE, DELIBERATELY NOT A FLAG AND NOT A THRESHOLD. There is no calibrated number for
+         * "enough signature terms" and there cannot be one: the terms are measured from SPEECH —
+         * the voiceprint says so at the top of itself — and most of them (`melbourne`,
+         * `enrollment`, `october`) have no business in a given post. A threshold would make a
+         * drafter pad to clear it, which is the exact failure the length note two blocks up refuses
+         * for the same reason.
+         *
+         * Symmetry is the argument: if the peer list can produce a flag, the signature list has to
+         * produce at least a sentence. The verdict on whether anyone else could have written it
+         * belongs to the gate's `anyone_else` check, which reads the post rather than counting
+         * words in it.
+         */
         lexicon: {
           signature_terms_used: signature,
+          signature_terms_note: signature.length === 0
+            ? `NONE of his ${SIGNATURE_TOTAL} measured signature terms appear in this draft. That ` +
+              "is not a fault and there is no target — they are measured from speech and most do " +
+              "not belong in a post — but it is the one number on this page that speaks to " +
+              "\"could anyone else have written this?\", and it is zero. If the draft also has no " +
+              "scene, no name and no figure only he would know, that question is worth asking " +
+              "before the gate asks it. Do not add a term to raise this count."
+            : `${signature.length} of his ${SIGNATURE_TOTAL} measured signature terms appear: ` +
+              `${signature.join(", ")}. Reported, never scored — there is no target count, and ` +
+              "padding to raise it would be the failure this note exists to surface.",
           peer_words_used: avoided,
+          peer_words_note: avoided.length === 0
+            ? `None of the ${PEER_WORDS.length} peer-list words appear.`
+            : `${peerOccurrences} occurrence(s) across ${avoided.length} word(s) — ${peerRate} ` +
+              `per 1k, against the writers' own ${PEER_LOAD} per 1k over the same list. ` +
+              (peerDrifting
+                ? "Flagged above."
+                : `Not flagged: the flag needs ${PEER_MIN_DISTINCT} or more different words AND ` +
+                  "their saturation or above, because its own sentence says one is nothing."),
+          /*
+           * SAID, NOT SILENT. A filter that removes words without naming them reads as "the list
+           * is short", and the next person to wonder why `who` stopped appearing has nothing to
+           * read. Named here so the artefact and this tool cannot quietly disagree.
+           */
+          ...(PEER_WORDS_DROPPED.length > 0 && {
+            peer_list_filtered_at_read_time: {
+              dropped: PEER_WORDS_DROPPED,
+              why: "Function words — articles, determiners, pronouns, prepositions, conjunctions, " +
+                "auxiliaries, modals, degree words. The stored list's test is raw rate with no " +
+                "ratio floor, and written register uses more subordination and possessives than " +
+                "speech does for everybody, so these cleared it on the register gap alone rather " +
+                "than on anything about Josh.",
+              the_artefact_still_carries_them: "data/josh/law/voiceprint.json was computed " +
+                "2026-09-08 against 59 posts and that corpus is not on disk (clause 8.3). " +
+                "Rebuilding would swap the corpus rather than filter the list, so the filter runs " +
+                "here instead. get_voice_brief reads the artefact directly and still shows them.",
+            },
+          }),
+          /*
+           * THE CARVE-OUT, AND THE HALF OF IT THIS TOOL CANNOT CHECK.
+           *
+           * Stated the way `will_refuse` above states the difference between what it decided and
+           * what it could only guess at, and for the same reason: this tool makes no database call,
+           * so a carve-out applied from a static mirror is not the same answer as one checked
+           * against the live section, and claiming otherwise is how a free look stops being read.
+           */
+          ...(carvedOut.length > 0 && {
+            carve_outs_applied: carvedOut.map((c) => ({
+              term: c.term,
+              matched: c.matched,
+              because: `Josh allowed ${c.describes} in ${c.section} on ${c.added}. His words: ` +
+                `"${c.his_words}".`,
+              not_checked_here: "Applied from a static mirror of that line, because this tool " +
+                "makes no database call. scrub_draft loads the library and confirms the line is " +
+                "still there — if Josh has withdrawn the carve-out, it says so and this " +
+                "suppression is wrong until the mirror is updated.",
+            })),
+          }),
         },
 
         ai_tells: {
