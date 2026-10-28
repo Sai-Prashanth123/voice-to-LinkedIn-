@@ -40,7 +40,13 @@ import {
 } from "../_shared/handlers/interview.ts";
 import { appendTurn, loadSession, renderTranscript } from "../_shared/session.ts";
 import { autoName, setIdeaName } from "../_shared/idea-names.ts";
-import { joshSaid, missingNumbers, verifyExtraction, WRITTEN_UP } from "../_shared/extraction.ts";
+import {
+  joshSaid,
+  missingNames,
+  missingNumbers,
+  verifyExtraction,
+  WRITTEN_UP,
+} from "../_shared/extraction.ts";
 import { applyDraft } from "../_shared/handlers/draft.ts";
 import { checkRetelling, dedupText, loadThresholds } from "../_shared/dedup.ts";
 import * as decisions from "./decisions.ts";
@@ -212,7 +218,24 @@ Deno.serve(async (req) => {
   // Numbers he gave that no field carries. Reported, not refused: start_post makes the seed a whole
   // pasted transcript, where most numbers are timestamps or somebody else's, and a refusal would
   // block every honest write-up of one. The worker, where nobody is watching, retries on it instead.
-  const dropped = missingNumbers(body.extracted, joshSaid(seed, session.turns));
+  const said = joshSaid(seed, session.turns);
+  const dropped = missingNumbers(body.extracted, said);
+
+  /*
+   * NAMES HE GAVE THAT NO ROW CARRIES. Reported here, never refused — see missingNames.
+   *
+   * Against `said` rather than `source`, the same asymmetry `dropped` above draws: a name that
+   * only the interviewer's question used is not one he gave, and asking him to clear it would be
+   * asking him about a name the system introduced.
+   *
+   * This is the direction nobody was checking. verifyExtraction's rule 3 refuses a name that was
+   * never said, which stops a model inventing somebody there is nobody to ask about. A name he
+   * said and the extraction dropped had no check at all, and it is the one with the contractual
+   * consequence: `unclearedNames`, create_draft's refusal, the gate and the claim ledger all
+   * filter `moment_names`, and an empty array passes every one of them. 31 of the 48 moments with
+   * material hold none.
+   */
+  const unrecorded = missingNames(body.extracted, said);
 
   if (!verdict.ok) {
     await logEvent(db, "extraction_refused", "warn", {
@@ -274,6 +297,25 @@ Deno.serve(async (req) => {
      * cannot be written and does not explain why.
      */
     uncleared_names: filed.uncleared.map((n) => n.name),
+    /*
+     * ALWAYS PRESENT, EVEN WHEN EMPTY, because the empty answer is the one that was ambiguous.
+     *
+     * `extraction_applied` has been logged on every one of these calls since the path existed, and
+     * nothing reads it — so "the names were scanned and there were none" and "no names were ever
+     * recorded" looked identical everywhere downstream. The same discipline as the gate's
+     * notJudged: a check reports that it ran, or its silence means nothing.
+     */
+    names_scanned: true,
+    names_not_recorded: unrecorded,
+    ...(unrecorded.length > 0 && {
+      names_note: `He named ${unrecorded.map((n) => `"${n}"`).join(", ")}, which the extraction ` +
+        `recorded no name row for. Nothing is blocked by this — it is a capital-letter scan of his ` +
+        `own words and it is wrong sometimes. But a name that is not recorded cannot be cleared, ` +
+        `and cannot be REFUSED either: the drafter, the gate and the claim ledger all filter ` +
+        `moment_names, so an empty list passes every one of them. If any of these is a real person ` +
+        `or company, submit again with redo: true and the names array filled in, then ask him ` +
+        `about them in one line.`,
+    }),
     numbers_not_carried: dropped,
     ...(dropped.length > 0 && {
       numbers_note: `He gave ${dropped.map((n) => `"${n}"`).join(", ")}, which no field carries, and ` +
@@ -434,8 +476,20 @@ async function capture(
       name: title,
       mode: "one_step",
       action: "no_question",
-      next: "No questions. Fill the ten fields from his own words — every span copied exactly out " +
-        "of what he just said — and call write_post. Say what it was filed as, in passing.",
+      /*
+       * "Fill the ten fields" is what this said until 28 Oct 2026, and the shape has eighteen.
+       *
+       * The six that are not text are the ones that were being skipped, and they are not
+       * cosmetic: `names` is what the never-name-a-client rule filters, `audience_known` decides
+       * whether the audience is stored at all, and `strength` decides whether a thin idea parks
+       * itself. A model counting to ten and stopping is a model obeying its instruction, and this
+       * string is one of the four places that instruction was wrong.
+       */
+      next: "No questions. Fill all eighteen fields from his own words — the ten material ones " +
+        "with every span copied exactly out of what he just said, plus the pillar, the audience " +
+        "and its two flags, the strength, the two time fields, and `names`: every person and " +
+        "company he mentioned. A name left out of that array is a name no later check can stop. " +
+        "Then call write_post. Say what it was filed as, in passing.",
     });
   }
 

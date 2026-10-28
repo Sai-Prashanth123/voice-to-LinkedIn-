@@ -52,6 +52,16 @@ import { verifyDraft } from "../../supabase/functions/_shared/claims.ts";
 // runs, never their sentences, so consulting it puts none of their text near a drafter.
 import { hashRun, shinglesOf } from "../../supabase/functions/_shared/shingles.ts";
 import { CLAIMABLE_FIELDS, sourceEntry } from "../../supabase/functions/_shared/entry.ts";
+/*
+ * ONE DECLARATION, SHARED WITH write_post.
+ *
+ * It used to live in this file, and `write_post` in onestep.mjs declared the same parameter as
+ * `z.record(z.string())` — so the tool Josh uses could not pass the names array that the entire
+ * never-name-a-client chain filters on. The two are now the same object, not two objects that
+ * agree, and conformance.test.mjs asserts that by identity: a second declaration cannot be written
+ * without a test naming it. See extraction-shape.mjs for the measurement.
+ */
+import { EXTRACTION, FIELD_COUNT } from "./extraction-shape.mjs";
 import { writingSources } from "../sources.mjs";
 import { HIGH_CONFIDENCE, scan } from "../aitells.mjs";
 import { PREFILE_CHECKS, prefileVerdict } from "../prefile.mjs";
@@ -149,44 +159,6 @@ const CLAIM = z.object({
       "substring of that field before the draft is stored, so a paraphrase is refused even when " +
       "it is perfectly accurate.",
     ),
-});
-
-/**
- * The extraction, in the shape schemas.ts defines it.
- *
- * Written out here rather than imported because ExtractionSchema is `npm:zod@4`, a Deno specifier
- * Node cannot resolve — the same reason model.mjs writes its own JSON schemas. The edge function is
- * the authority: it parses against the real schema and validates against the transcript, so this
- * exists to tell a caller what the fields ARE, not to be the thing that decides.
- *
- * Every text field is optional and defaults to empty, because "leave it empty" is the instruction
- * that matters most and a required field quietly pressures a model to fill it.
- */
-const TEXT = () => z.string().optional().default("");
-
-const EXTRACTION = z.object({
-  the_moment: TEXT().describe("What happened. Empty if he never gave you a moment."),
-  the_detail: TEXT().describe("The specific detail that makes it real. Empty if absent."),
-  the_realisation: TEXT().describe("What he worked out. Empty if absent."),
-  the_lesson: TEXT().describe("What a reader should take from it. Empty if absent."),
-  what_happened_before: TEXT(),
-  who_was_there: TEXT(),
-  their_actual_words: TEXT()
-    .describe("VERBATIM only. If he paraphrased what someone said, leave this empty."),
-  how_he_felt: TEXT(),
-  what_changed: TEXT(),
-  reader_takeaway: TEXT(),
-  pillar: TEXT().describe("One of the pillars in the brief, or empty."),
-  audience: TEXT().describe("Who this post is for. Empty if you genuinely cannot tell."),
-  audience_known: z.boolean().describe("False when you are guessing. A guessed reader is worse than an admitted gap."),
-  audience_is_buyer: z.boolean(),
-  strength: z.number().int().min(1).max(5).describe("How strong this material is, honestly."),
-  time_sensitive: z.boolean(),
-  decays_in_days: z.number().int().min(0).default(0),
-  names: z.array(z.object({
-    name: z.string(),
-    kind: z.enum(["person", "company"]),
-  })).default([]).describe("Every person and company he actually mentioned. Nobody he did not."),
 });
 
 /**
@@ -551,13 +523,16 @@ export const writeTools = [
     config: {
       title: "Record what an interview produced",
       description:
-        "Turn one finished interview into idea bank material (5.9). Call get_extraction_brief " +
-        "first and follow it exactly. Every field becomes the source of truth a later draft is " +
-        "checked against claim by claim, so LEAVE A FIELD EMPTY rather than filling it with " +
-        "something reasonable — empty is always allowed and is correct whenever Josh did not say " +
-        "it. The quote, the numbers and the names are checked against what he actually said " +
-        "before anything is written, and a submission that fails comes back with reasons rather " +
-        "than being stored badly.",
+        `Turn one finished interview into idea bank material (5.9). Call get_extraction_brief ` +
+        `first and follow it exactly. All ${FIELD_COUNT} fields: the ten material ones, the ` +
+        `pillar, the audience and its two flags, the strength, the two time fields, and the names. ` +
+        `Every text field becomes the source of truth a later draft is checked against claim by ` +
+        `claim, so LEAVE ONE EMPTY rather than filling it with something reasonable — empty is ` +
+        `always allowed and is correct whenever Josh did not say it. The names array is the one ` +
+        `that is not like the others: it is what the never-name-a-client rule reads, and a name ` +
+        `left out of it is a name no later check can stop. The quote, the numbers and the names ` +
+        `are checked against what he actually said before anything is written, and a submission ` +
+        `that fails comes back with reasons rather than being stored badly.`,
       inputSchema: {
         moment_id: z.number().int().describe("The moment whose interview this records"),
         extracted: EXTRACTION,

@@ -148,8 +148,33 @@ test("a parked paste stops the chain and comes back as a sentence, not a silence
       },
     };
 
+    /*
+     * THE FOUR NON-TEXT FIELDS ARE PART OF THE SCENARIO, NOT PADDING — DO NOT "TIDY" THEM.
+     *
+     * This fixture was `{ the_moment: "something happened" }` alone, and it only parsed because
+     * `write_post` declared `extracted` as a record of strings. That schema is what broke the name
+     * guard for fifteen days (see extraction-shape.mjs), so the shape is now the real one and
+     * `viaTool` parses against it.
+     *
+     * Each value is the thin paste this test is about:
+     *   strength: 1          — the park guard at interview.ts reads this and fires at 2 or less.
+     *                          Raised to a 3 by someone making it look tidier, the guard stops
+     *                          firing and this test passes while asserting nothing.
+     *   audience_known:false — the paste genuinely does not say who it is for, and false is the
+     *                          honest answer rather than a guessed reader (5.6).
+     *   audience_is_buyer / time_sensitive: false — neither is claimed by the paste.
+     */
     const result = await writePost.handler(
-      { moment_id: 99, extracted: { the_moment: "something happened" } },
+      {
+        moment_id: 99,
+        extracted: {
+          the_moment: "something happened",
+          audience_known: false,
+          audience_is_buyer: false,
+          strength: 1,
+          time_sensitive: false,
+        },
+      },
       { db, url: "https://example.supabase.co", key: "test" },
     );
 

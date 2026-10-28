@@ -407,10 +407,36 @@ function parkedResult(momentId: number, reason: string): Filed {
   return { momentId, title: null, pillar: null, audience: null, uncleared: [], parked: reason };
 }
 
+/**
+ * What this function is actually handed, as opposed to what it used to claim.
+ *
+ * The parameter was typed `Extraction`, where all six of these are required — and nothing on either
+ * caller's path parses against `ExtractionSchema`. cc-submit takes `body.extracted` straight off the
+ * request and casts it; the MCP tool is the only thing that validates, and until 28 Oct 2026 its
+ * `write_post` schema declared the whole object as a record of strings, so none of the six could
+ * arrive at all. The type said they were always there; the wire delivered them never.
+ *
+ * Saying so in the type is not pedantry. Every bug in the table below was a line reading one of
+ * these as though the type were true: `extracted.strength <= 2` on `undefined`, which is false and
+ * silently skipped a park; `extracted.audience_known ? ... : null`, which discarded an audience
+ * that had been supplied. TypeScript would have caught both the moment the type was honest.
+ */
+type FiledExtraction =
+  & Omit<
+    Extraction,
+    "strength" | "audience_known" | "audience_is_buyer" | "time_sensitive" | "decays_in_days" | "names"
+  >
+  & Partial<
+    Pick<
+      Extraction,
+      "strength" | "audience_known" | "audience_is_buyer" | "time_sensitive" | "decays_in_days" | "names"
+    >
+  >;
+
 export async function applyExtraction(
   db: SupabaseClient,
   momentId: number,
-  extracted: Extraction,
+  extracted: FiledExtraction,
   opts: { quiet?: boolean } = {},
 ): Promise<Filed> {
   const blank = (s: string) => (s && s.trim().length > 0 ? s.trim() : null);
@@ -435,6 +461,27 @@ export async function applyExtraction(
   // Filtered through `isRealName` rather than trusted: the prompt says "record PROPER NAMES only,
   // not job titles" and the model recorded "CFO" twice and "Josh" once anyway. Three of the first
   // eight names on file were not names, in the one question 9.12 depends on him reading.
+  /*
+   * "NO NAMES" AND "NO NAMES FIELD" ARE RECORDED AS DIFFERENT FACTS.
+   *
+   * `extracted.names ?? []` reads both as an empty loop, and they are not the same thing at all.
+   * An empty array is a model saying "he named nobody". An absent field is a caller that could not
+   * send names — which is what `write_post` was, for fifteen days — and it is the one where 9.10 is
+   * being enforced by nothing. There is no row to look at afterwards that can tell them apart, so
+   * the difference is written down here while it still exists.
+   *
+   * Logged rather than refused: refusing would strand the session, and cc-submit reports the scan
+   * of his own words back to the caller in the same reply (missingNames). This is the record for
+   * anyone reading the project afterwards and asking how 31 of 48 moments ended up with no names.
+   */
+  if (extracted.names === undefined) {
+    await logEvent(db, "names_not_supplied", "warn", {
+      moment_id: momentId,
+      reason: "the extraction carried no names field at all, which is not the same as naming nobody",
+      consequence: "9.10 is enforced by an empty array on this moment, and an empty array cannot fail",
+    });
+  }
+
   for (const n of extracted.names ?? []) {
     if (!n.name?.trim()) continue;
     if (!isRealName(n.name)) continue;
@@ -490,8 +537,33 @@ export async function applyExtraction(
   //
   // Parking here is the same outcome, reached for a tenth of the cost. Clause 1: "if the material is
   // not there in a given week, fewer posts is the correct outcome."
+  /*
+   * `strength` IS READ AS A NUMBER OR NOT READ AT ALL, AND IT USED NOT TO BE EITHER.
+   *
+   * `undefined <= 2` is false, so when `strength` did not arrive this guard silently did not fire
+   * — and that is exactly what happened on every one-step call from 13 to 28 October, because
+   * `write_post` declared `extracted` as a record of strings and no number could get through it.
+   * A guard whose condition is unevaluable must not read as "the condition was false": the park
+   * that clause 1 calls for simply never happened, and nothing anywhere said so.
+   *
+   * So the two cases are now separated. A number decides. No number is recorded as not judged, with
+   * its reason, which is the discipline handlers/gate.ts applies to a check it has no basis for: a
+   * green verdict with no basis is worse than no verdict, because it is indistinguishable from an
+   * earned one everywhere it is later read. There is deliberately no default — a 3 invented here
+   * would be a fabricated judgement that then decides whether a real idea is parked.
+   */
+  const strength = typeof extracted.strength === "number" ? extracted.strength : null;
   const nothingLearned = !extracted.the_realisation?.trim() && !extracted.the_lesson?.trim();
-  if (nothingLearned && extracted.strength <= 2) {
+
+  if (nothingLearned && strength === null) {
+    await logEvent(db, "park_guard_not_judged", "warn", {
+      moment_id: momentId,
+      reason: "nothing was learned from this moment, and no strength was supplied to judge it by",
+      consequence: "it was NOT parked — clause 1's park needs a number and did not get one",
+    });
+  }
+
+  if (nothingLearned && strength !== null && strength <= 2) {
     await park(
       db,
       momentId,
@@ -501,7 +573,7 @@ export async function applyExtraction(
     await logEvent(db, "moment_parked", "info", {
       moment_id: momentId,
       reason: "scene without a realisation",
-      strength: extracted.strength,
+      strength,
     });
     /*
      * The park reason promises he can add to it later, and that promise needs somewhere to live.
@@ -516,18 +588,46 @@ export async function applyExtraction(
     return parkedResult(momentId, why);
   }
 
-  const decays = extracted.time_sensitive && extracted.decays_in_days > 0
-    ? new Date(Date.now() + extracted.decays_in_days * 86_400_000).toISOString().slice(0, 10)
+  /*
+   * THE THIRD THING THE HONEST TYPE CAUGHT, and it had the same shape as the other two.
+   *
+   * `extracted.time_sensitive && extracted.decays_in_days > 0` compared `undefined > 0`, which is
+   * false, so a moment he had marked as decaying got `decays_at: null` and never aged out of the
+   * queue. Both schemas default this field to 0, and until 28 October nothing on the one-step path
+   * ever applied a default: `write_post` reached `submit_extraction`'s handler directly, past the
+   * zod that holds them. Read as a number here or not used, so the failure cannot come back as
+   * silence.
+   */
+  const decaysInDays = typeof extracted.decays_in_days === "number" ? extracted.decays_in_days : 0;
+  const decays = extracted.time_sensitive && decaysInDays > 0
+    ? new Date(Date.now() + decaysInDays * 86_400_000).toISOString().slice(0, 10)
     : null;
 
   await db.from("moments").update({
     status: "mined",
     pillar: blank(extracted.pillar),
-    // 5.6 — a guessed reader is worse than an admitted gap: it steers the drafter and the
-    // aimed_at_someone gate check. The drafter already handles "not recorded".
-    audience: extracted.audience_known ? blank(extracted.audience) : null,
+    /*
+     * 5.6 — a guessed reader is worse than an admitted gap: it steers the drafter and the
+     * aimed_at_someone gate check. The drafter already handles "not recorded".
+     *
+     * `=== false` RATHER THAN TRUTHINESS, which is a different rule than it looks.
+     *
+     * This was `extracted.audience_known ? blank(...) : null`. When the flag did not arrive at all
+     * — which was every one-step call from 13 to 28 October, because `write_post`'s schema could
+     * not carry a boolean — it discarded an audience string that HAD been supplied. The moment was
+     * stored with no reader on any of them, and "a post aimed at everyone" is the second most
+     * common reason drafts are rejected here: 8 of 13. The field that prevents it was being thrown
+     * away by the code that reads it.
+     *
+     * Only an explicit `false` now suppresses the audience, because only an explicit false is a
+     * model saying "I am guessing". A missing flag is not that claim; it is a caller that did not
+     * answer, and answering for it in the suppressing direction loses real information while
+     * looking like caution. An explicit true and an explicit false behave exactly as before, so
+     * the interview and worker paths are untouched.
+     */
+    audience: extracted.audience_known === false ? null : blank(extracted.audience),
     audience_is_buyer: extracted.audience_is_buyer,
-    strength: extracted.strength,
+    strength: strength ?? undefined,
     time_sensitive: extracted.time_sensitive,
     decays_at: decays,
     updated_at: new Date().toISOString(),

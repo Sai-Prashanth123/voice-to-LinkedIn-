@@ -34,12 +34,46 @@
 import { z } from "zod";
 import { tools } from "./index.mjs";
 import { oneStepMode, modeName } from "../mode.mjs";
+// The one declaration of the extraction, in a leaf module so this file and write.mjs can both have
+// it without either importing the other. See extraction-shape.mjs for why that matters here.
+import { EXTRACTION, FIELD_COUNT } from "./extraction-shape.mjs";
 
-/** Run another registered tool's handler. Keeps one implementation of every brief. */
+/**
+ * Run another registered tool's handler. Keeps one implementation of every brief.
+ *
+ * THE ARGUMENTS ARE PARSED AGAINST THE TARGET TOOL'S OWN SCHEMA FIRST, WHICH THEY WERE NOT.
+ *
+ * `server.mjs` is what applies `z.object(inputSchema)` — `registerTool` builds it and the SDK parses
+ * `params.arguments` against it before a handler runs. Reaching `tool.handler` directly, as this
+ * function does, walks straight past that. So for every tool reached this way the declared schema
+ * was documentation and nothing else: no validation, and — the half that actually bit — no
+ * defaults. `decays_in_days: z.number().int().min(0).default(0)` never materialised, so
+ * `applyExtraction` evaluated `extracted.decays_in_days > 0` on `undefined` and a time-sensitive
+ * idea could not record when it decays.
+ *
+ * In production this cannot refuse anything that was not already refused: a real call arrives
+ * through the MCP boundary, which parses `write_post`'s own schema before this handler exists. The
+ * refusal path below is a belt on a brace. Its value is the defaults, and the fact that two tools'
+ * schemas can no longer disagree IN EFFECT even if somebody lets them disagree in text.
+ *
+ * The issues are spelled out rather than re-thrown, because a zod error read raw by a model is a
+ * stack of nested objects and this is a message that has to be actionable in one read.
+ */
 async function viaTool(name, args, context) {
   const tool = tools.find((t) => t.name === name);
   if (!tool) throw new Error(`${name} is not registered`);
-  return await tool.handler(args, context);
+
+  const parsed = z.object(tool.config.inputSchema ?? {}).safeParse(args ?? {});
+  if (!parsed.success) {
+    throw new Error(
+      `${name} was called with arguments it does not accept, so nothing was done.\n\n` +
+      parsed.error.issues
+        .map((i) => `  · ${i.path.join(".") || "(root)"}: ${i.message}`)
+        .join("\n") +
+      `\n\nFix the named field and call again. Nothing has been stored.`,
+    );
+  }
+  return await tool.handler(parsed.data, context);
 }
 
 export const oneStepTools = [
@@ -53,8 +87,9 @@ export const oneStepTools = [
         "material and wants it written: a paragraph, a pasted transcript, a thought he just said " +
         "out loud. Pass HIS words, not a tidied version: every claim in the finished post is " +
         "checked back against this text span by span, so an improvement here becomes a fabrication " +
-        "two steps later. The reply carries the extraction brief; fill the ten fields from his own " +
-        "words and call write_post. This works whether or not one-step mode is on.",
+        `two steps later. The reply carries the extraction brief; fill all ${FIELD_COUNT} fields ` +
+        "from his own words — including every name he mentioned — and call write_post. This works " +
+        "whether or not one-step mode is on.",
       inputSchema: {
         text: z.string().min(1).describe("What he said, verbatim"),
         name: z.string().max(80).optional()
@@ -112,9 +147,15 @@ export const oneStepTools = [
         mode: modeName(await oneStepMode(context.db)),
         extraction_brief: brief,
         how: [
-          "Fill the ten fields from the text he gave you. Every span copied exactly, never " +
-            "paraphrased — they are checked as substrings before anything is stored.",
-          "A field with nothing behind it stays empty. That is allowed and it is the right answer.",
+          `Fill all ${FIELD_COUNT} fields from the text he gave you. Every text span copied ` +
+            "exactly, never paraphrased — they are checked as substrings before anything is stored.",
+          "A text field with nothing behind it stays empty. That is allowed and it is the right " +
+            "answer. The ones that are NOT text are not like that: audience_known, " +
+            "audience_is_buyer, strength and time_sensitive are judgements you have to make, and " +
+            "`names` must list every person and company he mentioned. A name left out of that " +
+            "array is a name nothing downstream can stop — the clearance question, the draft " +
+            "refusal and the gate all filter it, and an empty array passes every one of them. " +
+            "Recording a name does not name anybody: it asks him.",
           "Do not ask him anything. If the material genuinely will not carry a post, say which one " +
             "thing is missing and stop — that is one sentence, not an interview.",
         ],
@@ -139,16 +180,30 @@ export const oneStepTools = [
     config: {
       title: "File what he said as material, and get the brief to write from it",
       description:
-        "The second half of start_post. Stores the ten fields against the idea and returns the " +
-        "drafting brief — his voice guide, his rules, his structures, and the material itself. " +
-        "Write the post from that brief and file it with create_draft. If any name came back " +
-        "uncleared, ask him about that ONE name in one line before writing: it is the only thing " +
-        "that still stops a draft, and it stops it whichever mode is on.",
+        `The second half of start_post. Stores all ${FIELD_COUNT} fields against the idea and ` +
+        "returns the drafting brief — his voice guide, his rules, his structures, and the material " +
+        "itself. Write the post from that brief and file it with create_draft. If any name came " +
+        "back uncleared, ask him about that ONE name in one line before writing: it is the only " +
+        "thing that still stops a draft, and it stops it whichever mode is on. Nothing comes back " +
+        "uncleared if nothing was recorded, so the `names` array below is what makes that sentence " +
+        "mean anything.",
       inputSchema: {
         moment_id: z.number().int().describe("From start_post"),
-        extracted: z.record(z.string()).describe(
-          "The ten fields, each a verbatim span of his text. Empty ones may be left out",
-        ),
+        /*
+         * THE SAME OBJECT submit_extraction DECLARES, NOT A SECOND DESCRIPTION OF IT.
+         *
+         * This was `z.record(z.string())` from 13 October until 28 October: strings only, against
+         * a real shape with eighteen fields, six of them not strings. The MCP boundary parses this,
+         * so `names` — an array — was answered with "expected string, received array" and a caller
+         * that tried to pass the names he had just said was told it could not. Everything that
+         * enforces "never name a client" filters that array, and an empty array cannot fail a
+         * filter: 31 of 48 moments with material carry no name rows at all.
+         *
+         * Identity, not similarity. conformance.test.mjs asserts
+         * `write_post.extracted === submit_extraction.extracted`, so the two cannot be made to
+         * disagree again by editing one of them — there is only one of them.
+         */
+        extracted: EXTRACTION,
         writer_handle: z.string().optional().describe(
           "Pass it on from start_post, or set it here if he named a reference writer whose shape " +
           "he wants this post built in. e.g. mattjbarker1",
@@ -213,6 +268,22 @@ export const oneStepTools = [
         moment_id: args.moment_id,
         mode: modeName(await oneStepMode(context.db)),
         uncleared_names: brief?.must_not_name ?? [],
+        /*
+         * AN EMPTY uncleared_names MEANT TWO DIFFERENT THINGS AND SAID NEITHER.
+         *
+         * "He named nobody" and "nobody was recorded, so there is nothing to clear" came back as
+         * the same empty array, and the second one is the dangerous one: every check that enforces
+         * 9.10 filters that list, so nothing recorded means nothing enforced. This is the scan in
+         * the other direction, reported and never blocking — the gate's notJudged discipline, and
+         * see missingNames in extraction.ts for what it does and does not catch.
+         */
+        names_not_recorded: filed?.names_not_recorded ?? [],
+        ...(filed?.names_note && { names_note: filed.names_note }),
+        ...(filed?.names_scanned === undefined && {
+          names_not_recorded_note: "The write door did not report whether it scanned his words for " +
+            "names, which means it is older than this check. Treat the empty list as 'nobody " +
+            "looked', not as 'he named nobody'.",
+        }),
         // Numbers he gave that no field carries. A post cannot state them, so say which before
         // writing around a figure he expected to see.
         numbers_not_carried: filed?.numbers_not_carried ?? [],
