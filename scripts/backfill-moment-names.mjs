@@ -181,9 +181,29 @@ async function joshWords(momentId) {
  * described to him; `cleared` is the field with teeth, and it is false either way. An `unknown` kind
  * would mean altering a CHECK constraint to change a word.
  */
-const COMPANY_HINT =
-  /\b(?:inc|ltd|llc|plc|gmbh|pty|corp|group|labs?|technologies|systems|software|relations|agency|partners|solutions|media|health|capital)\b|[a-z][A-Z]/;
-const kindOf = (name) => (COMPANY_HINT.test(name) ? "company" : "person");
+/*
+ * A company, by three signals, and the guess is declared as one.
+ *
+ * The detector cannot tell a person from a company and must not pretend to. `kind` affects only
+ * how a name is described to Josh; `cleared` is the field with teeth and it is false either way.
+ *
+ * TWO PATTERNS, NOT ONE WITH A FLAG, and it took two wrong goes to see why. The suffix list must
+ * be case-insensitive or "Hardy Relations" — a company that says so in its own name — reads as a
+ * person. The all-caps clause must be case-SENSITIVE or `[A-Z]{2,}` matches any two letters and
+ * every name becomes a company, "Dan" included. One regex with /i cannot be both.
+ *
+ * (The first attempt was worse and quieter: written through a shell heredoc, the backslashes
+ * collapsed and `\\b` became the BACKSPACE character, so the clause compiled and matched nothing
+ * while the run reported success. Written as a file edit since.)
+ */
+const COMPANY_SUFFIX =
+  /\b(?:inc|ltd|llc|plc|gmbh|pty|corp|group|labs?|technologies|systems|software|relations|agency|partners|solutions|media|health|capital)\b/i;
+const ALL_CAPS_TOKEN = /\b[A-Z]{2,}\b/;
+const INNER_CAPS = /[a-z][A-Z]/;
+const kindOf = (name) =>
+  COMPANY_SUFFIX.test(name) || ALL_CAPS_TOKEN.test(name) || INNER_CAPS.test(name)
+    ? "company"
+    : "person";
 
 /* ── Scan ─────────────────────────────────────────────────────────────────── */
 
