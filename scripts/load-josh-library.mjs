@@ -30,12 +30,54 @@
  * quietly corrupt which moment gets written next. Other sections have no such rule.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
+// One composer of the measured span, shared with scripts/sentinel-refresh.mjs and with
+// cc-submit/maintenance.ts. Node 25 strips the types and reads it verbatim, the way measure.mjs
+// already reads _shared/shape.ts.
+import {
+  describeRefusals,
+  END,
+  measurementSpan,
+  referencePostsBody,
+  refusals,
+  SECTION_BUDGET,
+  START,
+} from "../supabase/functions/_shared/library-spans.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
+
+/* ── The measured span ────────────────────────────────────────────────────── */
+
+/**
+ * THE SEEDER CARRIES NO NUMBERS, SO A RE-SEED CANNOT REINTRODUCE STALE ONES.
+ *
+ * This is the half of the 28 October fix that is easy to skip. Correcting the live row alone would
+ * have left the September figures sitting in this file, armed: the next `--apply` — and this script
+ * is the one a rebuild into Josh's own account starts from, per clause 14.1 and `docs/04-handover.md`
+ * — would have written "fifty-nine posts across seven accounts" and "4 of 59 posts" straight back
+ * over the corrected section, with nothing in the output saying it had.
+ *
+ * So the seed composes the span from the stored measurement, exactly as the refreshers do. Where
+ * there is no measurement yet — a genuinely fresh rebuild — it seeds an EMPTY span rather than a
+ * plausible one, because a seeded number nobody measured is the defect this whole change is about.
+ */
+const REFERENCE_SPAN = (() => {
+  const file = join(ROOT, "data", "josh", "sentinels", "latest.json");
+  if (!existsSync(file)) {
+    return [
+      START,
+      "",
+      "_Not measured yet. Run `node scripts/sentinel-refresh.mjs --posts <scrape.json> --apply`,",
+      "which proposes the measured span for Josh to approve._",
+      "",
+      END,
+    ].join("\n");
+  }
+  return measurementSpan(JSON.parse(readFileSync(file, "utf8")));
+})();
 
 /* ── The sections ─────────────────────────────────────────────────────────── */
 
@@ -290,137 +332,56 @@ The one-in-five rationing is not yet enforced automatically. It needs the last f
 to count against, and nothing has published. Until LinkedIn is connected it is a rule the drafter is
 told, not one the gate can measure.`,
 
-  reference_posts: `# Reference posts — structure only
-
-Eight accounts, per clause 8.3. **Structural reference only. Never a source of voice, never copied,
-never quoted.**
-
-- linkedin.com/in/demandjen1 — Jen Allen-Knuth
-- linkedin.com/in/ryanscarlin — Ryan Carlin
-- linkedin.com/in/outboundphd — Eric Nowoslawski
-- linkedin.com/in/curtishowland — Curtis Howland
-- linkedin.com/in/adam-treboutat — not collected, see below
-- linkedin.com/in/juliacarter98 — Julia Carter
-- linkedin.com/in/amangrowth — Aman Ghataura
-- linkedin.com/in/mattjbarker1 — Matt Barker
-
----
-
-## What follows is measurement, not text
-
-**59 posts across 7 accounts were collected on 7 September 2026 and measured. Their words are not
-here and never will be.**
-
-The posts live in the scraping console, which is their store of record. This section holds only
-what came out of the measurement: counts, medians and categories. That is not a policy someone
-has to remember — the derivation script refuses to emit anything containing a run of the source
-text, so a draft cannot quote what this system does not hold.
-
-The adam-treboutat account returned zero posts. The fetch succeeded and found nothing, which usually means
-the handle has changed or the account posts nothing publicly. **Josh: worth confirming the handle.**
-
----
-
-<!-- sentinel-measurements:start -->
-
-## The finding that matters most
-
-**Almost nobody opens with a question. 4 of 59 posts do.**
-
-Josh's hook rule — a question may close a hook, never start one — is not a stylistic preference.
-It is what 93% of the writers he chose already do.
-
-Two more that corroborate his own rules:
-
-- **2 of 59 posts ask for engagement.** His "never ask for likes, reposts or follows" is standard
-  practice at this level, not a personal quirk.
-- **5 of 59 carry a direct ask** — about 1 in 12. His ration of roughly 1 in 5 is *more* permissive
-  than what these eight actually do.
-
----
-
-## There is no house length, and that settles a question
-
-Median post length by account, in words:
-
-| Account | Median | Range |
-|---|---|---|
-| Aman Ghataura | 53 | 10–139 |
-| Matt Barker | 118 | 20–277 |
-| Julia Carter | 162 | 91–198 |
-| Curtis Howland | 214 | 101–423 |
-| Jen Allen-Knuth | 252 | 62–515 |
-| Eric Nowoslawski | 282 | 175–336 |
-| Ryan Carlin | 408 | 18–489 |
-
-An eightfold spread between the shortest and longest habitual writer, and every one of them works.
-The formatting section's "no word count — the moment decides the length" is confirmed by the data.
-Do not let a target length near the drafter.
-
----
-
-## Two structural modes, and they do not mix
-
-The measurements separate cleanly into two ways of building a post.
-
-**The cut.** A very short opening line, almost nothing above the fold, many short paragraphs, heavy
-list use. Ryan Carlin (6-word opener, 28 words above the fold, 19 paragraphs), Curtis Howland
-(7 words, 20 above fold, lists in 8 of 9 posts), Aman Ghataura (8 words, 19 above fold). The
-opening's job is to get the tap, and the substance sits entirely below the fold.
-
-**The scene.** A longer opening that gives real information before the reader has to commit.
-Jen Allen-Knuth (26-word opener, 70 words above the fold), Julia Carter (22 and 73), Eric
-Nowoslawski (23 and 61), Matt Barker (20 and 61). Roughly three times as much is spent before the
-fold, and lists are rarer.
-
-**Josh writes in the second mode.** Every rule he sent points there: the five-element hook with
-stakes, lived experience, a scene with a time and a person. So the four scene writers are the
-structurally useful reference, and the three cut writers are useful mainly as a contrast — they
-demonstrate a technique that would fight his own rules if borrowed.
-
----
-
-## The closest structural match, and the furthest
-
-**Eric Nowoslawski is the account whose structure most resembles what Josh's own rules describe.**
-Long (median 282 words), prose rather than bullets (a list in only 1 of 7), opens on a specific
-number in 3 of 7, closes soft. That is Josh's formatting section — lean-fat-lean, bullets only for
-a genuine list — already being executed by somebody.
-
-**Curtis Howland is the furthest.** A list in 8 of 9 posts, 10 paragraphs, median 214 words. The
-formatting section says bullets are a crutch when they replace sentences. Take his subject
-discipline if anything; do not take his shape.
-
----
-
-## Sentence-length variation, measured
-
-Josh's guide says everything the same length is exhausting. That is measurable, and it separates
-these writers more sharply than anything else does.
-
-Median within-post standard deviation of sentence length: Julia Carter 12.1, Curtis Howland 11.5,
-Ryan Carlin 11.4, Matt Barker 9.2, Eric Nowoslawski 8.6, Jen Allen-Knuth 7.3, Aman Ghataura 3.4.
-
-Aman's 3.4 is not a failing — his posts are uniformly short by design. But a drafter aiming at
-Josh's stated preference should be landing nearer 9–12 than 3, and this is a number the gate could
-check if it ever needed to.
-
----
-
-<!-- sentinel-measurements:end -->
-
-## What never to take
-
-Their words, their cadence, their phrasing. Not quoted, not near-quoted, not paraphrased. If a run
-of words from one of these could be recognised in a draft, it has been used wrongly. Josh's voice
-comes from the voice guide and nowhere else.
-
-**One specific caution, Josh.** Matt Barker is not a peer reference here — he is the origin of your
-rules. His 3 September post states the lived-experience test, "lessons not advice", and the
-frame-then-reveal structure in almost the words you sent us. That makes his cadence the single most
-likely to leak into a draft, because the system is already aligned to his thinking. Take his
-structure knowingly, and be suspicious of any draft that starts to sound like him.`,
+  /**
+   * EVERY QUANTITY IN THIS SECTION IS INSIDE THE MARKERS, AND THAT IS THE WHOLE DESIGN.
+   *
+   * This section used to carry its own counts in hand-written prose ABOVE the measurement markers —
+   * fifty-nine posts across seven accounts, collected on a date in September, and a paragraph saying
+   * one of the eight accounts had returned nothing. Both refreshers preserve everything above the
+   * start marker as "something Josh wrote", so none of it could ever be reached. On 20 October the
+   * table below it was rewritten from a corpus an order of magnitude larger and the prose was not,
+   * and version 8 shipped contradicting itself inside one row: the prose said an account was empty,
+   * the table said hundreds of its posts were measured, and `compare_to_references` had been
+   * ranking it all along. A drafter could not tell which half was current.
+   *
+   * So the marker moved up. What is left outside it is the section's ARGUMENT — what it is for and
+   * what may never be taken — and it states no quantity a measurement could contradict.
+   *
+   * Both the prose and the span come from `_shared/library-spans.ts`, which is what the two
+   * refreshers use, so a re-seed and a refresh cannot produce different prose from one corpus.
+   */
+  reference_posts: referencePostsBody(REFERENCE_SPAN),
 };
+
+/* ── The three refusals, checked before anything is written ───────────────── */
+
+/*
+ * WHY THIS RUNS HERE AND NOT ONLY IN A TEST.
+ *
+ * A test catches it in CI. This catches it in the hand of whoever is running the seeder against
+ * Josh's project, which is where the damage would be done. Every one of the three things it refuses
+ * was LIVE in version 8 and had already been looked at by someone careful: Josh's own approval note
+ * records "the intro still says Adam Treboutat returned no posts" as an outstanding error he was
+ * shipping knowingly. A comment asking people to keep the counts inside the markers would have been
+ * true and would have changed nothing.
+ */
+{
+  const found = refusals(SECTIONS.reference_posts);
+  if (found.length) {
+    console.error("\n  The reference_posts seed would reintroduce what it was written to remove:\n");
+    console.error(describeRefusals(found));
+    console.error("");
+    process.exit(1);
+  }
+  if (SECTIONS.reference_posts.length > SECTION_BUDGET) {
+    console.error(
+      `\n  reference_posts is ${SECTIONS.reference_posts.length} characters, over the ` +
+        `${SECTION_BUDGET} budget. It ships on every drafting brief; version 8 reached 10,924 and ` +
+        `8,287 of those were one writer's shape. Which brief is carrying the addition, and why?\n`,
+    );
+    process.exit(1);
+  }
+}
 
 /* ── Applying ─────────────────────────────────────────────────────────────── */
 
@@ -460,6 +421,10 @@ async function main() {
   console.log("\n  Josh's reference library, v1.0 — 4 September 2026\n");
   console.log("  " + "─".repeat(66));
 
+  // Sections he has edited since the seed. Collected rather than counted, so the refusal can name
+  // each one and say exactly what it would have cost.
+  const edited = [];
+
   for (const [sectionKey, body] of Object.entries(SECTIONS)) {
     const current = byKey[sectionKey];
     if (!current) {
@@ -467,14 +432,50 @@ async function main() {
       continue;
     }
     const same = current.body?.trim() === body.trim();
-    const mark = same ? "==" : APPLY ? "->" : "  ";
+
+    /*
+     * A SEEDER MAY NOT OVERWRITE A SECTION HE HAS EDITED. This is the guard that was missing.
+     *
+     * Measured 28 October 2026 against the live project: `--apply` would have PATCHed the v1.0
+     * seed text over four sections Josh has changed himself, losing 1,264 characters of his own
+     * rules without a word —
+     *
+     *     audience    v7   1,866 -> 1,408   (-458)
+     *     closes      v6   1,052 ->   822   (-230)
+     *     formatting  v4   1,166 ->   983   (-183)
+     *     gate_rules  v5   2,657 -> 2,264   (-393)
+     *
+     * `closes` is one of the two sections in the contradiction he wrote in about on 27 October, and
+     * `gate_rules` is what the gate judges against. The only trace afterwards would be the version
+     * history, and nothing reads that unprompted.
+     *
+     * It was armed the whole time and the file's own header at :58 even says so about its figures,
+     * one clause short of noticing it was true of his rules too: "the next --apply — and this
+     * script". Nobody ran it, which is luck rather than design. Setting up a clone is precisely
+     * when somebody would.
+     *
+     * `version > 1` is the test rather than a body comparison, because the version is the record
+     * that SOMEBODY DECIDED SOMETHING. A section still at v1 has never been touched and is the
+     * only thing a seeder is entitled to write.
+     */
+    const his = (current.version ?? 1) > 1 && !same;
+    if (his) {
+      edited.push({
+        key: sectionKey,
+        version: current.version,
+        live: current.body?.length ?? 0,
+        seed: body.length,
+      });
+    }
+
+    const mark = same ? "==" : his ? "!!" : APPLY ? "->" : "  ";
     console.log(
       "  " + mark + "  " + sectionKey.padEnd(18) +
         String(current.body?.length ?? 0).padStart(6) + " -> " + String(body.length).padStart(6) +
-        " chars   v" + current.version,
+        " chars   v" + current.version + (his ? "   HIS — refused" : ""),
     );
 
-    if (!same && APPLY) {
+    if (!same && APPLY && !his) {
       const res = await fetch(
         url + "/rest/v1/library_sections?key=eq." + encodeURIComponent(sectionKey),
         { method: "PATCH", headers: { ...headers, Prefer: "return=minimal" }, body: JSON.stringify({ body }) },
@@ -484,6 +485,23 @@ async function main() {
         process.exitCode = 1;
       }
     }
+  }
+
+  if (edited.length > 0) {
+    const lost = edited.reduce((n, e) => n + Math.max(0, e.live - e.seed), 0);
+    console.log(
+      "\n  " + edited.length + " section(s) Josh has edited since this seed were NOT written:\n" +
+        edited.map((e) =>
+          "      " + e.key.padEnd(18) + "v" + e.version + "   " + e.live + " -> " + e.seed +
+          " chars   (" + (e.live - e.seed >= 0 ? "-" : "+") + Math.abs(e.live - e.seed) + ")"
+        ).join("\n") +
+        "\n\n  Writing them would have replaced his rules with the 4 September text and lost " +
+        lost + " characters of what he decided since. A seeder fills an empty shelf; it does not " +
+        "overrule the person whose library it is (12.10).\n\n  If one of these genuinely needs to " +
+        "go back to the seed, that is a library change and it goes to him as a proposal — " +
+        "scripts/sentinel-refresh.mjs is the pattern.\n",
+    );
+    if (APPLY) process.exitCode = 1;
   }
 
   if (!APPLY) {
