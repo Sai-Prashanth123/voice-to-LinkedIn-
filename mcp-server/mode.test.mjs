@@ -250,15 +250,45 @@ test("no tool tells the caller the server will judge a draft for them", () => {
   assert.match(text, /fresh context/i, "create_draft does not say to judge in a separate context");
 });
 
-test("the gate's two instruction surfaces agree on who judges", () => {
-  // The skill, the one-step path and the draft tool are read by the same model in one session.
+test("the gate's instruction surfaces agree on who judges, and name something reachable", () => {
+  /*
+   * THIS USED TO ASSERT THE WORDS "gate-check skill", AND THE WORDS WERE THE BUG.
+   *
+   * The invariant is that every surface telling a caller to judge agrees on who does it, so the
+   * model does not read "the server will" in one place and "you will" in another. That part is
+   * unchanged and is what caught 10 unjudged drafts.
+   *
+   * What was wrong was pinning it to the SKILL. Skills live in `.claude/skills/` and exist only in
+   * a clone of this repo. Josh has never used a clone — every session he has ever run went through
+   * the hosted connector — so "run the gate-check skill" is, on the only surface he has, an
+   * instruction naming nothing. The hook and cc-agent genuinely drive the skill and are right to
+   * name it; a tool description served over the wire is not.
+   *
+   * So the assertion is now: an MCP-served surface names the TOOL. Naming the skill as well is
+   * fine and is what a clone should read. A surface that names ONLY the skill is the divergence,
+   * and it is the one this test could not previously see.
+   */
   const skill = readFileSync(
     new URL("../.claude/skills/draft-post/SKILL.md", import.meta.url),
     "utf8",
   );
   assert.match(skill, /gate-check/, "the draft-post skill no longer names the gate-check skill");
 
-  // write_post says it in what it hands back, not in its schema, so this is checked by source.
-  const onestep = readFileSync(new URL("./tools/onestep.mjs", import.meta.url), "utf8");
-  assert.match(onestep, /gate-check skill/, "write_post no longer points at the gate-check skill");
+  // Checked by source because each of these says it in what it hands back, not in a schema.
+  const served = [
+    ["tools/onestep.mjs", "write_post", /get_gate_brief/],
+    ["tools/write.mjs", "create_draft", /get_gate_brief/],
+    ["instructions.mjs", "the server's own instructions", /get_gate_brief/],
+    ["tools/inspect.mjs", "next_action", /next_work|get_drafting_brief/],
+  ];
+
+  for (const [file, what, reachable] of served) {
+    const src = readFileSync(new URL(`./${file}`, import.meta.url), "utf8");
+    assert.match(
+      src,
+      reachable,
+      `${what} (${file}) tells a caller to judge or to draft without naming a tool. On the hosted ` +
+      `connector a skill name is not a route — it is a sentence that cannot be acted on.`,
+    );
+  }
 });

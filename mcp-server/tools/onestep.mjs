@@ -37,6 +37,9 @@ import { oneStepMode, modeName } from "../mode.mjs";
 // The one declaration of the extraction, in a leaf module so this file and write.mjs can both have
 // it without either importing the other. See extraction-shape.mjs for why that matters here.
 import { EXTRACTION, FIELD_COUNT } from "./extraction-shape.mjs";
+// Plain functions, not tools, and brief.mjs does not import this file — so no cycle. See
+// carriedBrief for why a nested brief must not keep its own size marker.
+import { carriedBrief, seal } from "./brief.mjs";
 
 /**
  * Run another registered tool's handler. Keeps one implementation of every brief.
@@ -181,8 +184,10 @@ export const oneStepTools = [
       title: "File what he said as material, and get the brief to write from it",
       description:
         `The second half of start_post. Stores all ${FIELD_COUNT} fields against the idea and ` +
-        "returns the drafting brief — his voice guide, his rules, his structures, and the material " +
-        "itself. Write the post from that brief and file it with create_draft. If any name came " +
+        "returns the drafting brief: the material itself inline, and his voice guide, rules and " +
+        "structures named by library:// URI for you to read with get_library — they are too large " +
+        "to paste into a reply his client truncates. Write the post from that brief, having read " +
+        "the sections it names, and file it with create_draft. If any name came " +
         "back uncleared, ask him about that ONE name in one line before writing: it is the only " +
         "thing that still stops a draft, and it stops it whichever mode is on. Nothing comes back " +
         "uncleared if nothing was recorded, so the `names` array below is what makes that sentence " +
@@ -264,9 +269,28 @@ export const oneStepTools = [
         context,
       );
 
-      return {
+      /*
+       * ONE-STEP MODE IS THE PATH HE IS ON, SO THIS IS THE RESPONSE THAT ACTUALLY GETS CUT.
+       *
+       * In one_step the caller never calls get_drafting_brief itself: this reply is the only place
+       * the brief appears, and before 28 October it carried 41,488 characters of constant library
+       * prose inside a response his client previews at ~2 KB. The uncleared names, the numbers he
+       * gave that no field carries, and the park notice all sat below the cut — which is the "he
+       * gives it something and nothing comes back" this file was written to stop, arriving by a
+       * different door.
+       */
+      const carried = carriedBrief(brief, {
+        tool: "write_post",
+        recover: `call get_drafting_brief with moment_id ${args.moment_id} and part: "material"`,
+      });
+      // Resolved before the seal, because seal's builder is called repeatedly to settle the size and
+      // must be pure — a database read inside it would run three times and could answer differently.
+      const mode = modeName(await oneStepMode(context.db));
+
+      return seal((chars) => ({
+        read_this_first: carried.firstKey(chars),
         moment_id: args.moment_id,
-        mode: modeName(await oneStepMode(context.db)),
+        mode,
         uncleared_names: brief?.must_not_name ?? [],
         /*
          * AN EMPTY uncleared_names MEANT TWO DIFFERENT THINGS AND SAID NEITHER.
@@ -288,16 +312,36 @@ export const oneStepTools = [
         // writing around a figure he expected to see.
         numbers_not_carried: filed?.numbers_not_carried ?? [],
         ...(filed?.numbers_note && { numbers_note: filed.numbers_note }),
-        drafting_brief: brief,
         how: [
-          "Read the brief's system text in full. It is the live library — his voice guide, his " +
-            "banned phrases, his hook and closing rules — and it is what the checks judge " +
-            "against, so a draft that ignores it fails for reasons you could have read first.",
+          /*
+           * THIS LINE HAD TO CHANGE WITH THE BRIEF, NOT AFTER IT.
+           *
+           * It said "Read the brief's system text in full. It is the live library". That was true
+           * until 28 October and is now false: `system` carries an INDEX of the library, so the
+           * same sentence would instruct a writer to read an index as though it were the standard
+           * and then tell them it is what the checks judge against. That is "the default framework
+           * gets used anyway" appearing in a new place — the writer believes it has read the
+           * standard, nothing contradicts it, and the gate fails the draft against sections nobody
+           * opened.
+           */
+          "Read the brief's `user` text in full — the material, the audience, the names, and " +
+            "anything he has already said about this post. That part is still inline, because it " +
+            "is what varies.",
+          "Then read the library. The brief's `library_pointers` names every section with its " +
+            "size and its library:// URI, and the bodies are NOT in the response: fetch each one " +
+            "that is not a placeholder with get_library (key: \"<key>\") or resources/read. These " +
+            "are his voice guide, his banned phrases, his hook and closing rules, and they are " +
+            "what the checks judge against — a draft that skips them fails for reasons that were " +
+            "one tool call away.",
+          "If a section will not read, say which one and write without it. Never guess at what it " +
+            "said.",
           "measure_draft and scrub_draft are free and catch most of what the checks would reject.",
           "Then create_draft, with every claim carrying the span it rests on.",
         ],
-        then: "create_draft, then run the gate-check skill on it in a fresh breath.",
-      };
+        then: "create_draft, then judge it in a fresh breath — the gate-check prompt, or " +
+          "get_gate_brief on the draft id.",
+        drafting_brief: carried.brief,
+      }));
     },
   },
 ];

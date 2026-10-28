@@ -24,6 +24,9 @@
  */
 
 import { loadEnv } from "./env.mjs";
+// The gate size is derived rather than written: the literal said eight for two weeks after the
+// ninth check landed on 14 October.
+import { GATE_CHECKS } from "../supabase/functions/_shared/prompts.ts";
 
 const { url: URL_BASE, key: KEY } = loadEnv();
 
@@ -205,7 +208,7 @@ async function main() {
     process.stdout.write(`  queued ${spec.id}\n`);
   }
 
-  console.log(`\nWaiting for the gate. Eight checks per draft, ten drafts.\n`);
+  console.log(`\nWaiting for the gate. ${GATE_CHECKS.length} checks per draft, ten drafts.\n`);
 
   const deadline = Date.now() + 25 * 60_000;
   let judged = [];

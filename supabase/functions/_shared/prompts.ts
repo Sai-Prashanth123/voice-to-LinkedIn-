@@ -183,6 +183,24 @@ whether the post reaches him at all.`;
  * THE DRAFTER (clause 9a)
  * ────────────────────────────────────────────────────────────────────────── */
 
+/**
+ * `library` IS NOW EITHER THE LIBRARY OR AN INDEX OF IT, AND THE PROSE ABOVE IT DOES NOT CARE.
+ *
+ * Measured 28 October 2026: this prompt is 41,488 characters, of which 2,907 are the prose below and
+ * the rest are the eleven DRAFTING_SECTIONS interpolated here. Nothing in it varies with the moment
+ * or the writer — it is constant for a library version. Josh's client truncates a tool response to a
+ * ~2 KB preview, cut mid-sentence, and he has no filesystem to read a spilled copy from, so on his
+ * surface those 38,581 constant characters were pushing the material, the audience, the shape targets
+ * and `must_not_name` past the cut. Six drafters hit it in one day and every one of them recovered
+ * only because it was running in a clone with disk access.
+ *
+ * So `get_drafting_brief` now hands this function a ~1.2 KB index over the same eleven sections —
+ * key, title, size, whether it is still a placeholder, and the `library://<key>` URI to read it from
+ * — instead of their bodies. THE PROSE BELOW IS DELIBERATELY UNCHANGED by that: it says the library
+ * is one of the writer's two sources and the index says where it is, which keeps
+ * `library: "inline"` byte-for-byte identical to what shipped before. brief-size.test.mjs asserts
+ * that equality, because an escape hatch that quietly drifts is not an escape hatch.
+ */
 export const DRAFTER_SYSTEM = (library: string) =>
   `You write LinkedIn posts for Josh, from moments that actually happened to him.
 
@@ -514,6 +532,15 @@ export const DRAFT_USER = (opts: {
  * score, and it defaults to reject when unsure.
  * ────────────────────────────────────────────────────────────────────────── */
 
+/**
+ * Same as DRAFTER_SYSTEM above: `library` is either the six GATING_SECTIONS or an index of them.
+ *
+ * 29,402 characters measured 28 October 2026, constant for a library version, repeated in full on
+ * every gate brief. Pointerising it makes the view split VISIBLE rather than implicit — the index
+ * names exactly the six keys the gate may read, so "the gate must not see reference posts" is now
+ * something a person can check by looking at the list instead of by searching 29 KB of prose for a
+ * heading. The prose below is unchanged, so the inline form is byte-identical.
+ */
 export const GATE_SYSTEM = (library: string) =>
   `You are the last check on a LinkedIn post before its author sees it.
 
@@ -730,10 +757,31 @@ export const GATE_USER = (opts: {
    * them. A rule he asked to break is still broken.
    */
   hisNotes?: string[];
+  /*
+   * THE POST AND THE SOURCE, CARRIED ONCE FOR THE WHOLE RESPONSE INSTEAD OF ONCE PER CHECK.
+   *
+   * Measured 28 October 2026 on draft 90: a nine-check gate brief serialises to 100,296 characters,
+   * of which 69,935 are the checks. The draft body appeared nine times (2,733 each) and moment 111's
+   * source entry three times (11,307 each) — 58,418 characters of duplication in a response Josh's
+   * client cuts at ~2 KB. Nine copies of one post is not nine inputs; it is one input billed nine
+   * times, and it pushed every rubric below the cut.
+   *
+   * When these are set, `get_gate_brief` has hoisted the real text to a top-level `body` and
+   * `source_entry` field and each check POINTS at it. Nothing about what a check may see changes:
+   * `gateInputsFor` still decides whether `entry` is passed at all, so the three CHECK_SEES_SOURCE
+   * checks are still the only ones told the source exists. Unset, this function renders exactly what
+   * it rendered before — which is what `bodies: "per_check"` asks for.
+   */
+  bodyHoisted?: boolean;
+  entryHoisted?: boolean;
 }) => {
   const parts: string[] = [];
   parts.push(`THE CHECK:\n\n${opts.check.question}`);
-  parts.push(`\n---\n\nTHE POST:\n\n${opts.body}`);
+  parts.push(
+    opts.bodyHoisted
+      ? `\n---\n\nTHE POST is the "body" field at the top of this response.`
+      : `\n---\n\nTHE POST:\n\n${opts.body}`,
+  );
 
   if (opts.hisNotes?.length) {
     parts.push(
@@ -748,7 +796,15 @@ export const GATE_USER = (opts: {
     );
   }
 
-  if (opts.entry) {
+  if (opts.entry && opts.entryHoisted) {
+    // The same sentence, and the same warning about what the source is NOT for. Only the location
+    // of the text moves: a check that is shown the source is still shown it, once.
+    parts.push(
+      `\n---\n\nTHE SOURCE MATERIAL IT WAS BUILT FROM is the "source_entry" field at the top of ` +
+        `this response — his raw notes, which NO READER SEES. Use it to check what the post ` +
+        `claims, never as something the post failed to include.`,
+    );
+  } else if (opts.entry) {
     parts.push(
       `\n---\n\nTHE SOURCE MATERIAL IT WAS BUILT FROM — his raw notes, which NO READER SEES. ` +
         `Use it to check what the post claims, never as something the post failed to include:\n`,

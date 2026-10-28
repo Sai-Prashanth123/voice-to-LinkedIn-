@@ -41,6 +41,19 @@ import { shapedWriterRows } from "../shape-rows.mjs";
 import { corpusShapeBlock, writerShapeBlock } from "./voice.mjs";
 import { WRITER_CHOICES, writerAskFrom } from "../writers.mjs";
 import { joshNote, JOSH_NOTE_PREFIX } from "../../supabase/functions/_shared/notes.ts";
+/*
+ * ONE RULE FOR WHETHER A NAME IS CLEARED, AND THESE TWO BRIEFS WERE THE LAST READERS NOT USING IT.
+ *
+ * Clearance is per POST (9.10): a name Josh cleared for one post stops being cleared the moment the
+ * idea is re-opened, because a re-open makes it a different post and the permission has to be asked
+ * again. names.ts implements that against `moments.reopened_at`, and both briefs read `cleared`
+ * straight off the row — so on the Claude path, which is the path that runs, the expiry had never
+ * once fired. Six readers, one rule; clearance.test.mjs asserts all six by source.
+ */
+import {
+  isClearedNow,
+  needsAClearanceDecision,
+} from "../../supabase/functions/_shared/names.ts";
 import { WRITTEN_UP } from "../../supabase/functions/_shared/extraction.ts";
 import { parsePillars } from "../../supabase/functions/_shared/library.ts";
 import { renderTranscript } from "../../supabase/functions/_shared/session.ts";
@@ -48,6 +61,7 @@ import { measureShape, shapeAgainst, writerShapeTargets } from "../../supabase/f
 import {
   CHECK_NEEDS_SECTION,
   gateInputsFor,
+  isSupplied,
   notJudged,
   renderLibrary,
   unjudgeableChecks,
@@ -83,6 +97,10 @@ async function libraryText(db, view) {
 
   return {
     text: prompt,
+    // The rows themselves, so the pointer index below is built from the same read rather than from
+    // a second one. Two reads of one table inside one brief is how a pointer ends up naming a
+    // section whose body the same response measured differently.
+    rows,
     // Per-section bodies as well as the assembled prompt: the gate brief has to know WHICH section
     // is empty, not merely that the prompt mentions a gap.
     sections,
@@ -94,6 +112,200 @@ async function libraryText(db, view) {
     awaiting_josh: Object.entries(sections).filter(([, body]) => !body).map(([key]) => key),
   };
 }
+
+/* ── Pointers, and a response that can tell you it was cut ───────────────── */
+/*
+ * WHY ANY OF THIS EXISTS
+ *
+ * Josh has never used a clone. Every session he has ever run went through the hosted connector, and
+ * his client truncates a tool response to a ~2 KB preview, cut mid-sentence. Nothing in this repo
+ * imposes that limit and nothing here can detect it: mcp-server/http.mjs, the edge function and
+ * server.mjs all pass the whole value through as one text block. So the cut is the client's, and the
+ * only lever on this side is WHAT SITS IN THE FIRST 2 KB and whether a reader can tell it was cut.
+ *
+ * Measured 28 October 2026, before this change:
+ *
+ *   get_drafting_brief, moment 111   73,414 chars   system 41,488  user 28,861
+ *   get_gate_brief, draft 90          100,296 chars   system 29,402  checks 69,935
+ *
+ * Everything below the cut was lost — the material, the audience, the shape targets, must_not_name,
+ * the previous rejection. Six drafters hit it in one day and every one recovered only by reading the
+ * spilled file off disk, which is exactly what his surface cannot do.
+ *
+ * Three things answer it, and none of them is a bigger limit. guards.test.mjs has said why since the
+ * shape rows were paged: "A bigger limit is not the fix; nothing in a response says it was
+ * truncated." So:
+ *
+ *   1. The constant 38 KB of library prose becomes a ~1.2 KB index of addresses (libraryPointers).
+ *   2. JSON.stringify preserves insertion order, so the keys that must survive a cut go FIRST.
+ *   3. The response measures itself and ends with a terminal marker, so a reader that cannot see
+ *      `brief_is_complete` KNOWS it is holding a cut copy — and the first key already told it what
+ *      to call to get the rest.
+ */
+
+/** 38581 → "38,581". Written out rather than toLocaleString: ICU builds disagree on the separator. */
+const commas = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+/**
+ * The library a view may read, as an INDEX of addresses rather than as its bodies.
+ *
+ * Built from VIEWS[view] rather than from the rows, so the set of URIs this prints is the view's own
+ * allowlist by construction. That is the property that matters: a pointer index naming a section the
+ * resource cannot serve would be worse than no index at all, and an index missing a section the view
+ * allows would quietly narrow the standard. brief-size.test.mjs asserts the set both ways.
+ *
+ * `library://{key}` has been served by resources.mjs since it was written, with a list callback, and
+ * nothing in the repo pointed at it until now. The two routes are named TOGETHER and deliberately:
+ * it is not verifiable from this side whether the connector surfaces `resources/list` to the model or
+ * only to the person, and `get_library` with a key has existed in read.mjs all along. Naming both
+ * costs one line and removes the guess.
+ */
+function libraryPointers(rows, view) {
+  const keys = [...VIEWS[view]];
+  const byKey = new Map(rows.map((r) => [r.key, r]));
+
+  const sections = keys.filter((key) => byKey.has(key)).map((key) => {
+    const row = byKey.get(key);
+    // isSupplied, not body.length — seven sections hold prose addressed to Josh explaining what he
+    // should put there, and a length test calls those filled in. See views.ts.
+    const body = isSupplied(row.body) ? String(row.body ?? "").trim() : "";
+    return {
+      key,
+      title: row.title ?? key,
+      chars: body.length,
+      placeholder: body.length === 0,
+      uri: `library://${key}`,
+    };
+  });
+
+  // A view key with no row at all is a disagreement between the allowlist and the library, and it
+  // is said out loud rather than silently dropped from the index.
+  const absent = keys.filter((key) => !byKey.has(key));
+
+  const pad = Math.max(...sections.map((s) => s.key.length), 0);
+  const lines = sections.map((s) =>
+    `  ${s.key.padEnd(pad)}  ${s.uri.padEnd(pad + 10)}  ` +
+    (s.placeholder
+      ? `PLACEHOLDER — not supplied by Josh. Do not invent one; work without it.`
+      : `${commas(s.chars)} chars · ${s.title}`)
+  );
+
+  const total = sections.reduce((n, s) => n + s.chars, 0);
+
+  const text =
+    `THE REFERENCE LIBRARY IS NOT PRINTED BELOW. IT IS ADDRESSABLE, AND READING IT IS NOT ` +
+    `OPTIONAL.\n\n` +
+    `These are the ${sections.length} sections this ${view} view may read — ${commas(total)} ` +
+    `characters in total. The standard is in them. This index is only their addresses, so a draft ` +
+    `written from the index alone is a draft written from nothing.\n\n` +
+    `Read every section that is not a placeholder BEFORE you write. Two routes, either works — use ` +
+    `whichever your client has:\n\n` +
+    `  · get_library with key: "<key>" — an ordinary tool call, always available\n` +
+    `  · resources/read on the URI below, if your client exposes MCP resources\n\n` +
+    `${lines.join("\n")}\n\n` +
+    (absent.length > 0
+      ? `NOT IN THE LIBRARY AT ALL: ${absent.join(", ")}. The ${view} view allows ` +
+        `${absent.length === 1 ? "it" : "them"} and no row exists. Say so rather than working ` +
+        `around a gap nobody knows about.\n\n`
+      : "") +
+    `If a section will not read, say WHICH ONE and write without it. Never guess at what it said, ` +
+    `and never substitute your own sense of what a good post is for a section you could not open — ` +
+    `that substitution is the whole reason this standard lives in the system rather than in a file.`;
+
+  return { text, sections, uris: sections.map((s) => s.uri), total_chars: total, absent };
+}
+
+/**
+ * Measure a response and seal it, in one pass that cannot disagree with itself.
+ *
+ * `build(chars)` returns the whole object in key order with the size quoted wherever it needs to be,
+ * and WITHOUT the last two keys; this appends `response_chars` and `brief_is_complete`. The size is
+ * quoted inside the value being measured, so it is a fixed point: f(n) = length of build(n) is
+ * non-decreasing in n (more digits is never shorter), so iterating from zero increases monotonically
+ * and settles as soon as the digit count stops changing — three passes at most in practice.
+ *
+ * `brief_is_complete` is LAST on purpose and is the only honest answer to "nothing in a response says
+ * it was truncated". It is not a flag anybody reads for its value: its ABSENCE is the signal.
+ */
+/*
+ * MEASURED THE WAY THE TRANSPORT SERIALISES, which is not the default.
+ *
+ * This counted `JSON.stringify(body)` — compact. `server.mjs:90` sends
+ * `JSON.stringify(value, null, 2)`. So `response_chars` under-reported the wire size by about 2.4%:
+ * on moment 111 it said 38,141 where the response was 39,080, and on moment 110 it said 19,809
+ * where it was 20,653. Measured 28 October 2026, against the live project.
+ *
+ * Small as a percentage and exactly the wrong kind of wrong. The field exists so a reader can
+ * compare it against what arrived and decide whether it has the whole thing — and the comment
+ * below, which was already here, says a figure that disagrees with the response is worse than no
+ * figure. It disagreed with the response. The indent is two spaces per level across a deeply nested
+ * object, so the gap grows with the brief rather than staying a rounding error.
+ *
+ * `INDENT` is the one place the two are tied together. If the transport ever stops indenting, this
+ * is the line that has to change with it, and `brief-size.test.mjs` asserts the equality rather
+ * than the constant.
+ */
+const INDENT = 2;
+
+function seal(build) {
+  let n = 0;
+  for (let pass = 0; pass < 8; pass++) {
+    const body = { ...build(n), response_chars: n, brief_is_complete: true };
+    const measured = JSON.stringify(body, null, INDENT).length;
+    if (measured === n) return body;
+    n = measured;
+  }
+  // Unreachable for a monotone f with a bounded digit count, and thrown rather than returned wrong:
+  // a response_chars that disagrees with the response is worse than no figure, because the whole
+  // point of it is that a reader can trust the figure to decide whether it has the whole thing.
+  throw new Error("response size did not settle; refusing to quote a figure that is not the size");
+}
+
+/**
+ * The first key of a brief, and the only one guaranteed to survive a 2 KB cut.
+ *
+ * Kept under 600 characters deliberately. It carries the three things a truncated reader needs and
+ * nothing else: how big the whole response is, where the library actually lives, and what to call to
+ * get the part that was cut off.
+ */
+function readThisFirst({ chars, tool, part, keys, recover }) {
+  return `This response is ${commas(chars)} serialized characters. The reference library is NOT ` +
+    `inlined — read it with get_library (key: ${keys.join(", ")}) or resources/read on ` +
+    `library://<key>.` +
+    (part && part !== "all" ? ` This is the "${part}" part only.` : "") +
+    ` If you cannot see brief_is_complete at the end of this response you are reading a cut copy — ` +
+    (recover ?? `call ${tool} again with part: "material"`) + `.`;
+}
+
+/**
+ * A brief carried inside ANOTHER tool's response — `next_work` and `write_post` both do it.
+ *
+ * ONE TRUNCATION SIGNAL PER RESPONSE. Nested, a brief's own `response_chars` is the size of
+ * something nobody serialised and its `brief_is_complete` is no longer the last key of anything, so
+ * a reader following the contract would check the wrong marker and conclude a complete response was
+ * cut, or a cut one complete. Three disagreeing signals in one object is worse than none, because
+ * there is no way to tell which object was measured. So the inner three are stripped and the OUTER
+ * response carries the pair, measured on itself.
+ *
+ * The library keys come off the brief rather than being passed in: a wrapper that typed its own list
+ * would be a second answer to which sections the view allows, and they would drift.
+ */
+export function carriedBrief(brief, { tool, recover }) {
+  const {
+    read_this_first: _inner,
+    response_chars: _size,
+    brief_is_complete: _marker,
+    ...rest
+  } = brief;
+  const keys = (brief.library_pointers?.sections ?? []).map((s) => s.key);
+  return {
+    brief: rest,
+    firstKey: (chars) => readThisFirst({ chars, tool, keys, recover }),
+  };
+}
+
+/** Exported for the two wrappers above, so there is one implementation of the measure-and-seal. */
+export { seal };
 
 /** One setting, read the way getSetting reads it, with the same fallback. */
 async function setting(db, key, fallback) {
@@ -139,7 +351,13 @@ export const briefTools = [
         "Pass writer_handle when Josh asks for a post in one of his reference writers' shapes — " +
         "\"write this one like Matt Barker would\" — and the brief carries that writer's measured " +
         "structure as the target for this post, plus what must not be taken from them. Their words " +
-        "are never included and are refused mechanically at filing.",
+        "are never included and are refused mechanically at filing.\n\n" +
+        "THE LIBRARY IS NOT INLINED. The brief names each section, its size and its library:// URI, " +
+        "and you read the ones you need with get_library or resources/read. That is not an " +
+        "optimisation you may skip: a draft written from the index rather than from the sections is " +
+        "a draft written against no standard, and the gate judges it against the sections. If the " +
+        "response ends without brief_is_complete, your client cut it — read read_this_first, which " +
+        "is the first key for that reason, and call again with the part you are missing.",
       inputSchema: {
         moment_id: z.number().int().describe("Which moment to draft, from list_moments"),
         // Built from REFERENCE_WRITERS rather than typed out again. The same eight were listed by
@@ -150,6 +368,33 @@ export const briefTools = [
           "If he named one in a pushback note instead, it is read from there and does not need " +
           "passing here.",
         ),
+        /*
+         * The escape hatch, and the only way back to what shipped before 28 October.
+         *
+         * "inline" reproduces the old response byte for byte — 41,488 characters of system prompt —
+         * and exists for a client with no tool-calling loop (the `draft-post` MCP prompt with
+         * inline: true is the one caller that genuinely needs it) and for the eval harness, which
+         * compares against recorded prompts and would otherwise read a change in the index as a
+         * change in the standard. Nobody drafting on Josh's surface should pass it: his client cuts
+         * the response long before the library starts.
+         */
+        library: z.enum(["pointers", "inline"]).optional().describe(
+          "Default \"pointers\": the library is named by URI, not pasted in. \"inline\" pastes all " +
+          "eleven sections into `system` — 41,488 characters, which Josh's client truncates.",
+        ),
+        /*
+         * A NAMED ENUMERATION, NEVER A CURSOR.
+         *
+         * A cursor over 25 KB of prose cuts mid-sentence at whatever offset the page ends on, which
+         * is the defect this whole change removes rather than a way of paging around it. Two named
+         * halves each make sense read on their own: "material" is everything that varies with the
+         * moment, "instructions" is everything that is constant for a library version.
+         */
+        part: z.enum(["material", "instructions", "all"]).optional().describe(
+          "Default \"all\". \"material\" is the moment, the audience, the names and the previous " +
+          "attempt — everything that varies. \"instructions\" is the standard. Ask for one half " +
+          "when the whole came back cut.",
+        ),
       },
     },
     async handler(args, context) {
@@ -157,7 +402,9 @@ export const briefTools = [
       const id = args.moment_id;
 
       const [moment] = await db.select("moments", {
-        select: "id,title,killed,status,audience,pillar",
+        // `reopened_at` for the clearance expiry above. Without it the rule cannot be evaluated at
+        // all, which is why it had silently not been.
+        select: "id,title,killed,status,audience,pillar,reopened_at",
         id: `eq.${id}`,
         limit: 1,
       });
@@ -213,12 +460,16 @@ export const briefTools = [
       }
 
       const names = await db.select("moment_names", {
-        select: "name,kind,cleared",
+        select: "name,kind,cleared,cleared_at",
         moment_id: `eq.${id}`,
       });
       const real = names.filter((n) => n.kind !== "not_a_name");
-      const cleared = real.filter((n) => n.cleared).map((n) => n.name);
-      const uncleared = real.filter((n) => !n.cleared).map((n) => n.name);
+      // Exact complements, from names.ts, so the two lists can never both hold a name or both drop
+      // one. A name in neither would be invisible to the drafter and to create_draft's refusal.
+      const cleared = real.filter((n) => isClearedNow(moment.reopened_at, n)).map((n) => n.name);
+      const uncleared = real
+        .filter((n) => needsAClearanceDecision(moment.reopened_at, n))
+        .map((n) => n.name);
 
       // 9.8 — a second attempt is told what the first one failed on, or it writes it again.
       const [previous] = await db.select("drafts", {
@@ -396,19 +647,18 @@ export const briefTools = [
       }
 
       const library = await libraryText(db, "drafting");
+      const pointers = libraryPointers(library.rows, "drafting");
+      const inline = args.library === "inline";
+      const part = args.part ?? "all";
 
-      const brief = {
-        moment_id: id,
-        name: moment.title ?? null,
-        prompt_version: PROMPT_VERSION,
-        library_version: library.version,
-        library_sections_awaiting_josh: library.awaiting_josh,
-        // Said out loud, because the comment where this is set promises the caller is told. It was
-        // assigned and read by nothing — a value nothing selects, which is the exact defect this
-        // repo is named for, introduced inside the fix for another instance of it.
-        ...(shapeUnavailable && { writer_shape_unavailable: shapeUnavailable }),
-        system: DRAFTER_SYSTEM(library.text),
-        user: DRAFT_USER({
+      // Both halves built ONCE, outside the seal below. `seal` calls its builder up to three times
+      // to settle the size it quotes, so anything expensive or impure in there would be done three
+      // times — and anything that could answer differently between passes would never settle.
+      const systemText = part === "material"
+        ? undefined
+        : DRAFTER_SYSTEM(inline ? library.text : pointers.text);
+
+      const userText = part === "instructions" ? undefined : DRAFT_USER({
           entry,
           audience: moment.audience ?? null,
           pillar: moment.pillar ?? null,
@@ -463,14 +713,16 @@ export const briefTools = [
               return `${said}\n      He was given:   "${first(n.before_text)}"\n` +
                 `      He changed it to: "${first(n.after_text)}"`;
             }),
-        }),
-        /*
-         * Said outside the prose as well, for the same reason must_not_name is: if the writer was
-         * named and no target could be given, the caller has to know that rather than assume the
-         * shape is in there somewhere. writerShapeBlock refuses rather than degrading when a
-         * writer's measurable corpus is too thin to call anything his habit.
-         */
-        ...(writerShape && {
+        });
+
+      /*
+       * Said outside the prose as well, for the same reason must_not_name is: if the writer was
+       * named and no target could be given, the caller has to know that rather than assume the
+       * shape is in there somewhere. writerShapeBlock refuses rather than degrading when a
+       * writer's measurable corpus is too thin to call anything his habit.
+       */
+      const shapeKeys = writerShape
+        ? {
           writer_shape: writerShape.refused
             ? { handle: writerShape.handle ?? null, no_target: writerShape.refused }
             : {
@@ -486,12 +738,69 @@ export const briefTools = [
                */
               asked_by: args.writer_handle ? "this_call" : "his_note",
             },
+        }
+        : {};
+
+      /*
+       * THE KEY ORDER IS THE CONTRACT, BECAUSE THE CUT IS THE CLIENT'S AND WE CANNOT SEE IT.
+       *
+       * JSON.stringify preserves insertion order, so the first keys are the ones that survive a
+       * 2 KB preview. read_this_first says how to get the rest; must_not_name is second because it
+       * is the one instruction that must never be missed, and because create_draft refuses on it
+       * anyway — better to know before writing than after. Everything bulky is below them, and
+       * brief_is_complete is last so its ABSENCE is the truncation signal.
+       */
+      const brief = seal((chars) => ({
+        read_this_first: readThisFirst({
+          chars,
+          tool: "get_drafting_brief",
+          part,
+          keys: pointers.sections.map((s) => s.key),
+          // A reader that asked for the material and STILL got cut cannot be sent back for the
+          // material. The moment resource is the smallest thing that carries it.
+          recover: part === "material"
+            ? `read moment://${id}, or call get_moment with moment_id ${id}`
+            : undefined,
         }),
-        // Repeated outside the prose because it is the one instruction that must not be missed,
-        // and because create_draft refuses on it anyway — better to know before writing.
         must_not_name: uncleared,
-        next: "Write the post, then call create_draft with every claim and its verbatim source span.",
-      };
+        library_pointers: {
+          view: "drafting",
+          read_with: [
+            `get_library with key: "<key>" — an ordinary tool call, always available`,
+            "resources/read on the URI, if your client exposes MCP resources",
+          ],
+          sections: pointers.sections,
+          ...(pointers.absent.length > 0 && { allowed_but_missing: pointers.absent }),
+          note: inline
+            ? "library: \"inline\" was asked for, so the bodies are also pasted into `system`. " +
+              "These URIs are then a convenience rather than the only route."
+            : "The bodies are NOT in this response. Read every section that is not a placeholder " +
+              "before writing — the gate judges the draft against them.",
+        },
+        moment_id: id,
+        name: moment.title ?? null,
+        prompt_version: PROMPT_VERSION,
+        library_version: library.version,
+        library_sections_awaiting_josh: library.awaiting_josh,
+        // Said out loud, because the comment where this is set promises the caller is told. It was
+        // assigned and read by nothing — a value nothing selects, which is the exact defect this
+        // repo is named for, introduced inside the fix for another instance of it.
+        ...(shapeUnavailable && { writer_shape_unavailable: shapeUnavailable }),
+        ...shapeKeys,
+        ...(part === "all" ? {} : {
+          part,
+          the_other_part: part === "material"
+            ? "get_drafting_brief with part: \"instructions\" returns the standard."
+            : "get_drafting_brief with part: \"material\" returns the moment and the names.",
+        }),
+        ...(userText !== undefined && { user: userText }),
+        ...(systemText !== undefined && { system: systemText }),
+        next: part === "instructions"
+          ? "Read the library sections named above, then call get_drafting_brief with " +
+            "part: \"material\" for the moment itself."
+          : "Read every library section named above, write the post, then call create_draft with " +
+            "every claim and its verbatim source span.",
+      }));
 
       // Recorded so cc-submit can refuse a draft written against no standard. See brief-read.mjs
       // for why this is a server-side record and not another hook.
@@ -510,9 +819,40 @@ export const briefTools = [
         "the source material it was built from. Judge each one separately and record it with " +
         "record_gate_verdict — one call per check. Do not average across them and do not stop at " +
         "the first failure: Josh should see everything wrong with a draft at once. Checks already " +
-        "judged are left out, so an interrupted run resumes rather than starting over.",
+        "judged are left out, so an interrupted run resumes rather than starting over.\n\n" +
+        "THE POST APPEARS ONCE, as the top-level `body` field, and the source material once as " +
+        "`source_entry`. Each check points at them rather than carrying its own copy. The library " +
+        "is named by URI, not inlined — read the sections with get_library or resources/read. If " +
+        "the response ends without brief_is_complete your client cut it: judge one check at a time " +
+        "with check_key.",
       inputSchema: {
         draft_id: z.number().int().describe("Which draft to check, from list_drafts"),
+        /*
+         * One check at a time, for a client that cuts the response.
+         *
+         * The nine rubrics are ~700 characters each before anything is added to them, so no key
+         * order fits them under a 2 KB preview. This is the only way a truncating client can read
+         * a rubric in full, and it is also what a resumed run wants: the gate is nine independent
+         * judgements and has never needed them in one response.
+         */
+        check_key: z.string().optional().describe(
+          "Judge one check. Its rubric is returned in full with the post and, where the check is " +
+          "allowed it, the source. Everything else is unchanged — the counts still report the " +
+          "whole draft.",
+        ),
+        /*
+         * The escape hatch, and the only way back to what shipped before 28 October: the post
+         * inlined in all nine checks and the source in three of them. Measured on draft 90, that is
+         * 58,418 characters of duplication in a 100,296-character response. It exists for the eval
+         * harness, which compares against recorded prompts, and for a client that cannot read a
+         * sibling field. Nothing on Josh's surface should ask for it.
+         */
+        bodies: z.enum(["once", "per_check"]).optional().describe(
+          "Default \"once\": the post and the source are carried once at the top, each check " +
+          "points at them, and the library is named by URI. \"per_check\" is the whole response " +
+          "as it stood before 28 October — a copy in every check and the library pasted into " +
+          "`system`. One switch, because a half-restored response is not what an eval compares.",
+        ),
       },
     },
     async handler(args, { db }) {
@@ -524,7 +864,10 @@ export const briefTools = [
       if (!draft) throw new Error(`No draft with id ${args.draft_id}.`);
 
       const [moment] = await db.select("moments", {
-        select: "id,title,audience",
+        // `reopened_at` for the same clearance rule as the drafting brief above. The gate judging a
+        // name as cleared that the drafter was told not to use is the worst direction for these two
+        // to disagree in: the draft is written clean and then failed for being clean.
+        select: "id,title,audience,reopened_at",
         id: `eq.${draft.moment_id}`,
         limit: 1,
       });
@@ -539,9 +882,11 @@ export const briefTools = [
       const entry = sourceEntry(material, gateExtra);
 
       const cleared = (await db.select("moment_names", {
-        select: "name,kind,cleared",
+        select: "name,kind,cleared,cleared_at",
         moment_id: `eq.${draft.moment_id}`,
-      })).filter((n) => n.cleared && n.kind !== "not_a_name").map((n) => n.name);
+      }))
+        .filter((n) => n.kind !== "not_a_name" && isClearedNow(moment?.reopened_at, n))
+        .map((n) => n.name);
 
       // Resuming rather than restarting. handlers/gate.ts does exactly this, for the same reason:
       // a run interrupted at check six should cost two more calls, not eight.
@@ -624,48 +969,129 @@ export const briefTools = [
         })), { returning: false });
       }
 
+      /*
+       * EVERYTHING ABOVE THIS LINE HAPPENS BEFORE ANYTHING IS MEASURED, AND THAT ORDER IS LOAD-BEARING.
+       *
+       * The insert is the one write a read tool makes, and the reason it is here is in the comment
+       * above it: without it a draft sits permanently at eight of nine verdicts and cc-agent re-gates
+       * it for ever. So it stays unconditional and stays FIRST. Assembly and measurement come after,
+       * because a size refusal thrown during assembly would skip the write that stops the loop — and
+       * the loop is more expensive than a long response.
+       */
+      const pointers = libraryPointers(library.rows, "gating");
+      const once = (args.bodies ?? "once") === "once";
+
+      /*
+       * One check, when the caller asked for one. The counts below still describe the whole draft:
+       * `checks_remaining` is how many are outstanding, not how many are in this response, because
+       * a judge told "1 remaining" when nine are would stop after one.
+       */
+      const asked = args.check_key
+        ? remaining.filter((c) => c.key === args.check_key)
+        : remaining;
+      const unknownCheck = args.check_key && asked.length === 0;
+
+      // Whether the hoisted source is used by anything in THIS response. gateInputsFor still
+      // decides, exactly as before — hoisting moves where the text sits, never who may see it.
+      const anySeesSource = asked.some((c) => gateInputsFor(c.key).source) &&
+        Object.keys(entry).length > 0;
+
+      /*
+       * The rubrics and the system prompt, built ONCE, for the reason the drafting brief gives: the
+       * seal below calls its builder up to three times to settle the figure it quotes, and nine
+       * rubrics is the most expensive thing in this handler.
+       */
+      const systemText = GATE_SYSTEM(once ? pointers.text : library.text);
+      const checks = asked.map((check) => {
+        const sees = gateInputsFor(check.key);
+        return {
+          check_key: check.key,
+          // Said out loud so a reader of the brief can see what the judge was given, rather than
+          // having to trust that something upstream filtered correctly.
+          sees: Object.entries(sees).filter(([, v]) => v).map(([k]) => k),
+          user: GATE_USER({
+            check,
+            body: draft.body,
+            entry: sees.source && Object.keys(entry).length > 0 ? entry : undefined,
+            audience: sees.audience ? (moment?.audience ?? null) : undefined,
+            clearedNames: sees.clearedNames ? cleared : undefined,
+            shape: sees.shape ? shapeLines : undefined,
+            hisNotes: sees.hisNotes && hisNotes.length > 0 ? hisNotes : undefined,
+            bodyHoisted: once,
+            entryHoisted: once,
+          }),
+        };
+      });
+
       // 9b — each check is its own call with its own rubric. Run together in one prompt a model
       // averages across them and lets marginal work through, which is the exact failure acceptance
       // test 8 is built to catch.
-      return {
+      return seal((chars) => ({
+        read_this_first: readThisFirst({
+          chars,
+          tool: "get_gate_brief",
+          keys: pointers.sections.map((s) => s.key),
+          recover: `call get_gate_brief again with check_key: "${
+            (asked[0] ?? remaining[0])?.key ?? "anyone_else"
+          }" and judge one check at a time`,
+        }),
         draft_id: draft.id,
         name: moment?.title ?? null,
         prompt_version: PROMPT_VERSION,
         already_judged: [...done],
         not_judgeable: [...unjudgeable],
         checks_remaining: remaining.length,
-        system: GATE_SYSTEM(library.text),
+        ...(args.check_key && { checks_in_this_response: asked.length }),
+        ...(unknownCheck && {
+          check_key_not_offered: `"${args.check_key}" is not a check awaiting a verdict on this ` +
+            `draft. Outstanding: ${remaining.map((c) => c.key).join(", ") || "none"}.`,
+        }),
+        /*
+         * THE POST, ONCE. Nine copies of one post is not nine inputs — it is one input billed nine
+         * times, and on draft 90 it was 24,597 of the response's 100,296 characters. Each check's
+         * text now names this field instead of repeating it.
+         */
+        ...(once && { body: draft.body }),
+        ...(once && anySeesSource && {
+          /*
+           * THE SOURCE, ONCE, AND IT IS THE BIGGEST SAVING HERE. moment 111's entry is 11,307
+           * characters and three checks are allowed it — 22,614 characters of duplication. Which
+           * three is still CHECK_SEES_SOURCE's decision and nothing else's: each check's own `sees`
+           * array below says whether it was told this field exists, so hoisting cannot quietly
+           * widen the filter.
+           */
+          source_entry: entry,
+        }),
+        library_pointers: {
+          view: "gating",
+          read_with: [
+            `get_library with key: "<key>" — an ordinary tool call, always available`,
+            "resources/read on the URI, if your client exposes MCP resources",
+          ],
+          sections: pointers.sections,
+          ...(pointers.absent.length > 0 && { allowed_but_missing: pointers.absent }),
+          // The view split, said as a list rather than left implicit in 29 KB of prose. The gate
+          // may not read reference_posts or voice_transcript; a judge that has read another
+          // writer's posts starts measuring against their voice rather than Josh's.
+          note: "These are the only sections the gate may read. reference_posts and " +
+            "voice_transcript are deliberately not among them — see views.ts.",
+        },
+        system: systemText,
         // Each check is shown the post, and nothing else unless its rubric cannot be answered
         // without it. This filter is the whole point of gateInputsFor: it was applied on the
         // server path and NOT here, and this is the path that actually runs, so five of the eight
         // checks were reading his private notes. That is his "it fails drafts for things that
         // aren't in them", and it had survived one fix because that fix was prompt wording.
-        checks: remaining.map((check) => {
-          const sees = gateInputsFor(check.key);
-          return {
-            check_key: check.key,
-            // Said out loud so a reader of the brief can see what the judge was given, rather than
-            // having to trust that something upstream filtered correctly.
-            sees: Object.entries(sees).filter(([, v]) => v).map(([k]) => k),
-            user: GATE_USER({
-              check,
-              body: draft.body,
-              entry: sees.source && Object.keys(entry).length > 0 ? entry : undefined,
-              audience: sees.audience ? (moment?.audience ?? null) : undefined,
-              clearedNames: sees.clearedNames ? cleared : undefined,
-              shape: sees.shape ? shapeLines : undefined,
-              hisNotes: sees.hisNotes && hisNotes.length > 0 ? hisNotes : undefined,
-            }),
-          };
-        }),
+        checks,
         note: unjudgeable.size > 0
           ? [...unjudgeable].join(", ") + " is not in this list: the library section it judges " +
             "against is empty, so it is recorded as NOT JUDGED rather than passed on no evidence."
           : undefined,
         next: remaining.length > 0
-          ? "Judge each check on its own and call record_gate_verdict once per check. When unsure, fail it."
+          ? "Read the library sections named above, judge each check on its own, and call " +
+            "record_gate_verdict once per check. When unsure, fail it."
           : "Every check already has a verdict. Nothing to do.",
-      };
+      }));
     },
   },
 

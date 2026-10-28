@@ -205,8 +205,15 @@ export const writeTools = [
         // 10 of the first 59 drafts carry no verdict at all, and Josh found a pile of them before
         // we did. The skill and the one-step tools said the right thing; this description did not,
         // and a tool description is what a model reads first.
-        "When you have filed it, run the gate-check skill on it in a FRESH context — never in the " +
-        "same breath as writing it. A draft nobody has judged is not finished and nothing " +
+        // AND IT NAMES A TOOL AS WELL AS THE SKILL, since 28 October. The skill is real in a clone
+        // — cc-agent and the writing-order hook both drive it — and it does not exist on the only
+        // surface Josh uses. Skills live in `.claude/skills/`, every session he has ever run went
+        // through the hosted connector, and "run the gate-check skill" there names nothing a
+        // session can reach. So both routes are named: the skill where there is one, the tool
+        // always. mode.test.mjs asserts that every MCP-served surface names the tool.
+        "When you have filed it, judge it in a FRESH context — never in the same breath as writing " +
+        "it. Call get_gate_brief with the draft id, or run the gate-check skill if you have one. " +
+        "A draft nobody has judged is not finished and nothing " +
         "downstream will pick it up. " +
         "If it is rejected it comes back through next_work with the reasons attached. " +
         "This creates a draft only — it does not publish, schedule or approve anything.",

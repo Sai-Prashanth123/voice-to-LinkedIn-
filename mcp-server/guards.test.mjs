@@ -248,14 +248,51 @@ test("the gate is described as nine checks, because it is nine", () => {
   const files = walk("");
   assert.ok(files.length > 50, `only ${files.length} source files found — the walk is not walking`);
 
+  const GATE_NOUNS = /eight\s+(?:ways|checks|judgements|judgments|independent\s+\w+)/i;
+
+  /**
+   * Does this line tell a READER the gate has eight checks?
+   *
+   * Approximate on purpose, and approximate in the safe direction. A line is ignored when the match
+   * sits in a comment, because a comment narrating October is a record rather than a claim. A line
+   * counts when the match sits inside a quoted string, because that is text that reaches somebody
+   * who cannot see the code around it.
+   *
+   * Markdown has no comments, so every match in a `.md` file counts as prose a reader reads —
+   * except under `docs/`, which is excluded wholesale below as a dated record.
+   */
+  const tellsAReader = (line, isMarkdown) => {
+    if (!GATE_NOUNS.test(line)) return false;
+    const t = line.trim();
+    if (isMarkdown) return true;
+    if (t.startsWith("*") || t.startsWith("//") || t.startsWith("/*")) return false;
+    const at = line.search(GATE_NOUNS);
+    const slashes = line.indexOf("//");
+    if (slashes !== -1 && slashes < at) return false;
+    // Inside a quote of some kind is the signal that it is text rather than code or commentary.
+    const before = line.slice(0, at);
+    return /["'`]/.test(before);
+  };
+
+  const offenders = [];
   for (const file of files) {
+    const isMarkdown = file.endsWith(".md");
+    if (isMarkdown && file.startsWith("docs/")) continue;
     const src = readFileSync(new URL(file, ROOT), "utf8");
-    assert.doesNotMatch(
-      src,
-      /eight (?:ways|independent checks)|the eight checks for/i,
-      `${file} still describes the gate as eight checks`,
-    );
+    src.split(/\r?\n/).forEach((line, i) => {
+      if (tellsAReader(line, isMarkdown)) {
+        offenders.push(`${file}:${i + 1}  ${line.trim().slice(0, 110)}`);
+      }
+    });
   }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `these tell a reader the gate has eight checks; it is nine, and has been since 14 October:\n  ${
+      offenders.join("\n  ")
+    }`,
+  );
 });
 
 test("the shape targets are paged, because the row ceiling is the server's", () => {

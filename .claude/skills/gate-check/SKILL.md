@@ -22,11 +22,34 @@ Be adversarial. Your job is to find the failure, not to be fair to the post.
 
 ## Steps
 
-1. **Call `get_gate_brief`** with the draft id. It returns:
-   - `system` — the gate's stance and the library sections the gate is allowed to see
-   - `checks` — one entry per check still to judge, each with its own rubric, the post, and the
-     source material
+1. **Call `get_gate_brief`** with the draft id. It returns, in this order:
+   - `read_this_first` — the response's size, where the library is, and what to call if this reply
+     was cut. First for that reason.
+   - `body` — **the post, once.** Every check's text points at this field rather than carrying its
+     own copy of it.
+   - `source_entry` — the source material, once, present only when a check in this response is
+     allowed to see it. The three that are say so in their own `sees` array.
+   - `library_pointers` — the sections the gate may read, each with its `library://<key>` URI. This
+     list *is* the view split: `reference_posts` and `voice_transcript` are deliberately not on it,
+     because a judge who has read another writer's posts starts measuring against their voice.
+   - `system` — the gate's stance, with the library named rather than pasted in
+   - `checks` — one entry per check still to judge, each with its own rubric
    - `already_judged` — checks with a verdict already; these are left out
+   - `brief_is_complete` — the last key. If you cannot see it, you are reading a cut copy.
+
+   **Read the library before you judge.** Fetch every section in `library_pointers` that is not a
+   placeholder, with `get_library` (`key: "<key>"`) or `resources/read` on its URI. The bodies are
+   not in the reply: 29,402 characters of them used to be, repeated on every gate brief, and on
+   Josh's surface that pushed the rubrics below his client's ~2 KB cut. A verdict reached without
+   those sections is a verdict against your own taste, which is the one thing this gate exists to
+   stop being.
+
+   **If a section will not read**, say which one, and say in the verdict that you judged without it.
+   Never guess at what it said.
+
+   **If the reply ends without `brief_is_complete`**, your client cut it. Call `get_gate_brief`
+   again with `check_key` and judge one check at a time — each of those replies carries one full
+   rubric, the post and, where that check is allowed it, the source.
 
 2. **Judge each check on its own.** Read only that check's rubric, then decide. Do not let a
    verdict on one check influence another — that is averaging, and averaging is how marginal work

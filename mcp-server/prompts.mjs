@@ -19,6 +19,14 @@
  * way the words come from prompts.ts through brief.mjs — never from a copy kept here, which is the
  * whole reason the skill files are thin too.
  *
+ * AND INLINE IS WHY THE BRIEFS KEPT AN INLINE MODE AT ALL
+ *
+ * From 28 October the briefs name the library by `library://` URI instead of pasting it in, because
+ * Josh's client truncates a tool reply at ~2 KB. A PROMPT is not a tool reply: it is a message with
+ * no sibling fields and, for the client inline exists for, no way to fetch a URI. So these two
+ * callers ask for the old shape explicitly — `library: "inline"` and `bodies: "per_check"` — and
+ * they are the reason those parameters are worth having rather than dead code.
+ *
  * ARGUMENTS ARE STRINGS
  *
  * MCP sends prompt arguments as strings, always. `inline` is compared against "true" rather than
@@ -122,6 +130,10 @@ export function promptsFor(context) {
             `Call get_drafting_brief with moment_id ${id} first and follow it exactly — the ` +
             `standard is there, not in this message, and it changes whenever Josh edits his ` +
             `library.\n\n` +
+            `THE LIBRARY IS NOT IN THAT BRIEF EITHER. It names each section with its size and its ` +
+            `library:// URI; read every one that is not a placeholder before you write, with ` +
+            `get_library (key: "<key>") or resources/read on the URI. The brief's prose is the ` +
+            `framing; the sections are the standard, and the gate judges against the sections.\n\n` +
             `Then call measure_draft on what you have written: it costs nothing and catches the ` +
             `mechanical faults that otherwise take a whole gate run to find.\n\n` +
             `Finish with create_draft, including every factual claim and the verbatim span of the ` +
@@ -129,7 +141,19 @@ export function promptsFor(context) {
           );
         }
 
-        const brief = await viaTool("get_drafting_brief", { moment_id: id }, context);
+        /*
+         * THE ONE CALLER THAT GENUINELY WANTS THE WHOLE LIBRARY PASTED IN.
+         *
+         * `library: "inline"` is why that parameter exists. Inline is for a client with no
+         * tool-calling loop, or a person reading the standard before writing — and for both of
+         * those, a message containing eleven URIs they cannot fetch is a message containing
+         * nothing. This is the one place where the 41,488 characters are the right answer.
+         */
+        const brief = await viaTool(
+          "get_drafting_brief",
+          { moment_id: id, library: "inline" },
+          context,
+        );
         return text(
           `${brief.system}\n\n---\n\n${brief.user}\n\n---\n\n` +
           `Names that must not appear: ${brief.must_not_name.length ? brief.must_not_name.join(", ") : "none"}.\n\n` +
@@ -159,6 +183,11 @@ export function promptsFor(context) {
             `Run the gate on draft ${id}.\n\n` +
             `Call get_gate_brief with draft_id ${id}. Judge each remaining check on its own rubric ` +
             `alone — do not average across them, and do not let a verdict on one influence another.\n\n` +
+            `The post is the reply's \`body\` field, once, and the source material its ` +
+            `\`source_entry\` field; a rubric that names them is pointing at those fields. The ` +
+            `library is named by library:// URI — read the sections with get_library before you ` +
+            `judge, or you are judging against your own taste. If the reply comes back cut, call ` +
+            `again with check_key and judge one at a time.\n\n` +
             `Be adversarial: your job is to find the failure, not to be fair to the post. If you ` +
             `are genuinely unsure, that is a FAIL.\n\n` +
             `Call record_gate_verdict once per check, naming the sentence rather than the rule. ` +
@@ -166,7 +195,14 @@ export function promptsFor(context) {
           );
         }
 
-        const brief = await viaTool("get_gate_brief", { draft_id: id }, context);
+        // bodies: "per_check" for the same reason as inline above — a message is not a response
+        // with sibling fields, so a rubric that says "the body field at the top of this response"
+        // would be pointing at nothing. Inline here, pointers everywhere a tool reply is involved.
+        const brief = await viaTool(
+          "get_gate_brief",
+          { draft_id: id, bodies: "per_check" },
+          context,
+        );
         const checks = (brief.checks ?? [])
           .map((c) => `### ${c.check_key}\n\n${c.user}`)
           .join("\n\n---\n\n");

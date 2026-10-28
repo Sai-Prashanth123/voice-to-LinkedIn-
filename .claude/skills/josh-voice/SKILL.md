@@ -67,9 +67,29 @@ Run it on the hook and on the central claim. Everything below is downstream of i
      `scripts/load-receipts.mjs --apply` has been run, `law://receipts` is the only copy. After it
      has been run, the section is the copy a claim can actually cite and the file is not.
 
-2. **Get the real brief.** `get_drafting_brief` with the moment id. It assembles the live library
-   for the drafting view. **The drafting standard is not in this file** — it is there, and it
-   changes without any deploy when Josh edits a section.
+2. **Get the real brief.** `get_drafting_brief` with the moment id. **The drafting standard is not
+   in this file** — it is in the library, and the library changes without any deploy when Josh edits
+   a section.
+
+   **The brief names the library; it does not contain it.** From 28 October it returns
+   `library_pointers`: every section the drafting view may read, with its size, whether it is still
+   a placeholder, and its `library://<key>` URI. Read every one that is not a placeholder, with
+   `get_library` (`key: "<key>"`) or `resources/read` on the URI, and read the brief's `user` field
+   in full — that half is still inline, because it is what varies with the moment.
+
+   The bodies came out because 41,488 characters of constant library prose, in a reply Josh's client
+   previews at ~2 KB, was burying the material and `must_not_name` below the cut. Note what that
+   means for this skill in particular: **`voice_guide` is now something you fetch, not something
+   that arrives.** The risk the precedence note above describes — writing from a copy on disk that
+   can be older than the library without saying so — gets easier to fall into the moment the live
+   copy takes one extra call. Make the call.
+
+   If a section will not read, say which one and work without it. Never guess at what it said, and
+   do not reach for `data/josh/law/` to fill the gap. If the reply ends without `brief_is_complete`,
+   your client cut it: call again with `part: "material"` or `part: "instructions"`.
+
+   `get_voice_brief` is **not** pointerised and still hands back the voice guide and the banned list
+   in full. When all you need is his voice, it remains the one call.
 3. **Never invent.** Every claim traces to the idea bank entry. Missing detail stays missing and
    the draft works without it.
 

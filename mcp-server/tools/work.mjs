@@ -33,6 +33,9 @@ import { z } from "zod";
 
 import { tools } from "./index.mjs";
 import { oneStepMode } from "../mode.mjs";
+// Imported straight from brief.mjs rather than reached through the registry: brief.mjs does not
+// import this file, so there is no cycle, and these two are plain functions rather than tools.
+import { carriedBrief, seal } from "./brief.mjs";
 
 /** Run another registered tool's handler. Keeps one implementation of every brief. */
 async function viaTool(name, args, context) {
@@ -133,24 +136,41 @@ export const workTools = [
         if (judged.size >= GATE_CHECKS.length) continue;
 
         const brief = await viaTool("get_gate_brief", { draft_id: draft.id }, context);
-        return {
+        /*
+         * This response is the gate brief plus a wrapper, so it is the brief's size problem with a
+         * wrapper on it: before 28 October that was over 100,000 characters on draft 90, against a
+         * client that previews ~2 KB. The brief is pointerised now; the wrapper has to keep the same
+         * discipline or it reintroduces the defect one layer out — the first key says how to recover
+         * and the last key is the marker whose absence means "cut".
+         */
+        const carried = carriedBrief(brief, {
+          tool: "next_work",
+          recover: `call get_gate_brief with draft_id ${draft.id} and check_key, one check at a time`,
+        });
+        return seal((chars) => ({
+          read_this_first: carried.firstKey(chars),
           work: "gate",
           draft_id: draft.id,
           moment_id: draft.moment_id,
           name: moment.title ?? null,
           checks_already_judged: [...judged],
-          brief,
           how: [
             "Judge each remaining check on its own rubric alone. Do not average across them, and do " +
               "not let a verdict on one influence another.",
             "Judge the POST. The material is context; a failure has to be something a reader would " +
               "see, and your reason must quote it from the post.",
+            "The post is the brief's `body` field, once, and the source its `source_entry` field. " +
+              "A check that names them is pointing at those fields, not asking you to find them.",
+            "Read the library sections the brief names by URI before judging — get_library with the " +
+              "key, or resources/read on library://<key>. A verdict reached without them is a " +
+              "verdict against your own taste.",
             "Be adversarial — if you are genuinely unsure, that is a fail.",
             "Call record_gate_verdict once per check, naming the sentence rather than the rule.",
           ],
           then: "Run every check even after one fails: he should see everything wrong at once. The " +
             "server files the result and, if it was rejected, offers the rewrite here next.",
-        };
+          brief: carried.brief,
+        }));
       }
 
       // Oldest first. A rewrite Josh asked for yesterday should not wait behind a first draft that
@@ -188,7 +208,13 @@ export const workTools = [
         const failures = Array.isArray(job.payload?.failures) ? job.payload.failures : [];
         const isRewrite = Boolean(job.payload?.previous_body) || failures.length > 0;
 
-        return {
+        // Same discipline as the gate branch above, and for the same measured reason.
+        const carried = carriedBrief(brief, {
+          tool: "next_work",
+          recover: `call get_drafting_brief with moment_id ${momentId} and part: "material"`,
+        });
+        return seal((chars) => ({
+          read_this_first: carried.firstKey(chars),
           work: isRewrite ? "rewrite" : "draft",
           moment_id: momentId,
           name: moment.title ?? null,
@@ -206,9 +232,18 @@ export const workTools = [
               },
             }
             : {}),
-          brief,
           how: [
             "Write from the brief only: the idea's material and the library. Nothing else.",
+            /*
+             * THE LIBRARY IS NAMED, NOT PASTED. This used to be satisfied by reading the brief's
+             * `system` text, which carried all eleven sections. It carries their addresses now, so
+             * "write from the brief" has to say out loud that the addresses have to be followed —
+             * otherwise it reads as permission to write from an index, which is writing against no
+             * standard while believing otherwise.
+             */
+            "The brief's `library_pointers` names each section and its library:// URI. Read every " +
+              "one that is not a placeholder BEFORE writing — get_library with the key, or " +
+              "resources/read on the URI. The gate judges the draft against those sections.",
             "Missing detail stays missing. Write around a gap; never fill one.",
             ...(isRewrite
               ? ["This is a rewrite. Fix exactly what_to_fix names — do not write a different post."]
@@ -219,7 +254,8 @@ export const workTools = [
           ],
           then: "Call next_work again. The server gates what you filed; if it is rejected it comes " +
             "back here with the reasons.",
-        };
+          brief: carried.brief,
+        }));
       }
 
       // Nothing queued. Said with the reason, because "nothing to do" and "everything is waiting on

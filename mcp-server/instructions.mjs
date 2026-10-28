@@ -88,9 +88,18 @@ RUNNING AN INTERVIEW — THIS IS WHERE THE FEEL IS WON OR LOST
 WRITING, AND THEN JUDGING
 
 - "Write the next one" → in one_step ask what he wants written, or use what he just said, and call
-  start_post. In interviewed, next_work, then the draft-post skill. It carries the brief; follow it.
-- Judge with the gate-check skill. Do not judge a draft in the same breath as writing it, and do not
-  soften a verdict because a rejection means more work.
+  start_post, then write_post. In interviewed, next_work. Both replies carry the drafting brief
+  itself; follow it.
+- The brief does NOT contain the library. It names each section with its size and its library:// URI,
+  and you read the ones you need — get_library with the key, or resources/read on the URI. Those
+  sections are the standard and the checks judge against them, so a post written from the brief's
+  prose alone is a post written against nothing. If a section will not read, say which one and work
+  without it.
+- Every brief ends with brief_is_complete. If you cannot see it, your client cut the reply: read
+  read_this_first, which is the first field for exactly that reason, and call again for the part you
+  are missing.
+- Judge with get_gate_brief, one verdict per check. Do not judge a draft in the same breath as
+  writing it, and do not soften a verdict because a rejection means more work.
 - A draft that fails: in interviewed it comes back as a rewrite with the reasons attached, and three
   failures park the idea, which is a correct outcome rather than a bug. In one_step it goes to his
   calendar flagged — read him the post in full, then each failed check in one line, and let him

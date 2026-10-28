@@ -495,9 +495,40 @@ test("get_drafting_brief hands over the standard, the material and the names", a
   assert.equal(typeof r.library_version, "number", "8.4 — the draft can be attributed");
   assert.ok(Array.isArray(r.must_not_name));
 
-  // 8.3 — the drafter MAY see reference posts, for structure only. The gate may not. This is the
-  // half of that pair that is allowed, asserted so the two views cannot quietly converge.
-  assert.ok(r.system.includes("Reference posts"), "the drafter's view includes reference posts");
+  /*
+   * 8.3 — THE DRAFTER MAY SEE REFERENCE POSTS, FOR STRUCTURE ONLY. THE GATE MAY NOT.
+   *
+   * This was one assertion: `r.system.includes("Reference posts")`. From 28 October the library is
+   * named by `library://` URI instead of pasted into `system`, and that one string stopped being
+   * able to tell the two halves apart — the pointer index prints every section's TITLE, so
+   * "Reference posts" is in `system` whether the drafter can read the section or not. A test that
+   * passes for the wrong reason is worse here than one that fails, because this is the assertion
+   * standing between the two views converging.
+   *
+   * So it is split. The drafting view NAMES the key and the resource can serve it; and asking for
+   * the inline form still returns the bodies rather than a longer index. brief-size.test.mjs holds
+   * the credential-free half of this — the URI set equals DRAFTING_SECTIONS exactly, and every URI
+   * resolves — and this is the half that runs against the live library.
+   */
+  assert.ok(
+    r.library_pointers.sections.some((s) => s.key === "reference_posts"),
+    "the drafter's view no longer names reference_posts",
+  );
+  assert.ok(
+    r.system.includes("library://reference_posts"),
+    "the drafter's prompt does not say where reference_posts is",
+  );
+
+  const inline = await call("get_drafting_brief", { moment_id: target, library: "inline" });
+  assert.ok(
+    inline.system.includes("Reference posts"),
+    "library: \"inline\" no longer carries the reference-posts section itself",
+  );
+  assert.ok(
+    inline.system.length > r.system.length * 3,
+    `inline is ${inline.system.length} characters against the index's ${r.system.length}; it is ` +
+    `supposed to be the bodies, which are ~38,000 of them`,
+  );
 });
 
 test("get_drafting_brief refuses a moment with nothing to write from", async () => {
@@ -559,6 +590,17 @@ test("get_gate_brief withholds what the gate must never see", async () => {
   // assemble its own library.
   assert.ok(!r.system.includes("Reference posts"), "the gate must not see reference posts");
   assert.ok(!r.system.includes("The voice interview"), "nor the voice transcript");
+
+  // And the same thing said positively, which the pointer index makes possible: the gate's prompt
+  // now carries a list of exactly the keys it may read, so the split is visible rather than
+  // inferred from the absence of a heading in 29 KB of prose.
+  for (const key of ["reference_posts", "voice_transcript"]) {
+    assert.ok(
+      !r.system.includes(`library://${key}`),
+      `${key}'s URI is in the gate's prompt, which offers the gate a section it must not read`,
+    );
+    assert.ok(!r.library_pointers.sections.some((s) => s.key === key));
+  }
 });
 
 test("get_gate_brief does not offer a check with no basis, and says so", async () => {

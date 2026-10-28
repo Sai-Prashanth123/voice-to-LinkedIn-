@@ -31,6 +31,7 @@ import { kill, park } from "../_shared/db.ts";
 import { setClearance } from "../_shared/names.ts";
 import { appendToSection } from "../_shared/library.ts";
 import { decide } from "../_shared/proposals.ts";
+import { GATE_CHECKS } from "../_shared/prompts.ts";
 import { pushBack } from "../_shared/pushback.ts";
 import { recordVerdict } from "../_shared/outcome.ts";
 import { classifyEdit } from "../_shared/diff.ts";
@@ -639,10 +640,21 @@ export async function setWritingMode(db: SupabaseClient, body: Body): Promise<Re
   return json({
     ok: true,
     mode,
+    /*
+     * The count is DERIVED, because this sentence told him the wrong number for two weeks.
+     *
+     * It said "The eight checks still run". A ninth was added on 14 October and this string was
+     * never touched, so `set_writing_mode` — the tool he calls to change how his own system writes
+     * — answered with a stale description of it. Found on 28 October by a guard that was widened to
+     * read strings rather than only the three files it had been pointed at.
+     *
+     * `GATE_CHECKS` is the one declaration of what the gate is, so the sentence cannot fall behind
+     * it again.
+     */
     next: oneStep
       ? "Nothing will ask him questions and nothing will be pulled from the idea bank. He gives " +
-        "you material, you call start_post. The eight checks still run and are read to him, but " +
-        "they no longer hold a post back."
+        `you material, you call start_post. The ${GATE_CHECKS.length} checks still run and are ` +
+        "read to him, but they no longer hold a post back."
       : "Back to the interviewed path: capture_thought asks a question, selection fills the queue " +
         "again, next_work offers what is waiting, and the checks hold a post until they pass.",
   });

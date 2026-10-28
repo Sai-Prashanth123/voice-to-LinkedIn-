@@ -26,15 +26,33 @@ that conversation.
    In **interviewed** mode, if you were not given one, call `list_moments` with `status: "mined"`.
    Nothing mined means nothing is ready; say so rather than drafting from a half-mined moment.
 
-2. **Call `get_drafting_brief`** with the moment id. It returns:
-   - `system` — the writing standard and the reference library, assembled for drafting
-   - `user` — the moment's material, the audience, the pillar, cleared and uncleared names
+2. **Call `get_drafting_brief`** with the moment id. It returns, in this order:
+   - `read_this_first` — the response's size, where the library is, and what to call if this reply
+     was cut. First for that reason.
    - `must_not_name` — names that must not appear, in any form
-   - `library_sections_awaiting_josh` — sections Josh has not filled in
+   - `library_pointers` — every library section this view may read, with its size, whether it is
+     still a placeholder, and its `library://<key>` URI
+   - `user` — the moment's material, the audience, the pillar, the previous attempt, anything Josh
+     has already said about this post
+   - `system` — the writing standard, with the library **named rather than pasted in**
+   - `brief_is_complete` — the last key. If you cannot see it, you are reading a cut copy.
 
-   **Read both `system` and `user` in full and follow them exactly.** They are the instructions.
-   Do not substitute your own sense of what a good LinkedIn post is, and do not soften anything in
+   **Read `user` in full and follow it exactly.** Then **read the library**: fetch every section in
+   `library_pointers` that is not a placeholder, with `get_library` (`key: "<key>"`) or
+   `resources/read` on its `library://` URI. The bodies are **not** in the brief — 41,488 characters
+   of them used to be, and on Josh's own surface that pushed the material, the audience, the shape
+   targets and `must_not_name` below his client's ~2 KB cut. Six drafters hit that on 28 October and
+   every one recovered only by reading a spilled file off disk, which his sessions cannot do.
+
+   So the index is an index. A draft written from it rather than from the sections is a draft
+   written against no standard, and the gate judges against the sections. Do not substitute your own
+   sense of what a good LinkedIn post is for one you did not open, and do not soften anything in
    them because it seems strict.
+
+   **If a section will not read**, say which one, say you wrote without it, and write without it.
+   Never guess at what it said. If several will not read — or if the reply ends without
+   `brief_is_complete` even after calling again with `part: "material"` and `part: "instructions"` —
+   stop and say so rather than drafting on a standard you could not see.
 
 3. **Write the post**, using only what the brief gives you. You have exactly two sources: the
    moment's material and the reference library. No research, no browsing, no general knowledge

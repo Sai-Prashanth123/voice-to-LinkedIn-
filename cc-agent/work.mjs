@@ -40,6 +40,7 @@ import { dirname, join, resolve } from "node:path";
 
 import { c, mark, title } from "./ui.mjs";
 import { claudeCommand } from "./claude-bin.mjs";
+import { GATE_CHECKS } from "../supabase/functions/_shared/prompts.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
@@ -116,8 +117,8 @@ async function findWork(creds) {
   // draft 49 carried eight rows across six judged checks. Anything counting rows read it as fully
   // gated, and this loop would never have come back to finish the two that were never run.
   //
-  // The gate is eight independent judgements. Eight rows is not the same fact as eight checks, and
-  // only one of them is the one worth acting on.
+  // The gate is a fixed number of independent judgements, and N rows is not the same fact as N
+  // checks — only one of those is worth acting on, which is why this counts DISTINCT check keys.
   const verdicts = new Map();
   for (const r of runs) {
     if (!verdicts.has(r.draft_id)) verdicts.set(r.draft_id, new Set());
@@ -129,7 +130,24 @@ async function findWork(creds) {
 
   return {
     toGate: drafts
-      .filter((d) => judgedCount(d.id) < 8)
+      /*
+       * DERIVED, because the literal 8 here went stale on 14 October and nothing noticed.
+       *
+       * A ninth check was added that day. This line kept saying `< 8`, so a draft that reached
+       * EXACTLY 8 of 9 verdicts was never queued for re-gating — `8 < 8` is false — and would have
+       * sat at 8 for ever with `gate_passed` null, which `mark_ready` refuses in every mode.
+       *
+       * Checked against the live project on 28 October: no draft created since 14 October sits at
+       * exactly 8 distinct checks, so this was armed and never fired. The reason is that
+       * `gate_runs_in_claude` is true and the gate runs in a Claude session rather than through
+       * this supervisor. A latent bug in a path that is not currently driven is still the same bug
+       * the day somebody turns the path back on.
+       *
+       * `GATE_CHECKS` is the one declaration of what the gate is. `prompts.ts` carries no `npm:`
+       * specifiers, so Node imports it with type stripping — the same route `measure.mjs` already
+       * uses for `library-spans.ts`.
+       */
+      .filter((d) => judgedCount(d.id) < GATE_CHECKS.length)
       .map((d) => ({ ...d, judged: judgedCount(d.id) }))
       .slice(0, MAX_GATES),
     toDraft: moments.filter((m) => !drafted.has(m.id)).slice(0, MAX_DRAFTS),

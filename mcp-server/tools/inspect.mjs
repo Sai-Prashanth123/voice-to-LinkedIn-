@@ -299,7 +299,10 @@ export const inspectTools = [
       if (mined.length > 0 && !oneStep) {
         actions.push({
           do: `Draft ${mined.length} mined moment(s)`,
-          where: "Claude Code — next_work, then the draft-post skill",
+          // The TOOL first and the skill second, for the reason create_draft's description now
+          // gives: a skill exists only in a clone and he has only ever used the connector, so a
+          // line naming nothing but the skill names nothing he can reach.
+          where: "next_work, which carries the drafting brief — or the draft-post skill in a clone",
           why: "These have material and no draft. This is the only state where writing is possible.",
         });
       }
