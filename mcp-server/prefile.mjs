@@ -45,7 +45,7 @@
  * came from would be the system inventing a standard of its own.
  */
 
-import { HIGH_CONFIDENCE, scan } from "./aitells.mjs";
+import { HIGH_CONFIDENCE, normaliseMarks, quotedRanges, scan } from "./aitells.mjs";
 
 /**
  * Closing by asking the room for a reaction.
@@ -96,15 +96,67 @@ const RULE_PRESENT = {
     /never end by asking for engagement/i.test(sections?.banned_phrases ?? ""),
 };
 
+
+/*
+ * A QUOTE EARNS ITS EXEMPTION ONLY IF IT IS A QUOTE.
+ *
+ * Added 28 October. A finding inside quotation marks is reported but set `blocking: false`, which
+ * sends it to `advisory` below, which means `create_draft` files the draft. That is right for a
+ * real quote — Josh should not have to rewrite an email somebody actually sent him because it
+ * contains a phrase his library bans.
+ *
+ * It was wrong for everything else, because quote marks were self-certifying. An adversarial test
+ * put four quote characters around sixteen characters of an AI-voiced line — 2% of the body — and
+ * every refusal on the draft disappeared. A whole AI-voiced post went from eight refusals to zero
+ * by quoting each line and padding to 22%, under the 60% cap at which the exemption stops applying.
+ *
+ * So the exemption now asks the question the claim ledger already asks of every quote: does this
+ * span appear in what Josh actually said? If it does not, it is not a quote of anything, and the
+ * rule applies as if the marks were not there.
+ *
+ * WHEN NO SOURCE IS PASSED, the exemption still holds — `measure_draft` and `scrub_draft` are given
+ * a body with no moment behind it, and refusing there would make the free look stricter than the
+ * filing door it exists to predict. But the caller is told the difference, because "this quote
+ * checked out" and "nothing checked it" are different facts and only one of them is reassuring.
+ */
+function verifiedQuoteLines(body, source) {
+  const text = normaliseMarks(body);
+  const { ranges } = quotedRanges(text);
+  if (ranges.length === 0) return null;
+
+  const flatten = (s) => String(s ?? "").replace(/\s+/gu, " ").trim().toLowerCase();
+  const haystack = flatten(normaliseMarks(source));
+  const lines = new Set();
+
+  for (const [open, close] of ranges) {
+    const span = flatten(text.slice(open + 1, close));
+    // Too short to evidence anything, the same reasoning the claim ledger uses on a one-word span.
+    if (span.length < 12) continue;
+    if (!haystack.includes(span)) continue;
+    // 1-based lines this verified run touches.
+    const before = text.slice(0, open).split("\n").length;
+    const after = text.slice(0, close).split("\n").length;
+    for (let l = before; l <= after; l++) lines.add(l);
+  }
+  return lines;
+}
+
 /**
  * @param body the draft, as it would be filed
  * @param sections the live library, keyed by section — `banned_phrases` is the only one read today.
  *                 Pass nothing and the library-derived checks are skipped rather than guessed at.
+ * @param source   the moment's own text. Pass it and a quoted span that does not appear in it
+ *                 stops exempting the rule inside it. Pass nothing and quoting still exempts,
+ *                 but `quotes_unverified` says so.
  * @returns blocking — refuse and store nothing; advisory — report, file anyway
  */
-export function prefileVerdict(body, { sections = null } = {}) {
+export function prefileVerdict(body, { sections = null, source = null } = {}) {
   const blocking = [];
   const advisory = [];
+
+  // Which quoted runs are quotes of something he said. null when there is nothing to check against.
+  const verified = source ? verifiedQuoteLines(body, source) : null;
+  let unverifiedQuotes = 0;
 
   /*
    * The AI tells, unchanged. HIGH_CONFIDENCE decides which RULES may refuse; a finding carrying
@@ -121,6 +173,20 @@ export function prefileVerdict(body, { sections = null } = {}) {
       matched: f.matched,
       fix: f.fix,
     };
+    /*
+     * A quoted finding goes to advisory only if the quote checked out. With no source to check
+     * against we keep the old behaviour and count it, so the caller can say nothing looked.
+     */
+    if (f.in_quote && verified && !verified.has(f.line)) {
+      unverifiedQuotes++;
+      blocking.push({
+        ...entry,
+        note: "Inside quotation marks, but that quoted span does not appear in the moment. Quote "
+          + "marks exempt a rule only around something he actually said.",
+      });
+      continue;
+    }
+    if (f.in_quote && !verified) unverifiedQuotes++;
     (f.blocking === false ? advisory : blocking).push(entry);
   }
 
@@ -145,7 +211,21 @@ export function prefileVerdict(body, { sections = null } = {}) {
     // sections present and the rule gone: Josh removed it. Say nothing.
   }
 
-  return { blocking, advisory };
+  return {
+    blocking,
+    advisory,
+    ...(unverifiedQuotes > 0 && {
+      quotes_unverified: {
+        count: unverifiedQuotes,
+        checked: Boolean(verified),
+        means: verified
+          ? "These sit in quotation marks whose text is not in the moment, so the marks did not "
+            + "exempt them."
+          : "These sit in quotation marks and were exempted on that alone. No moment was passed "
+            + "to this call, so nothing checked whether the quote is real.",
+      },
+    }),
+  };
 }
 
 /** What `create_draft` will refuse on, named for a writer looking before they spend a call. */

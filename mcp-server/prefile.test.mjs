@@ -198,3 +198,78 @@ test("an empty reference index reports 'not checked', never 'nothing found'", as
   // for.
   assert.match(src, /Returns null when the index is empty/);
 });
+
+/*
+ * QUOTE MARKS ARE NOT A FIX, AND NOW THEY ARE NOT A BYPASS EITHER.
+ *
+ * Found on 28 October by an adversarial run. A finding inside quotation marks is reported but
+ * carries `blocking: false`, which sends it to `advisory`, which means the draft files. That is
+ * right for a real quote and was wrong for everything else, because nothing checked that the quote
+ * was a quote of anything: four quote characters around sixteen characters of an AI-voiced line —
+ * 2% of the body — took a draft from four refusals to none. A whole AI-voiced post went from eight
+ * refusals to zero, line by line, padded to stay under the 60% cap at which the exemption stops.
+ *
+ * The payload asserted the opposite while it happened: "It is never suppressed: wrapping a
+ * paragraph in quotation marks is not a fix."
+ */
+const QUOTE_SOURCE =
+  "He wrote back and said: it is not about the tools, it is about the people who use them.";
+
+test("a quote that is not in the moment does not exempt the rule inside it", () => {
+  const body = 'Most teams get this wrong.\n\n"It\'s not about the tools. It\'s about the people." '
+    + "Let me explain.";
+
+  const withSource = prefileVerdict(body, { source: QUOTE_SOURCE });
+  const bare = prefileVerdict(body.replace(/"/g, ""), { source: QUOTE_SOURCE });
+
+  assert.equal(
+    withSource.blocking.length,
+    bare.blocking.length,
+    "quoting a line that nobody said must refuse exactly as the unquoted line does",
+  );
+  assert.ok(withSource.blocking.some((b) => b.source === "2C-2"));
+  assert.equal(withSource.quotes_unverified?.checked, true);
+  assert.match(withSource.quotes_unverified.means, /not in the moment/);
+});
+
+test("a quote he actually has in the moment still exempts the rule inside it", () => {
+  const body = 'Most teams get this wrong.\n\n"it is not about the tools, it is about the people '
+    + 'who use them" was the whole of it.';
+
+  const v = prefileVerdict(body, { source: QUOTE_SOURCE });
+  assert.equal(
+    v.blocking.filter((b) => b.source === "2C-2").length,
+    0,
+    "Josh must not have to rewrite a line somebody actually said to him because his library bans "
+      + "the construction in it",
+  );
+  assert.ok(v.advisory.some((a) => a.source === "2C-2"), "it is still reported, just not blocking");
+});
+
+test("with no moment to check against, the exemption holds and the payload says nothing looked", () => {
+  const body = 'Most teams get this wrong.\n\n"It\'s not about the tools. It\'s about the people." '
+    + "Let me explain.";
+
+  const v = prefileVerdict(body, {});
+  assert.equal(v.quotes_unverified?.checked, false);
+  assert.match(v.quotes_unverified.means, /nothing checked whether the quote is real/);
+  assert.equal(
+    v.blocking.filter((b) => b.source === "2C-2").length,
+    0,
+    "the free look must not be stricter than the filing door it exists to predict",
+  );
+});
+
+test("create_draft passes the moment's own text, or the check above it cannot run", async () => {
+  const src = await import("node:fs").then((fs) =>
+    fs.promises.readFile(new URL("./tools/write.mjs", import.meta.url), "utf8")
+  );
+  const call = src.match(/prefileVerdict\(args\.body, \{[\s\S]{0,220}?\}\)/);
+  assert.ok(call, "could not find create_draft's prefileVerdict call");
+  assert.match(
+    call[0],
+    /source:/,
+    "create_draft is the only caller holding the entry, so if it does not pass `source` then every "
+      + "quoted tell is exempt at the one door that cannot be avoided",
+  );
+});

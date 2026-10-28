@@ -231,3 +231,60 @@ test("the judge is shown the same source the ledger verifies against", async () 
     );
   }
 });
+
+/*
+ * THE BORROWED-RUN CHECK MUST BE WIRED ON THE PATH THAT FILES THE DRAFT
+ *
+ * Added 28 October, after an adversarial test lifted a verbatim sentence from a stored Matt Barker
+ * post and watched it file clean.
+ *
+ * `verifyDraft` takes the reference index as its fifth argument and defaults it to null, and
+ * `borrowedRuns` returns [] the instant the index is null or empty. So the check is only as real as
+ * its call sites, and the one in `applyDraft` — the function this file's own header calls the single
+ * place a draft is filed, "so the two paths cannot drift" — passed four arguments. It had done since
+ * the check shipped. Every test of the mechanism, here and in claims.test.ts and shingles.test.ts,
+ * built an index by hand and passed it explicitly, which is exactly why a production call site with
+ * no index at all went unnoticed through a green suite.
+ *
+ * A unit test of `borrowedRuns` cannot catch this and never could: the defect is not in the function,
+ * it is in whether anybody calls it with anything. So this reads the call site.
+ */
+test("applyDraft hands verifyDraft a reference index, so a borrowed run can be found at all", async () => {
+  const src = await Deno.readTextFile(new URL("./handlers/draft.ts", import.meta.url));
+
+  const call = src.match(/const verification = verifyDraft\(([\s\S]*?)\n  \);/);
+  assert.ok(call, "could not find applyDraft's verifyDraft call — did it move?");
+
+  const args = call[1].split("\n").map((l) => l.trim()).filter(Boolean);
+  assert.equal(
+    args.length,
+    5,
+    `applyDraft passes ${args.length} arguments to verifyDraft, not 5. The fifth is the reference ` +
+      `index. Without it borrowedRuns() returns [] on every draft and the 8.3 check reports a ` +
+      `clean result having looked at nothing.`,
+  );
+  assert.match(
+    args[4],
+    /borrowedIndexFor/,
+    "the fifth argument should be the loaded index, not a literal — an empty Set is as silent as null",
+  );
+});
+
+/*
+ * And the loader must tell "nothing borrowed" from "nothing looked".
+ *
+ * `reference_shingles` is populated by a script run by hand. A fresh project, a restored database,
+ * or a clone pointed somewhere that script never ran all produce an empty table, and an empty index
+ * makes every draft clean. Returning null in that case is what lets the caller say so.
+ */
+test("the index loader returns null when the table is empty, never an empty Set", async () => {
+  const src = await Deno.readTextFile(new URL("./handlers/draft.ts", import.meta.url));
+  const fn = src.match(/async function borrowedIndexFor[\s\S]*?\n}/);
+  assert.ok(fn, "borrowedIndexFor is gone — the server path has stopped loading the index");
+  assert.match(
+    fn[0],
+    /return null/,
+    "borrowedIndexFor must return null when reference_shingles is empty, so a caller can tell an " +
+      "unborrowed draft from an unchecked one",
+  );
+});

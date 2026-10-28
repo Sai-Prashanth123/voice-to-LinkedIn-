@@ -11,7 +11,7 @@
  * instruction rather than guessed at.
  */
 
-export const PROMPT_VERSION = "2026-10-28.1";
+export const PROMPT_VERSION = "2026-10-28.2";
 
 /* ────────────────────────────────────────────────────────────────────────── *
  * THE INTERVIEW (clause 5)
@@ -724,13 +724,16 @@ export const GATE_CHECKS: GateCheckSpec[] = [
       `set of parallel items has been run together as prose, or when so much sits above the fold ` +
       `that nothing is left to open. Josh asked for this directly on 14 October: line breaks, a ` +
       `list where there is genuinely a list, a short label above a group rather than a wall.\n\n` +
-      `YOU MUST QUOTE A NUMBER WHEN YOU FAIL IT. Say which measurement is out and against what — ` +
-      `"one paragraph, where his writers run 4 to 14" is a reason; "it could be better formatted" ` +
-      `is not, and is the kind of verdict this gate refuses everywhere else.\n\n` +
-      `BEING OUTSIDE THE RANGE IS NOT AUTOMATICALLY A FAILURE. One of his writers runs a median of ` +
-      `four paragraphs and seventeen words above the fold, and that works. A short post that lands ` +
-      `in two deliberate blocks passes. What fails is text that was never broken at all, or broken ` +
-      `so evenly it reads as a layout rather than as writing.\n\n` +
+      `YOU MUST QUOTE A NUMBER WHEN YOU FAIL IT, and quote it FROM THE MEASURED BLOCK BELOW — ` +
+      `never from this paragraph. "One paragraph, where his writers run <the measured range>" is ` +
+      `a reason; "it could be better formatted" is not, and is the kind of verdict this gate ` +
+      `refuses everywhere else. That range is computed from the corpus each time this brief is ` +
+      `built, so it moves when the measurements move and no figure written here would stay true.\n\n` +
+      `BEING OUTSIDE THE RANGE IS NOT AUTOMATICALLY A FAILURE. A short post that lands in ` +
+      `two deliberate blocks passes. What fails is text that was never broken at all, or broken ` +
+      `so evenly it reads as a layout rather than as writing — a scaffold repeated down the page ` +
+      `is the second kind, however many paragraphs it adds up to. Judge the breaking and cite the ` +
+      `measurement; do not grade the distance from a median.\n\n` +
       `DO NOT fail it for anything that is not shape. Whether the words are good, whether the claim ` +
       `is his, whether the hook opens a loop — eight other checks own those, and a reason that ` +
       `mentions them is a reason belonging to a different check.`,

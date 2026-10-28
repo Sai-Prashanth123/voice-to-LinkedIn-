@@ -516,17 +516,49 @@ export const inspectTools = [
       if (args.edit_class) q.set("edit_class", "eq." + args.edit_class);
 
       const data = await rows(db, "outcomes?" + q);
-      const measured = data.filter((o) => o.edit_ratio !== null);
+
+      /*
+       * THE 17a STATISTIC COUNTS LIVE MOMENTS ONLY.
+       *
+       * Corrected 28 October. This summary cites acceptance test 17a — a contractual finish line —
+       * and computed it over every outcome row, including fixtures. Two of the four it was counting
+       * hang off killed moments, and moment 20's own stored note reads "Killed so it cannot reach
+       * the learning loop or the 17a acceptance bar." It was reaching it anyway.
+       *
+       * So it reported "4 of 4 … 17a asks for five of the last six", implying two more approvals to
+       * the finish line where get_acceptance, which does filter killed moments, says four. The error
+       * was in the optimistic direction, on the number that says whether the build is done, and
+       * get_learning_brief names this tool as the first place to gather evidence.
+       *
+       * The ROWS are still returned — they are real measurements and a caller may want them. Only
+       * the statistic is scoped, and the response says which rows it left out, because a quietly
+       * smaller number is how this was missed the first time.
+       */
+      const killed = new Set(
+        (await rows(db, "moments?select=id&killed=is.true")).map((m) => m.id),
+      );
+      const live = data.filter((o) => !killed.has(o.moment_id));
+      const measured = live.filter((o) => o.edit_ratio !== null);
       const light = measured.filter((o) => o.edit_class === "light").length;
+      const excluded = data.filter((o) => killed.has(o.moment_id) && o.edit_ratio !== null).length;
 
       // The bodies are not returned. draft_body and published_body are full posts, and the ratio
       // plus the class is what a model needs to learn from; the text is what it would imitate.
       return {
         outcomes: data,
         summary: measured.length === 0
-          ? "Nothing measured yet — no post has been approved and published."
+          ? (args.edit_class
+            ? `No measured post has edit_class "${args.edit_class}". ` +
+              `${data.length} outcome row(s) came back; none of them match that filter.`
+            : "Nothing measured yet — no post has been approved and published.")
           : `${light} of ${measured.length} measured posts needed only light editing. ` +
             `17a asks for five of the last six.`,
+        ...(excluded > 0 && {
+          excluded_from_the_statistic:
+            `${excluded} measured outcome(s) sit on killed moments and are not counted above. ` +
+            `They are fixtures, and one of them says so in its own note. The rows are still in ` +
+            `"outcomes" below.`,
+        }),
         note: "Bodies are omitted on purpose. The edit ratio is the lesson; the text is not.",
       };
     },
@@ -542,7 +574,7 @@ export const inspectTools = [
         "constraints rather than by application code. Use this to see what is queued and what has " +
         "gone out.",
       inputSchema: {
-        status: z.enum(["draft", "ready", "scheduled", "published"]).optional()
+        status: z.enum(["draft", "ready", "scheduled", "published", "failed"]).optional()
           .describe("Filter by stage"),
         limit: z.number().int().min(1).max(100).optional().describe("Default 25"),
       },

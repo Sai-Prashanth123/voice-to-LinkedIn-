@@ -598,12 +598,38 @@ export const referencePostTools = [
       const posts = await db.select("reference_writer_posts", query);
 
       if (posts.length === 0) {
-        const known = await db.select("reference_writer_posts", { select: "handle", limit: "500" });
-        const have = [...new Set(known.map((k) => k.handle))].sort();
+        /*
+         * WHY THE HANDLE IS CHECKED AGAINST THE CANONICAL LIST AND NOT AGAINST A READBACK.
+         *
+         * Corrected 28 October. This read back `limit: "500"` rows with no order and no distinct to
+         * work out which handles exist. The table holds ~1,900 rows served by the index on
+         * (handle, posted_at desc), so 500 rows is adam-treboutat's 250 plus amangrowth's 250 and
+         * nothing else. Every other handle therefore tested as absent, and the tool told callers
+         * "Nothing stored for mattjbarker1" while holding 250 of his posts, then enumerated two of
+         * the eight as the complete stored set. Two false statements in one sentence.
+         *
+         * It only fired when a handle was passed WITH a search or since that matched nothing, which
+         * is why the drafting path never saw it — and why a session that did see it was told the
+         * corpus was broken and pointed at a re-scrape it did not need.
+         *
+         * REFERENCE_WRITERS is the eight, as data, in process, free. An unknown handle is a typo
+         * and a known handle with no matches is a filter that missed, and those get different
+         * sentences now because they are different facts.
+         */
+        const canonical = new Set(REFERENCE_WRITERS.map((w) => w.handle));
+        const unknownHandle = args.handle && !canonical.has(String(args.handle).toLowerCase());
+        const narrowed = [args.search && `search "${args.search}"`, args.since && `since ${args.since}`]
+          .filter(Boolean)
+          .join(" and ");
+
         return {
           posts: [],
-          note: args.handle && !have.includes(args.handle)
-            ? `Nothing stored for "${args.handle}". Stored: ${have.join(", ") || "none yet"}.`
+          note: unknownHandle
+            ? `"${args.handle}" is not one of the eight. They are: ` +
+              `${[...canonical].sort().join(", ")}.`
+            : narrowed
+            ? `Nothing matched ${narrowed}${args.handle ? ` for ${args.handle}` : ""}. ` +
+              `That is the filter missing, not an empty corpus — drop it and the posts are there.`
             : "Nothing matched. Refresh with scripts/load-reference-posts.mjs after a scrape.",
         };
       }

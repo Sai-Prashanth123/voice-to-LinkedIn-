@@ -393,7 +393,17 @@ export const writeTools = [
           return null;
         }
       })();
-      const prefile = prefileVerdict(args.body, { sections: prefileSections });
+      /*
+       * `source` is the moment's own text, and it decides whether quotation marks exempt a rule.
+       * Without it, four quote characters round sixteen characters of an AI-voiced line removed
+       * every refusal on a draft — measured on 28 October at 2% of a body. The entry is already in
+       * hand here from the claim ledger above, so the filing door is the one place that can ask
+       * whether a quote is a quote of anything.
+       */
+      const prefile = prefileVerdict(args.body, {
+        sections: prefileSections,
+        source: Object.values(entry).join("\n\n"),
+      });
       const blocking = prefile.blocking;
       if (blocking.length > 0) {
         throw new Error(

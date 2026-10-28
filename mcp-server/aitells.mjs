@@ -1016,8 +1016,18 @@ export function scan(body, { exempt = EXEMPT } = {}) {
         ignored: `${quoted.unpaired} quotation marks is an odd number, so nothing was treated as ` +
           "quoted. One stray mark must not silence the rest of the post.",
       }),
-      means: "A finding inside a quote keeps its rule and its line and carries in_quote. It is " +
-        "never suppressed: wrapping a paragraph in quotation marks is not a fix.",
+      /*
+       * This said "It is never suppressed: wrapping a paragraph in quotation marks is not a fix."
+       * True of the findings list and false of what acts on it: a quoted finding carries
+       * `blocking: false`, and `will_refuse` counts only what blocks. So quoting DID remove the
+       * refusal, and the sentence announcing otherwise sat in the same payload. Corrected 28
+       * October, when a run put four quote characters round one AI-voiced line and took a draft
+       * from four refusals to none.
+       */
+      means: "A finding inside a quote keeps its rule and its line and carries in_quote, so it is " +
+        "never hidden from this list. Whether it still REFUSES the draft is a different question: " +
+        "quotation marks stop a rule blocking only around text that appears in the moment, and " +
+        "create_draft is where that is checked. Quoting something he never said changes nothing.",
     },
     judgement: JUDGEMENT,
     exemptions: exemptionStanding(),

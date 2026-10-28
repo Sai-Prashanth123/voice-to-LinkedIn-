@@ -14,6 +14,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { callStructured, MODELS, modelName } from "../llm.ts";
 import { verifyDraft, type Claim } from "../claims.ts";
+import { hashRun, shinglesOf } from "../shingles.ts";
 import { getMaterial, getMoment, getNames, getSetting, logEvent, park, sourceEntry } from "../db.ts";
 import { clearedNames, unclearedNames } from "../names.ts";
 import { type ExtraSources, HIS_WORDS_TABLE, RECEIPTS_SECTION } from "../entry.ts";
@@ -183,6 +184,41 @@ export async function writingSources(
   };
 }
 
+/*
+ * WHICH OF THIS DRAFT'S SEVEN-WORD RUNS APPEAR IN A REFERENCE WRITER'S POST (8.3)
+ *
+ * Added 28 October. `verifyDraft` takes the index as its fifth argument and defaults it to null,
+ * and `borrowedRuns` returns [] the moment the index is null or empty — so until this function
+ * existed, every draft filed by the server's own drafter came back with zero borrowed runs because
+ * nothing had looked. The MCP tool has loaded the index since the check shipped; this path never
+ * did, and `grep reference_shingles supabase/functions/` found nothing outside the module that
+ * defines it.
+ *
+ * Returning null rather than an empty Set when the table is empty is the point. Both are falsy to
+ * `borrowedRuns`, but only null lets a caller tell "nothing borrowed" from "nothing looked" — the
+ * distinction this repo keeps rediscovering as a check that reports success having run on nothing.
+ */
+async function borrowedIndexFor(db: SupabaseClient, body: string): Promise<Set<string> | null> {
+  const wanted = [...new Set(shinglesOf(body).map(hashRun))];
+  if (wanted.length === 0) return new Set();
+
+  // Is there an index at all? One cheap row separates "nothing borrowed" from "nothing looked".
+  const { data: present } = await db.from("reference_shingles").select("hash").limit(1);
+  if (!present || present.length === 0) return null;
+
+  const known = new Set<string>();
+  // In chunks, because PostgREST puts the filter in the URL and a URL has a length limit.
+  for (let i = 0; i < wanted.length; i += 150) {
+    const { data, error } = await db
+      .from("reference_shingles")
+      .select("hash")
+      .in("hash", wanted.slice(i, i + 150));
+    if (error) throw new Error(`reference_shingles lookup failed: ${error.message}`);
+    for (const r of data ?? []) known.add(r.hash as string);
+  }
+  return known;
+}
+
 export async function applyDraft(db: SupabaseClient, d: DraftToFile): Promise<FiledDraft> {
   const { momentId, attempt, nearMiss } = d;
 
@@ -218,6 +254,7 @@ export async function applyDraft(db: SupabaseClient, d: DraftToFile): Promise<Fi
     d.claims,
     entry,
     names.map((n) => ({ name: n.name, cleared: n.cleared })),
+    await borrowedIndexFor(db, d.body),
   );
 
   const nextVersion = await nextDraftVersion(db, momentId);
