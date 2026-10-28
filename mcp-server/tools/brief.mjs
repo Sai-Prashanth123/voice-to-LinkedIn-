@@ -422,16 +422,47 @@ export const briefTools = [
            * it. Two kinds: what he said, and what he changed — and the second is the stronger of
            * the two, because a verdict says what was wrong while a diff says what right looked
            * like.
+           *
+           * NOW CARRYING WHICH POST EACH ONE WAS ABOUT, WHICH IS THE WHOLE DIFFERENCE.
+           *
+           * Measured 28 October 2026: six drafters were each given a different moment, and every
+           * one of them read this list as instructions for the post in front of them. On a brief
+           * for a post about board papers, the most prominent "feedback" was hook direction for an
+           * unrelated post about cold email. The read returns the ten most recent notes about ANY
+           * post — deliberately, see migration 0054 — but the page said "WHAT JOSH HAS SAID ABOUT
+           * PREVIOUS DRAFTS" directly above a second, moment-scoped list in the identical bullet
+           * style whose framing says "these are INSTRUCTIONS … cumulative".
+           *
+           * Two things fix it, and neither is filtering the read:
+           *
+           *   1. ANYTHING ABOUT THIS MOMENT IS DROPPED HERE. It is already carried by hisNotes,
+           *      correctly scoped and correctly framed as an instruction. Rendering it in both
+           *      places put the same sentence on one page twice under opposite headings — once as
+           *      a standing instruction and once as a note that "is not a rule". Whichever a
+           *      drafter believed, the page contradicted itself.
+           *   2. EVERY REMAINING NOTE SAYS WHICH POST IT WAS ABOUT. A note about another post is
+           *      evidence of taste; a note about this one is an instruction. They are frequently
+           *      the same sentence, and until now the page made them indistinguishable.
+           *
+           * A note with no text is also dropped. One verdict row on moment 113 has a null note and
+           * rendered as `- 2026-10-27 — ""` — a dated entry presented as something he said, which
+           * is worse than absent.
            */
-          tasteNotes: (taste ?? []).map((n) => {
-            const when = (n.said_at ?? "").slice(0, 10);
-            const said = `${when} — "${String(n.note ?? "").trim()}"`;
-            if (!n.before_text || !n.after_text || n.before_text === n.after_text) return said;
-            const first = (s) => String(s).split("\n")[0].trim();
-            if (first(n.before_text) === first(n.after_text)) return said;
-            return `${said}\n      He was given:   "${first(n.before_text)}"\n` +
-              `      He changed it to: "${first(n.after_text)}"`;
-          }),
+          tasteNotes: (taste ?? [])
+            .filter((n) => String(n.note ?? "").trim().length > 0)
+            .filter((n) => Number(n.moment_id) !== id)
+            .map((n) => {
+              const when = (n.said_at ?? "").slice(0, 10);
+              // The title rather than the id, because a drafter cannot look an id up and the whole
+              // point is that it reads at a glance as being about something else.
+              const about = n.moment_title ? `on "${n.moment_title}"` : "on another post";
+              const said = `${when}, ${about} — "${String(n.note ?? "").trim()}"`;
+              if (!n.before_text || !n.after_text || n.before_text === n.after_text) return said;
+              const first = (s) => String(s).split("\n")[0].trim();
+              if (first(n.before_text) === first(n.after_text)) return said;
+              return `${said}\n      He was given:   "${first(n.before_text)}"\n` +
+                `      He changed it to: "${first(n.after_text)}"`;
+            }),
         }),
         /*
          * Said outside the prose as well, for the same reason must_not_name is: if the writer was

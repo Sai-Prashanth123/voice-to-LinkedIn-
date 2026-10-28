@@ -222,7 +222,19 @@ test("the brief carries his own notes about drafts, and frames them as notes", a
   const brief = await tools.find((t) => t.name === "get_drafting_brief")
     .handler({ moment_id: 111 }, { db, url: creds.url });
 
-  assert.match(brief.user, /WHAT JOSH HAS SAID ABOUT PREVIOUS DRAFTS/);
+  /*
+   * The heading changed on 28 October, and the old one is the defect.
+   *
+   * It read "WHAT JOSH HAS SAID ABOUT PREVIOUS DRAFTS" and the block sat ABOVE the moment-scoped
+   * one, in the same bullet style. Six drafters on six different moments all read it as
+   * instructions for the post in front of them. The notes were right; the heading was wrong.
+   */
+  assert.match(brief.user, /WHAT HE HAS SAID ABOUT OTHER POSTS — NOT INSTRUCTIONS FOR THIS ONE/);
+  assert.doesNotMatch(
+    brief.user,
+    /WHAT JOSH HAS SAID ABOUT PREVIOUS DRAFTS/,
+    "the heading that six drafters misread is back",
+  );
 
   // Framed as instructions, not as prose to imitate. These are dictated and carry spoken filler,
   // which the voice guide is explicit does not belong in a post.
@@ -231,6 +243,75 @@ test("the brief carries his own notes about drafts, and frames them as notes", a
   // And it must not be mistakable for a rule: only he changes the library (12.10).
   assert.match(brief.user, /None of this is a rule/);
   assert.match(brief.user, /12\.10/);
+});
+
+test("a note about another post is labelled with that post, and is not in the block of instructions", async () => {
+  /*
+   * THE DEFECT THIS PINS, measured 28 October 2026.
+   *
+   * `joshs_notes` returns the ten most recent notes about ANY post — deliberately, see migration
+   * 0054: a preference he stated on Monday was invisible to Tuesday's post. What it did not return
+   * was WHICH post, so the brief rendered hook direction for a cold-email post inside the brief for
+   * a post about board papers, under a heading that read like feedback on this one.
+   *
+   * Migration 0056 projects the moment id and title. This asserts both halves of the fix: every
+   * bullet says which post, and nothing about THIS post is duplicated down here when the block
+   * above already carries it as an instruction.
+   */
+  const notes = await db.rpc("joshs_notes", { p_limit: 10 });
+  assert.ok((notes ?? []).length > 0, "no notes came back at all");
+  assert.ok(
+    notes.every((n) => "moment_id" in n),
+    "the RPC stopped projecting moment_id, so nothing can be labelled",
+  );
+
+  const brief = await tools.find((t) => t.name === "get_drafting_brief")
+    .handler({ moment_id: 111 }, { db, url: creds.url });
+
+  /*
+   * Bounded at the next `---`, because the block that follows is the previous attempt's rejection
+   * reasons and those are rendered as `  - anyone_else: …` in the same bullet style. An unbounded
+   * slice reads a gate verdict as an unlabelled taste note — which is a small version of exactly
+   * the confusion this test exists to pin, so it is worth saying out loud rather than just fixing.
+   */
+  const from = brief.user.indexOf("WHAT HE HAS SAID ABOUT OTHER POSTS");
+  const rest = brief.user.slice(from);
+  const end = rest.indexOf("\n---\n");
+  const taste = end === -1 ? rest : rest.slice(0, end);
+  const bullets = taste.split("\n").filter((l) => /^ {2}- /.test(l));
+
+  if (bullets.length > 0) {
+    for (const b of bullets) {
+      assert.match(
+        b,
+        / on "|on another post/,
+        `a bullet does not say which post it was about: ${b.slice(0, 90)}`,
+      );
+    }
+  }
+
+  // An empty note rendered as `- 2026-10-27 — ""`, a dated entry presented as something he said.
+  assert.doesNotMatch(taste, /— ""/, 'an empty note is being shown as something he said');
+
+  /*
+   * ORDER IS PART OF THE FIX, not decoration. A drafter reads top-down, so the block that IS
+   * instructions has to come before the block that is not.
+   */
+  /*
+   * Matched WITH the separator prefix, so this finds the real heading and not the reference to it
+   * inside the other block's framing paragraph. Without the prefix, a brief on a moment he has
+   * never commented on reports the order as wrong, because the only occurrence of the instructions
+   * heading is the sentence pointing at it — which is how I first wrote this and how it first lied.
+   */
+  const his = brief.user.indexOf("\n---\n\nWHAT HE HAS ALREADY TOLD YOU ABOUT THIS POST");
+  const other = brief.user.indexOf("\n---\n\nWHAT HE HAS SAID ABOUT OTHER POSTS");
+  if (his >= 0 && other >= 0) {
+    assert.ok(
+      his < other,
+      "the notes about other posts are rendered before his instructions for this one, which is " +
+        "the order six drafters read in the wrong direction",
+    );
+  }
 });
 
 test("a line he changed is shown as a pair, because that is the only positive example there is", async () => {

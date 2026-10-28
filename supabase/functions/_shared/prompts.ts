@@ -11,7 +11,7 @@
  * instruction rather than guessed at.
  */
 
-export const PROMPT_VERSION = "2026-10-27.1";
+export const PROMPT_VERSION = "2026-10-28.1";
 
 /* ────────────────────────────────────────────────────────────────────────── *
  * THE INTERVIEW (clause 5)
@@ -335,27 +335,6 @@ export const DRAFT_USER = (opts: {
     );
   }
 
-  if (opts.tasteNotes && opts.tasteNotes.length > 0) {
-    lines.push(
-      `\n---\n\nWHAT JOSH HAS SAID ABOUT PREVIOUS DRAFTS, in his words, newest first.\n\n` +
-        `${opts.tasteNotes.map((n) => `  - ${n}`).join("\n")}\n\n` +
-        // The framing is the load-bearing part. These are dictated, so they carry the spoken filler
-        // the voice guide is explicit about — "none of that belongs in a post". Take the
-        // instruction, not the cadence.
-        `These are notes he dictated about drafts, not examples of his writing. Take the ` +
-        `INSTRUCTION from them and ignore the delivery: the voice guide is clear that his spoken ` +
-        `filler is not his written voice.\n\n` +
-        `Where a line shows what he was given and what he changed it to, that pair is the most ` +
-        `useful thing on this page. It is the only direct evidence in the system of what he thinks ` +
-        `right looks like — he has never approved a post, so there is nothing else. A verdict says ` +
-        `what was wrong; a change says what better was.\n\n` +
-        `None of this is a rule. It does not override the library, and a note he gave once about ` +
-        `one post is not a standing instruction. If something here reads like a rule he would want ` +
-        `applied every time, say so to him rather than acting on it — only he changes the library ` +
-        `(12.10).`,
-    );
-  }
-
   if (opts.writerShape) {
     const w = opts.writerShape;
     const corpus = w.kind === "corpus";
@@ -400,6 +379,80 @@ export const DRAFT_USER = (opts: {
         `handover, naming the rule. The gate will fail it, correctly, and only he can change the ` +
         `standard (12.10) — so the way out is a library change he decides on, never a quiet ` +
         `override and never a fifth draft into the same wall.`,
+    );
+  }
+
+  /*
+   * WHAT HE SAID ABOUT OTHER POSTS — AND IT COMES AFTER THE BLOCK ABOVE, WHICH IS THE POINT.
+   *
+   * The heading used to read "WHAT JOSH HAS SAID ABOUT PREVIOUS DRAFTS, in his words, newest
+   * first", and this block was rendered BEFORE the one above it, in the identical `  - "…"` bullet
+   * style. So a drafter reading top-down met ten notes about other posts, framed as feedback on
+   * "previous drafts", and only afterwards met the block that is actually scoped to this post and
+   * actually says "these are INSTRUCTIONS … cumulative".
+   *
+   * Measured 28 October 2026: six drafters, six different moments, every one of them read the
+   * global list as instructions for the post in front of them. On a brief for a post about board
+   * papers at public bodies, the most prominent "feedback" was hook direction for an unrelated
+   * post about cold email. One drafter said acting on it "would corrupt the draft". They each
+   * worked out it did not apply by reading the notes and noticing they were about something else —
+   * a drafter rescuing the system, not the system working.
+   *
+   * They were not careless. The page genuinely did not say these were about other posts, and the
+   * only thing between a drafter and the wrong post's hook direction was one sentence — "a note he
+   * gave once about one post is not a standing instruction" — buried four paragraphs down.
+   *
+   * Three changes, and the order is one of them:
+   *   - the heading says it;
+   *   - every bullet names the post it came from (brief.mjs does the labelling, from the moment_id
+   *     and title that migration 0056 made the RPC project);
+   *   - anything about THIS post is gone from here, because the block above already carries it in
+   *     the frame it belongs in. Rendering it in both put the same sentence on one page twice under
+   *     opposite headings, once as a standing instruction and once as something that "is not a
+   *     rule". Whichever a drafter believed, the page contradicted itself.
+   */
+  if (opts.tasteNotes && opts.tasteNotes.length > 0) {
+    lines.push(
+      `\n---\n\nWHAT HE HAS SAID ABOUT OTHER POSTS — NOT INSTRUCTIONS FOR THIS ONE.\n\n` +
+        `Read the label on every line before you read the line. Each one names the post it was ` +
+        `said about, and none of them is this post.\n\n` +
+        /*
+         * Conditional, because it has to be TRUE on a moment he has never commented on.
+         *
+         * The first version pointed at "the block above, headed WHAT HE HAS ALREADY TOLD YOU
+         * ABOUT THIS POST" unconditionally. On moment 110 there is no such block — he has left no
+         * note on it — so the brief directed a drafter to a heading that was not on the page, and
+         * the likeliest repair a reader makes at that point is to treat the list in front of it as
+         * the instructions after all. That is the defect this whole block exists to remove,
+         * reintroduced by the sentence meant to remove it.
+         */
+        (opts.hisNotes?.length
+          ? `What he has actually asked for HERE is in the block above, headed WHAT HE HAS ` +
+            `ALREADY TOLD YOU ABOUT THIS POST. That block is the instructions; this one is not.\n\n`
+          : `He has left no instruction on THIS post, so there is no such block on this page. ` +
+            `That means nothing below is an instruction, and the absence is not an invitation to ` +
+            `promote one.\n\n`) +
+        `${opts.tasteNotes.map((n) => `  - ${n}`).join("\n")}\n\n` +
+        // The framing is the load-bearing part. These are dictated, so they carry the spoken filler
+        // the voice guide is explicit about — "none of that belongs in a post". Take the
+        // instruction, not the cadence.
+        `These are notes he dictated about drafts, not examples of his writing. Take the ` +
+        `INSTRUCTION from them and ignore the delivery: the voice guide is clear that his spoken ` +
+        `filler is not his written voice.\n\n` +
+        `Use them to recognise a HABIT — a kind of opening he keeps cutting, a register he keeps ` +
+        `reaching for — never to take a direction. "Make the hook more provocative" was said about ` +
+        `a post on cold email: it is not a brief for this one, and a hook built to satisfy it would ` +
+        `be answering a question nobody asked here. If a line happens to describe something this ` +
+        `post should also do, do it because it is right for this post, never because he said it ` +
+        `about that one.\n\n` +
+        `Where a line shows what he was given and what he changed it to, that pair is the most ` +
+        `useful thing on this page. It is the only direct evidence in the system of what he thinks ` +
+        `right looks like — he has never approved a post, so there is nothing else. A verdict says ` +
+        `what was wrong; a change says what better was.\n\n` +
+        `None of this is a rule. It does not override the library, and a note he gave once about ` +
+        `one post is not a standing instruction. If something here reads like a rule he would want ` +
+        `applied every time, say so to him rather than acting on it — only he changes the library ` +
+        `(12.10).`,
     );
   }
 
