@@ -42,36 +42,38 @@ import pg from "pg";
 
 const HERE = import.meta.dirname;
 const DATA = join(HERE, "..", "data", "local");
-const FORCE = process.argv.includes("--force");
 
-if (!existsSync(join(DATA, "manifest.json"))) {
-  console.error(
-    `No export found at ${DATA}.\n\n` +
-      `Create one against the live project first:\n` +
-      `  node scripts/export-local.mjs\n`,
-  );
-  process.exit(2);
-}
+/**
+ * Restore the export into an ALREADY CONNECTED client.
+ *
+ * Exported rather than run at top level because `stack.mjs` calls it directly on a fresh cluster.
+ * A restore left as a documented second step is a step somebody skips, and the failure mode of
+ * skipping it is silent: 54 of 54 migrations, 15 library sections, ten of them empty, and a system
+ * that cannot judge a draft while reporting itself healthy.
+ *
+ * Takes the client rather than making one, so the caller owns the connection and a failure here
+ * cannot `process.exit` out from under a stack that has three child processes to stop.
+ *
+ * @returns `{ loaded, sections, empty, failures, results }` — `empty` is the one the caller must
+ *          act on, and it is a count of sections with no rules rather than of rows that exist.
+ */
+export async function restore(client, { force = false, quiet = false } = {}) {
+  const say = (...args) => { if (!quiet) console.log(...args); };
 
-const manifest = JSON.parse(readFileSync(join(DATA, "manifest.json"), "utf8"));
+  if (!existsSync(join(DATA, "manifest.json"))) {
+    return {
+      loaded: 0,
+      sections: 0,
+      empty: 0,
+      results: [],
+      failures: [
+        `No export found at ${DATA}. Create one against the live project first: ` +
+          `node scripts/export-local.mjs`,
+      ],
+    };
+  }
 
-const client = new pg.Client({
-  host: process.env.LOCAL_PG_HOST ?? "127.0.0.1",
-  port: Number(process.env.LOCAL_PG_PORT ?? 54329),
-  user: process.env.LOCAL_PG_USER ?? "postgres",
-  password: process.env.LOCAL_PG_PASSWORD ?? "local",
-  database: process.env.LOCAL_PG_DATABASE ?? "postgres",
-});
-
-try {
-  await client.connect();
-} catch (err) {
-  console.error(
-    `Could not reach the local cluster on port ${client.port}: ${err.message}\n\n` +
-      `Start it first:  node stack.mjs\n`,
-  );
-  process.exit(2);
-}
+  const manifest = JSON.parse(readFileSync(join(DATA, "manifest.json"), "utf8"));
 
 /**
  * What the LOCAL database says this table looks like — not what the export says.
@@ -81,7 +83,7 @@ try {
  * have must be dropped rather than crash the load. The reverse is also true and quieter: a column
  * this schema has and the export lacks simply takes its default.
  */
-async function shapeOf(table) {
+  async function shapeOf(table) {
   const { rows } = await client.query(
     `select a.attname as name,
             format_type(a.atttypid, a.atttypmod) as type,
@@ -125,7 +127,7 @@ for (const entry of manifest.tables) {
 
   const existing = Number((await client.query(`select count(*) from public."${table}"`)).rows[0].count);
   if (existing > 0) {
-    if (!FORCE) {
+    if (!force) {
       failures.push(
         `${table}: already holds ${existing} row(s). Refusing to append — that is how a library ` +
           `ends up with two different rules for the same key. Re-run with --force to replace.`,
@@ -192,55 +194,105 @@ for (const entry of manifest.tables) {
 
 /* ── What happened ────────────────────────────────────────────────────────── */
 
-console.log(`restored from data/local, exported ${manifest.exported_at}\n`);
-let total = 0;
-for (const r of results) {
-  total += r.loaded;
-  const bits = [];
-  if (r.sequenceSetTo !== null && r.sequenceSetTo !== undefined) bits.push(`seq->${r.sequenceSetTo}`);
-  if (r.skipped?.length) bits.push(`recomputed: ${r.skipped.join(",")}`);
-  if (r.dropped?.length) bits.push(`NOT IN THIS SCHEMA: ${r.dropped.join(",")}`);
-  if (r.note) bits.push(r.note);
-  console.log(`  ${r.table.padEnd(26)} ${String(r.loaded).padStart(7)}  ${bits.join("  ")}`);
+  say(`restored from data/local, exported ${manifest.exported_at}\n`);
+  let total = 0;
+  for (const r of results) {
+    total += r.loaded;
+    const bits = [];
+    if (r.sequenceSetTo !== null && r.sequenceSetTo !== undefined) bits.push(`seq->${r.sequenceSetTo}`);
+    if (r.skipped?.length) bits.push(`recomputed: ${r.skipped.join(",")}`);
+    if (r.dropped?.length) bits.push(`NOT IN THIS SCHEMA: ${r.dropped.join(",")}`);
+    if (r.note) bits.push(r.note);
+    say(`  ${r.table.padEnd(26)} ${String(r.loaded).padStart(7)}  ${bits.join("  ")}`);
+  }
+  say(`\n${total} rows restored.`);
+
+  /*
+   * The check the plan got wrong, stated correctly.
+   *
+   * "select count(*) from library_sections returns 15" PASSES ON AN EMPTY LIBRARY: a fresh cluster
+   * has all 15 rows from the migrations and ten of them are zero characters long. A count of rows
+   * that exist is not a check that anything is in them, and that one line is why a stack that could
+   * not write a post reported itself healthy for a week.
+   *
+   * `voice_transcript`, `receipts` and `reference_writer_reads` are empty on purpose — the first two
+   * are for Josh to fill and `system_status` already lists them as waiting on him, and the third is
+   * empty until proposal 22 is approved. They are excluded so the number that comes back is the
+   * number that means something is wrong.
+   */
+  const EXPECTED_EMPTY = ["voice_transcript", "receipts", "reference_writer_reads"];
+  const { rows: lib } = await client.query(
+    `select count(*)::int as sections,
+            count(*) filter (
+              where coalesce(body,'') = '' and key <> all($1::text[])
+            )::int as empty,
+            coalesce(max(version), 0) as top_version
+       from public.library_sections`,
+    [EXPECTED_EMPTY],
+  );
+  const { rows: mode } = await client.query(
+    `select value::text as v from public.settings where key = 'one_step_mode'`,
+  );
+  const { rows: refs } = await client.query(
+    `select count(*)::int as n from public.reference_writer_posts`,
+  );
+
+  say(`\nthe standard:`);
+  say(`  library sections        ${lib[0].sections}, ${lib[0].empty} empty that should not be`);
+  say(`  highest section version ${lib[0].top_version}`);
+  say(`  reference writer posts  ${refs[0].n}`);
+  say(`  one_step_mode           ${mode[0]?.v ?? "(not set)"}`);
+
+  return {
+    loaded: total,
+    sections: lib[0].sections,
+    empty: lib[0].empty,
+    results,
+    failures,
+  };
 }
-console.log(`\n${total} rows restored.`);
+
+/* ── Run from the command line ────────────────────────────────────────────── */
 
 /*
- * The check the plan got wrong, stated correctly.
- *
- * "select count(*) from library_sections returns 15" PASSES ON AN EMPTY LIBRARY: a fresh cluster
- * has all 15 rows from the migrations and ten of them are zero characters long. A count of rows
- * that exist is not a check that anything is in them, and that one line is why a stack that could
- * not write a post reported itself healthy for a week.
+ * Only when this file IS the entry point. `stack.mjs` imports `restore` and owns its own client,
+ * so importing must not connect, must not restore and must never call process.exit — a stack with
+ * three child processes cannot survive an exit from inside a library.
  */
-const { rows: lib } = await client.query(
-  `select count(*)::int as sections,
-          count(*) filter (where coalesce(body,'') = '')::int as empty,
-          coalesce(max(version), 0) as top_version
-     from public.library_sections`,
-);
-const { rows: mode } = await client.query(
-  `select value::text as v from public.settings where key = 'one_step_mode'`,
-);
-const { rows: refs } = await client.query(`select count(*)::int as n from public.reference_writer_posts`);
+if (import.meta.filename === process.argv[1]) {
+  const client = new pg.Client({
+    host: process.env.LOCAL_PG_HOST ?? "127.0.0.1",
+    port: Number(process.env.LOCAL_PG_PORT ?? 54329),
+    user: process.env.LOCAL_PG_USER ?? "postgres",
+    password: process.env.LOCAL_PG_PASSWORD ?? "local",
+    database: process.env.LOCAL_PG_DATABASE ?? "postgres",
+  });
 
-console.log(`\nthe standard:`);
-console.log(`  library sections        ${lib[0].sections}, ${lib[0].empty} empty  (empty must be 0)`);
-console.log(`  highest section version ${lib[0].top_version}`);
-console.log(`  reference writer posts  ${refs[0].n}`);
-console.log(`  one_step_mode           ${mode[0]?.v ?? "(not set)"}`);
+  try {
+    await client.connect();
+  } catch (err) {
+    console.error(
+      `Could not reach the local cluster on port ${client.port}: ${err.message}\n\n` +
+        `Start it first:  node stack.mjs\n`,
+    );
+    process.exit(2);
+  }
 
-await client.end();
+  const { empty, failures } = await restore(client, {
+    force: process.argv.includes("--force"),
+  });
+  await client.end();
 
-if (failures.length) {
-  console.error(`\n${failures.length} failure(s):`);
-  for (const f of failures) console.error(`  ${f}`);
-  process.exit(1);
-}
-if (lib[0].empty > 0) {
-  console.error(
-    `\n${lib[0].empty} library section(s) are empty after the restore. The shelves are here and ` +
-      `the rules are not, which is the state this whole exercise exists to end.`,
-  );
-  process.exit(1);
+  if (failures.length) {
+    console.error(`\n${failures.length} failure(s):`);
+    for (const f of failures) console.error(`  ${f}`);
+    process.exit(1);
+  }
+  if (empty > 0) {
+    console.error(
+      `\n${empty} library section(s) are empty after the restore. The shelves are here and the ` +
+        `rules are not, which is the state this whole exercise exists to end.`,
+    );
+    process.exit(1);
+  }
 }

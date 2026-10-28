@@ -126,6 +126,65 @@ if (url && key) {
   }
 }
 
+/* ── 4b. THE LIBRARY HAS RULES IN IT, not just rows ───────────────────────── */
+
+/*
+ * The check above proves the role can READ the library. It does not prove there is a library.
+ *
+ * This matters because of a measurement on 28 October 2026. A fresh local cluster takes all 54
+ * migrations and comes up with 15 `library_sections` — exactly the number the live project has.
+ * TEN OF THOSE FIFTEEN WERE ZERO CHARACTERS LONG. The migrations build the shelves; Josh wrote the
+ * rules into them himself over two months.
+ *
+ * So the verification written for the local stack — "select count(*) from library_sections returns
+ * 15" — PASSES ON AN EMPTY LIBRARY. It counts rows that exist, not content in them. A clone would
+ * have reported itself healthy while being unable to judge a single draft, because every rubric it
+ * judges against would have been the empty string.
+ *
+ * `voice_transcript` and `receipts` are expected to be empty: they are FOR Josh to fill, and
+ * `system_status` already lists them under what is waiting on him. `reference_writer_reads` is
+ * empty by design until proposal 22 is approved. Anything else being empty is a broken clone.
+ */
+if (url && key) {
+  const EXPECTED_EMPTY = new Set(["voice_transcript", "receipts", "reference_writer_reads"]);
+  try {
+    const res = await fetch(`${url}/rest/v1/library_sections?select=key,body`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) {
+      bad("The standard", `could not read the sections (${res.status})`, "Send us this line.");
+    } else {
+      const rows = await res.json();
+      const empty = rows
+        .filter((r) => !String(r.body ?? "").trim())
+        .map((r) => r.key)
+        .filter((k) => !EXPECTED_EMPTY.has(k));
+      const chars = rows.reduce((n, r) => n + String(r.body ?? "").length, 0);
+      if (rows.length === 0) {
+        bad("The standard", "no library sections at all", "The migrations have not been applied.");
+      } else if (empty.length > 0) {
+        bad(
+          "The standard",
+          `${empty.length} section(s) have no rules in them: ${empty.join(", ")}`,
+          "The shelves are here and the standard is not. Restore the data: node local/load.mjs, " +
+            "or point SUPABASE_URL at the hosted project.",
+        );
+      } else {
+        ok(
+          "The standard",
+          `${rows.length} sections, ${chars.toLocaleString()} characters of his rules` +
+            (rows.some((r) => EXPECTED_EMPTY.has(r.key) && !String(r.body ?? "").trim())
+              ? " (the sections waiting on him are empty, which is expected)"
+              : ""),
+        );
+      }
+    }
+  } catch (err) {
+    bad("The standard", String(err?.message ?? err), "Check the connection and re-run.");
+  }
+}
+
 /* ── 5. THE WRITE DOOR. The one that would have caught the 401. ───────────── */
 
 if (url && key) {

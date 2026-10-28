@@ -8,7 +8,8 @@ cd local && npm install
 # Download PostgREST (once). Official Windows build, v16.5:
 #   https://github.com/PostgREST/postgrest/releases  ->  bin/postgrest.exe
 
-node stack.mjs     # Postgres + PostgREST + a Supabase-shaped gateway on :54321
+node stack.mjs     # Postgres + PostgREST + a Supabase-shaped gateway on :54321,
+                   # AND the data restored on a fresh cluster. One command.
 node probe.mjs     # throwaway cluster, asserts the schema and the guarantees
 ```
 

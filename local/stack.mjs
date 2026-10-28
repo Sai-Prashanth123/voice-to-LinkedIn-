@@ -130,6 +130,31 @@ if (fresh) {
     await stopAll();
     process.exit(1);
   }
+
+  /*
+   * AND THE RULES, NOT JUST THE SHELVES.
+   *
+   * The migrations create 15 library_sections — exactly the number the live project has — and TEN
+   * OF THEM ARE ZERO CHARACTERS LONG. Measured 28 October 2026. Josh wrote the rules into them
+   * himself over two months, which is the whole reason the standard lives in the database instead
+   * of in the prompts.
+   *
+   * So a cluster that applied 54 of 54 migrations and stopped here is a system that cannot judge a
+   * draft: every rubric it judges against is the empty string, and nothing says so. It was the
+   * state this stack was in for a week while reporting itself healthy.
+   *
+   * Restored here rather than left as a documented second step, because a second step is a step
+   * somebody skips — and the failure mode of skipping it is silent.
+   */
+  const { restore } = await import("./load.mjs");
+  const { loaded, sections, empty } = await restore(client, { quiet: false });
+  console.log(`data       ${loaded.toLocaleString()} rows restored, ${sections} library sections`);
+  if (empty > 0) {
+    console.log(`           ${empty} section(s) are STILL EMPTY — the shelves are here, the rules are not`);
+    await client.end();
+    await stopAll();
+    process.exit(1);
+  }
 }
 
 /*
