@@ -9,8 +9,9 @@ description: Use when asked whether an image is right before it goes out, why a 
 
 - **Not a rewrite.** It reports what the SVG does and what the brand says. Changing it is a separate
   decision and Josh's to ask for.
-- **Not a tenth gate check.** The gate judges nine things and none of them reads an SVG. A visual
-  can fail everything here and still be filed, because this is advice and the gate is not.
+- **Not another gate check.** None of the gate's checks reads an SVG, and this is not one of them
+  either. A visual can fail everything here and still be filed, because this is advice and the gate
+  is not.
 - **Not taste.** Every finding here is a hex value, a pixel measurement or a rule quoted from the
   library. If a finding cannot be stated as one of those, it does not belong in the report.
 

@@ -19,7 +19,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -208,6 +208,21 @@ test("nothing that instructs a session states the gate size as a word", () => {
     // The hook is the one thing that speaks to the session mid-draft, and it said "the nine
     // checks" in both of its messages.
     "../.claude/hooks/writing-order.mjs",
+    /*
+     * EVERY SKILL, FOUND RATHER THAN LISTED. Widened again 29 October.
+     *
+     * This list named three skills of four. `barker-audit` was not one of them and had said "The
+     * gate judges nine things" since it was written — so the guard that exists because a count went
+     * stale was itself blind to a file carrying a count. Then six visual skills landed and none of
+     * them were in the list either.
+     *
+     * The comment four lines up already says it: a guard that scans the files somebody remembered
+     * to fix is not a guard. So it walks the directory now, and a skill added tomorrow is covered
+     * without anyone thinking of it.
+     */
+    ...readdirSync(new URL("../.claude/skills/", import.meta.url), { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => `../.claude/skills/${e.name}/SKILL.md`),
   ];
 
   // "all eight are in", "the eight checks", "eight quality checks" — the forms that instruct.

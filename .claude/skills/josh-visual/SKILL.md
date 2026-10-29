@@ -103,7 +103,7 @@ Hard floors, because LinkedIn renders a feed image a few hundred pixels wide on 
 
 ## The naming rule, which is the one with a client-sized downside
 
-Restated here rather than trusted to the section, because **no gate check reads the SVG.** The nine
+Restated here rather than trusted to the section, because **no gate check reads the SVG.** The
 checks judge the post body; `visuals` is a different table. Two pieces of prose are the only thing
 between a chart label and a published image naming a client.
 

@@ -64,10 +64,14 @@ Postgres.
 | "not that one" / "not yet" | `kill_idea` with a reason / `park_idea` |
 | "never open with a question" | `add_library_rule`, immediately, in his words |
 | "show me Matt Barker" | `get_reference_posts`, `analyse_reference_writer` |
+| "make an image for this" | `get_visual_brief`, then the skill that fits — see **Pictures** |
+| anything he was sent — an email, a screenshot | the **josh-artefact** skill, which anonymises first |
 
 ## The skills
 
-Four, in `.claude/skills/`. Use them rather than writing from instinct:
+Ten, in `.claude/skills/`. Use them rather than writing from instinct.
+
+**The words:**
 
 - **josh-voice** — before writing, editing or judging anything in his voice.
 - **draft-post** — writing a post from an idea, or redrafting after a rejection.
@@ -75,8 +79,54 @@ Four, in `.claude/skills/`. Use them rather than writing from instinct:
 - **barker-audit** — only when he asks why a draft feels flat structurally. It reports the
   measured shape against the draft's and stops; it is not a tenth check and it never rewrites.
 
+**The pictures,** added 29 October:
+
+- **josh-visual** — the picture for a post. One object, one promise.
+- **josh-infographic** — ranked rows, comparisons, sequences. Where the shape of the information
+  is the point.
+- **josh-artefact** — a real email or screenshot he was sent, anonymised and annotated. The
+  strongest of the set, because a competitor cannot copy an email they were not sent.
+- **josh-quote-card** — one line, set in the serif. The format that travels on a reshare.
+- **josh-visual-audit** — measures a draft SVG against the brand, reports, and stops. The
+  barker-audit of pictures, and it never rewrites either.
+- **josh-animation** — GIF and MP4. Read its first section before using it: that output cannot be
+  filed with `create_visual` and nothing in the system can attach it to a post.
+
 They deliberately do not contain the standard. They fetch it from the system, so when Josh changes a
 rule the next draft is written against it with no deploy and nothing to keep in sync.
+
+## Pictures
+
+Every visual skill answers the writing rule in its own medium:
+
+> **Could this be any B2B SaaS company's graphic? If yes, it fails.**
+
+A stock chart of invented numbers is the visual form of the AI-generated post this system exists to
+prevent. And **his raw material beats any illustration** — he is sent real cold emails and measures
+real numbers across real companies. Reach for `josh-artefact` before reaching for a diagram.
+
+His brand is light, warm and green — cream ground, navy ink, one green accent, DM Serif Display for
+titles and DM Sans for everything else. It lives in the `visual_brand` library section and you fetch
+it; it is not written down in any skill.
+
+Four things catch people out:
+
+- **The renderer's font list is the only font source there is.** `@import`, `<link>` and
+  `url(https:)` are all refused by the validator, and resvg ignores `@font-face` even from a `data:`
+  URI. Since 29 October it carries DM Serif Display (regular and italic), DM Sans, JetBrains Mono
+  and DejaVu. Name one of those, or it falls back **silently, correctly, in the wrong face** — which
+  is how every heading this system ever rasterised came out a grotesque for two days, with nothing
+  reporting it, because a PNG does not record which typeface drew it.
+- **No gate check reads an SVG.** The checks judge the post body; visuals are a different table.
+  Two pieces of prose are the whole guard between a chart label and an image naming a client.
+  Check `must_not_name` against the SVG text yourself, and then check the composite — a figure plus
+  a niche plus a date — which no string search will ever catch.
+- **You CAN look at a stored visual.** `visual.ts` says you cannot, and that is now wrong: fetch
+  `renders/{moment}/v{n}.png` from storage with the project key. `rendered: true` only means a PNG
+  exists, and on 27 October that was true of an image containing not one of its four labels. Look
+  before you report, and look before you tell him it is done.
+- **Nothing is repaired, only re-versioned.** `visuals` is insert-only by design. A fix is a new
+  version that repoints `posts.visual_id`, never an edit.
 
 ## The reference writers
 
@@ -130,8 +180,20 @@ supabase/migrations/   schema. Applied in order; never edit one that has shipped
 scripts/               doctor.mjs first — does this clone work. Then scrape, refresh
                        measurements, rebuild the law set
 data/josh/             the law set and the measured voiceprint
+data/local/            the whole bank as JSONL, so a clone has real content to work against
+local/                 the local stack: real Postgres, real PostgREST, cc-submit, storage
 docs/                  runbook, handover, the cost model, and his own material in from-josh/
 ```
+
+**A clone needs no Supabase project and no Supabase token.** `cd local && npm install && node
+stack.mjs` brings up Postgres, PostgREST, the real cc-submit function and filesystem storage on one
+port, restores `data/local/`, and writes a `.env.local` with a `SUPABASE_URL` and a locally-minted
+`CONTENT_MCP_KEY`. Point the MCP server at those two and nothing else changes.
+
+The workers do not run there — everything under `/functions/v1/` other than cc-submit answers 501
+and says why, because they are driven by `pg_cron` and `pg_net`, which exist only on Supabase.
+Storage was added on 29 October with the visual skills: without it `create_visual` rendered the
+image and then 404ed on the upload, so a clone could write posts and not pictures.
 
 **Deploy with `node scripts/deploy.mjs`, never `supabase functions deploy` by hand.** The edge runtime has no git, so unless the
 commit is written in first the connector cannot say which code is answering — and `system_status`

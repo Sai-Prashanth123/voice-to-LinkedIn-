@@ -13,7 +13,7 @@ and now is measured.**
 
 - **Not a rewrite.** It reports what the draft does and what the writers do. Changing the draft is
   a separate decision and Josh's to ask for.
-- **Not a tenth gate check.** The gate judges nine things and this is not one of them. A draft can
+- **Not another gate check.** The gate judges what it judges and this is not one of them. A draft can
   pass the gate and still sit outside every number here, and that is allowed — these are what the
   writers *tend* to do, not rules.
 - **Not a licence to copy him.** Clause 8.3: structure only, never cadence or phrasing. If a run of
