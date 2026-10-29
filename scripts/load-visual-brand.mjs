@@ -223,6 +223,32 @@ async function main() {
   }
   console.log("  carries the naming rule, and does not read as a placeholder");
 
+  /*
+   * AND IT STOPS HERE IF JOSH HAS TOUCHED THE SECTION.
+   *
+   * Added 29 October. `VISUAL_BRAND` above is the STARTER text written on 7 September — the default
+   * palette, the Inter stack, "no brand has been supplied". It has never been updated.
+   *
+   * Josh supplied his brand on 21 October: cream #F4F1EA, ink #0E2A44, green #2EA866, DM Serif
+   * Display and DM Sans. It arrived as an appended line, so the section is now v5 and the starter
+   * is v1 content. Running this with --apply would have PATCHed the starter over the top and
+   * deleted his brand, leaving a section that says a brand was never supplied — and the next
+   * visual would have been drawn in a default grey that belongs to nobody.
+   *
+   * It is the same gun as scripts/load-josh-library.mjs, disarmed the same way on 28 October: a
+   * seed loader may create a section and may never overwrite a decision. The fix for a section
+   * Josh has edited is propose_library_change, which he approves (12.10) — not a script.
+   */
+  if ((current?.version ?? 0) > 1) {
+    console.error(
+      "\n  visual_brand is at v" + current.version + ", so it carries decisions this file does " +
+        "not.\n  Josh supplied his brand on 21 October; the text in this script is the 7 " +
+        "September starter.\n  Writing it would delete his brand and say none was ever given." +
+        "\n\n  Refusing. Use propose_library_change for an edit he approves.\n",
+    );
+    process.exit(1);
+  }
+
   if (!APPLY) {
     console.log("\n  Dry run. Nothing written. Re-run with --apply.\n");
     return;

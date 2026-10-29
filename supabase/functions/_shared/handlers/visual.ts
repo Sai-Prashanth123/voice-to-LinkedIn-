@@ -51,11 +51,57 @@ function ensureWasm(): Promise<void> {
  * half. So two changes here. The font is loaded, and a render that could not load a font for an
  * image WITH TEXT IN IT is a failure rather than a wordless success.
  */
-const FONT_URLS = [
+/*
+ * AND THE SECOND HALF OF THE SAME DEFECT, FOUND 29 OCTOBER.
+ *
+ * The fix above loaded A font. It did not load HIS fonts. For two days the renderer held DejaVu Sans
+ * and nothing else, with `loadSystemFonts: false` — so every heading of every image this system has
+ * ever rasterised came out in a grotesque, however carefully the SVG asked for DM Serif Display.
+ *
+ * It is the same shape as the bug it replaced and it is quieter. A missing font drops the words and
+ * can be caught; a WRONG font renders every word correctly in the wrong face, and nothing in a PNG
+ * says which typeface drew it. Josh's brand is a serif. Four of his visuals specify
+ * `'DM Serif Display', Georgia, serif`. Not one of them could ever have produced a serif.
+ *
+ * It cannot be fixed from inside the SVG, which is why it has to be fixed here: `@import`, `<link>`
+ * and `url(https:)` are all refused by create_visual's validator, and resvg does not resolve
+ * `@font-face` at all — not even from a `data:` URI. This list is the only font source there is.
+ *
+ * MEASURED BEFORE COMMITTING, because two of these are variable fonts and resvg's support for them
+ * was the open question. Rendering the same text against each family and hashing the PNG: all four
+ * faces differ from the DejaVu baseline, and a control naming a family nobody has came back
+ * byte-identical to it. So the test discriminates, and the answer is that they all work.
+ *
+ * DEJAVU STAYS, and not as a nicety. DM Sans and DM Serif Display are Latin-only. DejaVu carries
+ * arrows, dashes, symbols and accents they do not, and it is the fallback resvg reaches for per
+ * glyph rather than per font — so dropping it would silently delete an arrowhead or an em dash from
+ * a diagram that was otherwise fine.
+ *
+ * PINNED TO A COMMIT, not to @main, so the face cannot change under a post Josh already approved.
+ * Note the DM Sans URL encodes its brackets but NOT the comma: with the comma encoded, jsDelivr
+ * serves 403 from a pinned ref while the same path works on @main.
+ */
+const FONTS_PIN = "b68b528a75da7d9b73f3928899c07a23083a6633";
+const GF = `https://cdn.jsdelivr.net/gh/google/fonts@${FONTS_PIN}/ofl`;
+
+export const FONT_URLS = [
+  // Josh's brand, from slingshotgtm.com. All three are SIL OFL.
+  `${GF}/dmserifdisplay/DMSerifDisplay-Regular.ttf`,
+  // The italic is a separate file and resvg will not synthesise one: without it, the green italic
+  // second line he chose on moment 111 renders upright and nothing reports a problem.
+  `${GF}/dmserifdisplay/DMSerifDisplay-Italic.ttf`,
+  `${GF}/dmsans/DMSans%5Bopsz,wght%5D.ttf`,
+  `${GF}/jetbrainsmono/JetBrainsMono%5Bwght%5D.ttf`,
+  // Kept for glyph coverage, per the note above.
   "https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf",
   "https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans-Bold.ttf",
 ];
-const FONT_FAMILY = "DejaVu Sans";
+
+/*
+ * What an SVG gets when it names no family, or names one that is not here. His body face, so that
+ * unstyled text lands in his brand rather than in a default that belongs to nobody.
+ */
+export const FONT_FAMILY = "DM Sans";
 
 /*
  * Deno's fetch has no default timeout, and this promise is cached. Without the signal a request
