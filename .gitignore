@@ -84,3 +84,6 @@ docs/to-josh/SEND-THIS.md
 # as the 21 October clear-out above.
 docs/retrospective-2026-10-26.md
 
+
+# The local stack writes uploaded objects here at runtime. Images, not source.
+local/storage/

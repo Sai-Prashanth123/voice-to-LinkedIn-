@@ -36,10 +36,11 @@ import EmbeddedPostgres from "embedded-postgres";
 import { createHmac } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { existsSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 import { applySchema, INITDB_FLAGS } from "./schema.mjs";
+import { serveStorage } from "./storage.mjs";
 
 const exe = process.platform === "win32" ? ".exe" : "";
 const HERE = import.meta.dirname;
@@ -274,10 +275,31 @@ for (const stream of [ccSubmit.stdout, ccSubmit.stderr]) {
   });
 }
 
+/* ── Storage, on the filesystem ────────────────────────────────────────────── */
+
+/*
+ * The gateway served /rest/v1 and /functions/v1/cc-submit, which is everything the drafting path
+ * touches — so the clone looked complete, and was, for words.
+ *
+ * Images are not words. storeVisual uploads the SVG and the rendered PNG to a bucket, which is
+ * /storage/v1, which this gateway did not serve. So in a clone create_visual reached cc-submit,
+ * rendered correctly, and then 404ed on the upload — every visual skill failing at the last step.
+ *
+ * The implementation is in storage.mjs so it can be tested without booting Postgres. Objects land
+ * under local/storage/<bucket>/<key>, where they survive a restart and open in any image viewer.
+ */
+const STORAGE = join(HERE, "storage");
+
+
 /* ── The gateway ──────────────────────────────────────────────────────────── */
 
 const gateway = createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${GATEWAY_PORT}`);
+
+  if (url.pathname.startsWith("/storage/v1/object")) {
+    await serveStorage(req, res, url, STORAGE);
+    return;
+  }
 
   if (url.pathname.startsWith("/rest/v1")) {
     const target = `http://localhost:${PGRST_PORT}${url.pathname.slice("/rest/v1".length)}${url.search}`;

@@ -16,6 +16,28 @@ node probe.mjs     # throwaway cluster, asserts the schema and the guarantees
 `stack.mjs` writes `.env.local` with a `SUPABASE_URL` and a `CONTENT_MCP_KEY`. Point the MCP
 server at those two values and **nothing else changes** — that is the test it was built to pass.
 
+## What the gateway serves
+
+Three prefixes, on one port, so `SUPABASE_URL=http://localhost:54321` and nothing else changes:
+
+| prefix | goes to |
+|---|---|
+| `/rest/v1` | real PostgREST, switching to `content_mcp` per request |
+| `/functions/v1/cc-submit` | the real Deno function, the one write door |
+| `/storage/v1/object` | the filesystem, under `local/storage/<bucket>/<key>` |
+
+Everything else under `/functions/v1/` answers 501 and says why: the workers are driven by
+`pg_cron` and `pg_net` on Supabase, neither of which exists here.
+
+**Storage was added on 29 October, with the visual skills.** Without it a clone could write posts
+and not pictures — `create_visual` reached cc-submit, rendered the image, then 404ed on the
+upload, failing at the last step after the model had done the work. The implementation is in
+`storage.mjs` rather than in `stack.mjs` so it can be tested without booting Postgres, and
+`mcp-server/local-storage.test.mjs` pins the multipart handling, which was wrong twice: once
+storing the boundary with the image, once storing supabase-js's `cacheControl` part instead of
+the file. Both produce a file. Neither produces an error.
+
+An object written here opens in any image viewer, which is more than the hosted project offers.
 ## Proven so far
 
 **The schema and the guarantees** (`probe.mjs`): 54 of 54 migrations on real Postgres, all five
