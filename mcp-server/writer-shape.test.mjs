@@ -195,21 +195,53 @@ test("an unknown handle refuses instead of inventing a shape", async () => {
   assert.equal(block.lines, undefined);
 });
 
-test("no writer asked for, by anyone, means no block at all", async () => {
+test("a shape nobody asked for is carried, and says so rather than claiming he chose it", async () => {
   /*
-   * This asserted `moment_id: 111` carried no shape when no handle was passed. That changed on
-   * 27 October and the change is the point: his pushback on 111 says "go look at the Sentinel
-   * accounts to see how others who have done lists like this would write it", and the brief now
-   * reads it. A shape SHOULD appear there, and the test below covers it.
+   * This asserted that moment 109 carried NO shape, because nobody had asked for one. That was
+   * right about the attribution and wrong about the outcome, and on 31 October the outcome changed.
    *
-   * So the negative case moved to moment 109, which is the stronger one: 1,609 characters of his
-   * notes, none of them about the reference writers. It proves the detector discriminates rather
-   * than firing on the presence of a note.
+   * With no handle and no Sentinel ask in his notes, the brief used to carry no opening guidance
+   * at all — the whole of it was one line in DRAFTER_SYSTEM, "Open a loop with the first line."
+   * `hook_opens_loop` then failed 59% of drafts, every recorded reason the same shape: the first
+   * line announced the topic. A drafter cannot aim at a distribution it was never shown, and most
+   * drafts are this case.
+   *
+   * So the corpus band is now the floor. What the original test was really protecting survives
+   * intact and is what this one checks: a default must never be presented as something Josh chose.
+   * That is not pedantry about a label — it is how the Barker read became the house framework he
+   * complained about on 26 October, after shipping on every brief regardless of handle.
    */
   const brief = await tools.find((t) => t.name === "get_drafting_brief")
     .handler({ moment_id: 109 }, { db, url: creds.url });
-  assert.equal(brief.writer_shape, undefined, "a shape appeared that nobody asked for");
+
+  assert.equal(brief.writer_shape?.asked_by, "nobody", "an unasked default must label itself");
+  assert.ok(
+    brief.writer_shape?.targets?.some((l) => l.startsWith("HOW THEY GET IN:")),
+    "the point of carrying it is the opening distribution; without that line it is just a band",
+  );
+
+  // Never a mandate, and never his name on it.
   assert.doesNotMatch(brief.user, /BUILD THIS ONE/);
+  assert.doesNotMatch(
+    brief.user,
+    /he asked for the Sentinel/,
+    "nobody asked — saying he did is a fabricated attribution, in a brief, to the client",
+  );
+  assert.match(brief.user, /NOBODY ASKED FOR A SHAPE ON THIS POST/);
+  assert.match(
+    brief.user,
+    /the FRAMEWORK wins/,
+    "an unasked default must not outrank a library section Josh approved",
+  );
+});
+
+test("the detector still discriminates: his own ask outranks the default", async () => {
+  // The guard the rewrite above could silently lose. If every brief now carries a corpus block,
+  // a broken Sentinel-ask detector would look identical to a working one from the outside.
+  const brief = await tools.find((t) => t.name === "get_drafting_brief")
+    .handler({ moment_id: 111 }, { db, url: creds.url });
+  assert.equal(brief.writer_shape?.asked_by, "his_note", "his recorded ask read as a default");
+  assert.match(brief.user, /he asked for the Sentinel accounts/);
 });
 
 test("the Sentinel ask in his note on 111 is acted on, not just reported", async () => {

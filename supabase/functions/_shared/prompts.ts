@@ -293,6 +293,8 @@ export const DRAFT_USER = (opts: {
     lines: string[];
     excludes: string[];
     basis: string;
+    /** "nobody" when this is the default corpus band rather than a shape anyone asked for. */
+    asked_by?: string;
     /*
      * "corpus" when he pointed at the group rather than at a person — his own words are "the
      * Sentinel accounts", and he has used them twice. A band across eight writers who disagree is
@@ -356,8 +358,23 @@ export const DRAFT_USER = (opts: {
   if (opts.writerShape) {
     const w = opts.writerShape;
     const corpus = w.kind === "corpus";
+    /*
+     * Nobody asked for this one. Since 31 October the corpus band is carried on every brief, so a
+     * drafter is never left without an opening shape to aim at — `hook_opens_loop` was failing 59%
+     * of drafts and the brief had been handing them nothing to aim at.
+     *
+     * It has to announce itself as a default. "He asked for the Sentinel accounts" is true when he
+     * did and a fabricated attribution when he did not, and a default presented as his choice is
+     * how the Barker read became the house framework he then complained about.
+     */
+    const unasked = corpus && w.asked_by === "nobody";
     lines.push(
-      (corpus
+      (unasked
+        ? `\n---\n\nNOBODY ASKED FOR A SHAPE ON THIS POST, SO HERE IS THE CORPUS.\n\n` +
+          `This is a default, not an instruction and not something Josh chose. Use it where it ` +
+          `helps and depart from it deliberately. If he names a writer, that target replaces this ` +
+          `one entirely.\n\n`
+        : corpus
         ? `\n---\n\nBUILD THIS ONE THE WAY THE EIGHT HANDLE IT — he asked for the Sentinel ` +
           `accounts, not for one writer.\n\n`
         : `\n---\n\nBUILD THIS ONE IN ${w.name.toUpperCase()}'S SHAPE.\n\n`) +
@@ -372,9 +389,14 @@ export const DRAFT_USER = (opts: {
         // The precedence sentence. This is what actually overrides the frameworks section's "the
         // right default when nothing else obviously fits" for this one post, without editing a
         // section Josh has not approved a change to (12.10).
-        `The framework still names what the body argues, and it is still recorded (9.3). This shape ` +
-        `decides how the post gets in, where it turns, how much sits above the fold, and how it ` +
-        `lands. Where the two disagree about structure, the measured shape wins for this post.\n\n` +
+        (unasked
+          ? `The framework still names what the body argues, and it is still recorded (9.3). ` +
+            `Where this default and the framework disagree, the FRAMEWORK wins — nobody asked for ` +
+            `this shape, so it does not get to override a section Josh approved.\n\n`
+          : `The framework still names what the body argues, and it is still recorded (9.3). This ` +
+            `shape decides how the post gets in, where it turns, how much sits above the fold, and ` +
+            `how it lands. Where the two disagree about structure, the measured shape wins for ` +
+            `this post.\n\n`) +
         `Their sentences are not available to you and never will be. Every seven-word run of your ` +
         `draft is checked against every stored post of ` + (corpus ? `all eight` : `theirs`) +
         ` before this draft is filed, and a borrowed run is refused. Take the shape; write the ` +
@@ -586,11 +608,27 @@ export const GATE_CHECKS: GateCheckSpec[] = [
       `This is the one that matters most. Read the post and ask whether a competent stranger in the ` +
       `same field could have produced it from general knowledge, with no access to this specific ` +
       `moment.\n\n` +
-      `It PASSES only if it is anchored in something that demonstrably happened to this person: a ` +
+      `It PASSES if it is anchored in something that demonstrably happened to this person: a ` +
       `scene, a detail, a thing someone actually said, a moment where something changed for them.\n\n` +
+      `IT ALSO PASSES WHEN THE ANCHOR IS WORK HE DID RATHER THAN A ROOM HE WAS IN. He read the ` +
+      `paper and checked it against his own outbound. He ran the numbers across 2,206 companies. He ` +
+      `tried the method and it broke. He noticed the thing in a public thread that the people in it ` +
+      `did not. That is a moment that happened to him; it happened at a desk. The test is whether a ` +
+      `stranger could have produced THIS POST — not whether the subject matter is public.\n\n` +
+      `THE CARVE-OUT ABOVE IS NARROW AND YOU MUST NOT WIDEN IT. A recap of someone else's survey ` +
+      `with an opinion bolted on still fails, and so does a taxonomy anyone in the field could ` +
+      `compile. What separates them is whether he DID something the post reports: measured, tried, ` +
+      `compared against his own practice, or was proved wrong. "I think" is not work. "I checked" ` +
+      `is. If the only first-person content is a bare assertion that he agrees or has seen this ` +
+      `too, there is no anchor and it fails.\n\n` +
       `It FAILS if it is advice, observation, or a well-expressed opinion that any informed person ` +
       `could have written. Fluency is not evidence. A confident post full of sensible generalities ` +
-      `is precisely the failure you are looking for.`,
+      `is precisely the failure you are looking for.\n\n` +
+      `Added 31 October, after this check failed a run of posts built on published material — a ` +
+      `survey, three public threads, a research paper, and a breakdown of detection methods Josh ` +
+      `had asked for in writing. Each verdict was right that no scene was present and wrong that ` +
+      `nothing of his was. Reacting to what the field publishes is a kind of post he wants to ` +
+      `write, and it had no route through a rubric whose only pass condition was a room.`,
   },
   {
     key: "claims_trace",
@@ -606,7 +644,27 @@ export const GATE_CHECKS: GateCheckSpec[] = [
       `failure and is not your business: a post is a selection, and most of the source should be ` +
       `missing from it. Writing "one specific account" where the source names the account is good ` +
       `anonymising, not an invented detail. You are looking for things ADDED, never for things ` +
-      `omitted — this check failed a real post for exactly that inversion on 5 October.`,
+      `omitted — this check failed a real post for exactly that inversion on 5 October.\n\n` +
+      `AN INTERPRETATION IS NOT A FABRICATION, AND THE HEDGE DECIDES WHICH IT IS. A conclusion Josh ` +
+      `draws from the source is his to draw. What you are judging is whether the post says so.\n\n` +
+      `  "My guess is that's why the rounds pile up"  — PASSES. Marked as his, and offered as a ` +
+      `guess rather than a finding.\n` +
+      `  "That's why the rounds pile up"              — FAILS. The same thought stated as fact the ` +
+      `source does not carry.\n` +
+      `  "The study shows the rounds pile up"         — FAILS, and worse. It puts his inference in ` +
+      `the source's mouth, which is a fabricated attribution however true the thought may be.\n\n` +
+      `So read for the marking, not for the idea. "My guess", "my bet", "I think", "I suspect", "it ` +
+      `might be" — these are the construction that makes an inference honest, and the voice guide ` +
+      `is explicit that he hedges hardest immediately before his most useful sentence and that the ` +
+      `hedge IS the voice. Do not fail a post for the thing that makes it his.\n\n` +
+      `This is NOT a licence for unmarked opinion. An inference asserted flat is now a failure you ` +
+      `must name as one, and so is a hedge on a FACT — "I think the survey had 153 respondents" ` +
+      `does not launder a number that is not in the source. Hedging governs conclusions only. Every ` +
+      `quote, number and name is judged exactly as strictly as before.\n\n` +
+      `Added 31 October. This is the most-failed check in the system, and three drafts before the ` +
+      `one that prompted it failed on the same shape: an honest "my bet is" read as a stance he ` +
+      `never took. The rubric had two categories, in the source and added, and an interpretation is ` +
+      `neither — so it kept landing in the wrong one.`,
   },
   {
     key: "hook_opens_loop",

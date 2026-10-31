@@ -706,6 +706,26 @@ export const briefTools = [
         } else if (ask?.corpus) {
           // He pointed at the group. A band across eight, never one of them — see corpusShapeBlock.
           writerShape = await corpusShapeBlock(db);
+        } else {
+          /*
+           * NOBODY ASKED, AND THAT IS MOST DRAFTS.
+           *
+           * Until 31 October a brief with no handle and no corpus ask carried no opening guidance
+           * at all — the whole of it was one line in DRAFTER_SYSTEM, "Open a loop with the first
+           * line." `hook_opens_loop` then failed 59% of drafts, and every recorded reason is the
+           * same shape: the first line announced the topic. A drafter cannot aim at a distribution
+           * it was never shown.
+           *
+           * So the corpus block is the floor rather than an upgrade. It is a band across eight
+           * writers who disagree, which is weaker than one writer's habits and says so in its own
+           * text — but it is the difference between a drafter choosing an opening shape and a
+           * drafter not knowing there are any.
+           *
+           * It is marked `unasked` so the brief can say it was not requested. A target nobody
+           * asked for must not read as one Josh chose, which is the mistake the Barker read made.
+           */
+          writerShape = await corpusShapeBlock(db);
+          if (writerShape && !writerShape.refused) writerShape.asked_by = "nobody";
         }
       } catch (err) {
         writerShape = null;
@@ -802,8 +822,15 @@ export const briefTools = [
                * Where the target came from, because a shape nobody asked for in THIS call needs to
                * announce itself. "his_note" means it was read out of his own pushback — tell him
                * that rather than letting a target appear from nowhere.
+               *
+               * "nobody" is set by the fallback above: the corpus band, carried on every brief
+               * since 31 October so a drafter is never left with no opening guidance. It must not
+               * be labelled "his_note", which would present a default as a choice he made — the
+               * mistake the Barker read made when it shipped on every brief and became the house
+               * framework he then complained about.
                */
-              asked_by: args.writer_handle ? "this_call" : "his_note",
+              asked_by: writerShape.asked_by ??
+                (args.writer_handle ? "this_call" : "his_note"),
             },
         }
         : {};

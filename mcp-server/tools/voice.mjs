@@ -976,10 +976,50 @@ export async function corpusShapeBlock(db) {
 
   const handles = new Set(rows.map((r) => r.handle));
 
+  /*
+   * HOW THEY GET IN, WHICH THIS BLOCK WAS BUILT TO ANSWER AND DID NOT CARRY.
+   *
+   * Josh's ask on 27 October, recorded in his own words a few lines down this file, was "what
+   * makes a good opening hook from the Sentinel accounts". This is the block that answers a corpus
+   * ask — and it returned fold width, paragraph count, and a line saying "what to take from them is
+   * where the post gets in" without ever saying where they get in. The drafter was told to take the
+   * opening from them and shown no opening.
+   *
+   * The distribution has existed the whole time, in the per-writer reports, and reached no brief.
+   * `hook_opens_loop` fails 59% of drafts, the worst rate of the nine after claims_trace.
+   *
+   * READ FROM THE STORED REPORT, not from `rows`, for the same reason the sd figure is: those rows
+   * carry handle, paragraphs and above_fold_words only, and widening that query would change what
+   * the ninth gate check loads. Same measurements, no extra call.
+   */
+  const openTally = {};
+  let openBasis = 0;
+  for (const w of sentinels.report ?? []) {
+    openBasis += w.shape_basis ?? 0;
+    for (const [shape, n] of w.opening_shapes ?? []) openTally[shape] = (openTally[shape] ?? 0) + n;
+  }
+  const opens = Object.entries(openTally).sort((a, b) => b[1] - a[1]);
+  const openPct = (n) => (openBasis ? `${Math.round((100 * n) / openBasis)}%` : "—");
+
+  const gettingIn = opens.length
+    ? [
+      `HOW THEY GET IN: across ${openBasis} posts the openings run ` +
+      `${opens.map(([s, n]) => `${s.replace(/_/g, " ")} ${openPct(n)}`).join(", ")}. ` +
+      `Two of them carry most of it — ${opens[0][0].replace(/_/g, " ")} and ` +
+      `${opens[1]?.[0]?.replace(/_/g, " ") ?? "—"} together are ` +
+      `${openPct((opens[0][1] ?? 0) + (opens[1]?.[1] ?? 0))} of every post they write.`,
+      "PICK ONE AND COMMIT TO IT. The distribution is what they do, not a quota — but a first line " +
+      "that is none of these shapes is usually a topic announcement, which is the commonest way " +
+      "this draft will fail the hook check. Question openings are in the data and are ruled out " +
+      "for him: his hooks section forbids opening on one, and that rule is his.",
+    ]
+    : [];
+
   return {
     kind: "corpus",
     name: "the eight together",
     lines: [
+      ...gettingIn,
       `ABOVE THE FOLD: they run ${band(all.aboveFold)} words. That is the range the shape check ` +
         "will measure this draft against.",
       `PARAGRAPHS: they run ${band(all.paragraphs)}.`,
@@ -989,6 +1029,9 @@ export async function corpusShapeBlock(db) {
       "WHAT TO TAKE FROM THEM is where the post gets in, where it turns and how it lands — not a " +
         "length. If you want one writer's habits rather than the range, that is a different ask " +
         "and it needs their name.",
+      "THE SHAPE IS NOT THE SENTENCE. A number-claim opening means a first line built on a real " +
+        "figure of his, not one of theirs reworded. The figure has to be in the moment, and the " +
+        "words have to be yours.",
     ],
     excludes: [
       "Not one of their sentences. Every seven-word run of this draft is checked against every " +
