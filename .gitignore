@@ -87,3 +87,8 @@ docs/retrospective-2026-10-26.md
 
 # The local stack writes uploaded objects here at runtime. Images, not source.
 local/storage/
+
+# Soak-test output: 100 generated posts and the material dump behind them.
+# Generated artefacts, not deliverables, and they hold real material from the idea bank —
+# scripts/soak-measure.mjs rebuilds the measurements from them on demand.
+scripts/soak/

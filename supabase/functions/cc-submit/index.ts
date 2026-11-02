@@ -40,6 +40,7 @@ import {
 } from "../_shared/handlers/interview.ts";
 import { appendTurn, loadSession, renderTranscript } from "../_shared/session.ts";
 import { autoName, setIdeaName } from "../_shared/idea-names.ts";
+import { type ResemblesResult, resembles } from "../_shared/resembles.ts";
 import {
   joshSaid,
   missingNames,
@@ -425,6 +426,86 @@ async function submitCandidates(db: SupabaseClient, body: {
  * on moments, raw_inputs or interview_turns, and it should not. The model decides; this writes.
  */
 
+/**
+ * Has he said this before? Read his earlier captures and compare, in exact wording.
+ *
+ * ADVISORY, AND IT MUST STAY THAT WAY. This runs on the write path, inside a capture that has
+ * already succeeded. Nothing it returns may stop a capture or change what is stored — he is
+ * mid-thought, and a capture refused because the system thinks it recognises the words is worse
+ * than a duplicate idea. The precedent is two lines further down, where a name that clashes falls
+ * through to a derived handle rather than refusing.
+ *
+ * So every failure here is caught, and a failure reports that nothing was compared rather than
+ * reporting nothing found. "We could not check" and "nothing resembles it" are different answers
+ * and only one of them is good news — which is the defect this repository keeps finding.
+ */
+async function resemblesEarlier(
+  db: SupabaseClient,
+  text: string,
+  exceptMomentId: number,
+): Promise<ResemblesResult & { error?: string; truncated?: boolean }> {
+  try {
+    /*
+     * NEWEST FIRST, AND THE ORDER IS NOT COSMETIC. An unordered limited read returns an arbitrary
+     * slice, so once this table passes the cap the comparison would quietly run against a random
+     * subset while still reporting a confident count — caught here by `row-ceiling.test.ts`, which
+     * exists for exactly this. Descending id means the rows dropped are the oldest, which are the
+     * least likely to be what he is typing now.
+     */
+    const CAP = 500;
+    const { data, error } = await db
+      .from("raw_inputs")
+      .select("moment_id, text_body, transcript, moments!inner(title)")
+      .neq("moment_id", exceptMomentId)
+      .order("id", { ascending: false })
+      .limit(CAP);
+    if (error) throw new Error(error.message);
+
+    // Several raw inputs can belong to one moment, so they are joined per moment before comparing.
+    // Comparing each row separately would report the same idea two or three times over.
+    const byMoment = new Map<number, { title: string | null; parts: string[] }>();
+    for (const row of data ?? []) {
+      const body = String(row.text_body ?? row.transcript ?? "").trim();
+      if (!body) continue;
+      const title = (row.moments as { title?: string | null } | null)?.title ?? null;
+      const entry = byMoment.get(row.moment_id) ?? { title, parts: [] };
+      entry.parts.push(body);
+      byMoment.set(row.moment_id, entry);
+    }
+
+    const priors = [...byMoment.entries()].map(([moment_id, v]) => ({
+      moment_id,
+      title: v.title,
+      text: v.parts.join("\n\n"),
+    }));
+
+    const result = resembles(text, priors);
+
+    /*
+     * A full read and a truncated one are different answers. If the cap was reached, the oldest
+     * captures were never compared and "nothing resembles it" is no longer the whole truth — so it
+     * says so rather than letting the count imply a complete sweep.
+     */
+    if ((data ?? []).length >= CAP) {
+      return {
+        ...result,
+        truncated: true,
+        means: result.means + " NOTE: only his most recent " + CAP + " raw inputs were read, so " +
+          "older ideas were not compared.",
+      };
+    }
+    return result;
+  } catch (err) {
+    return {
+      checked: 0,
+      found: [],
+      error: String((err as Error)?.message ?? err),
+      means: "THE CHECK DID NOT RUN, so nothing was compared. Do not tell him this looks new. " +
+        "The capture itself is fine and is already filed.",
+    };
+  }
+}
+
 /** 4.1 — a thought, from a surface that is not Telegram. Named from their words, not by asking. */
 async function capture(
   db: SupabaseClient,
@@ -451,6 +532,30 @@ async function capture(
   // handle rather than refusing, because nothing about a label is worth stopping a capture over.
   const named = name ? await setIdeaName(db, moment.id, name) : { ok: false as const, reason: "" };
   const title = named.ok ? named.name : await autoName(db, moment.id, text);
+
+  /*
+   * Does this duplicate something he already told us? Asked here because this is the first moment
+   * at which saying so is free. By draft time the duplicate has been named, interviewed and
+   * selected, and everything spent on it is spent.
+   *
+   * On 2 November a hundred posts written across twenty moments shared wording across moment
+   * boundaries sixty times, and reading those showed nine of the twenty moments duplicated another
+   * — four holding the same survey, three the same customer count. Two of them carry the SAME
+   * TITLE as another. Nothing had ever said so.
+   */
+  const alreadySaid = await resemblesEarlier(db, text, moment.id);
+  if (alreadySaid.found.length > 0 || alreadySaid.error) {
+    await logEvent(db, "capture_resembles_earlier", alreadySaid.error ? "warn" : "info", {
+      moment_id: moment.id,
+      checked: alreadySaid.checked,
+      ...(alreadySaid.error && { error: alreadySaid.error }),
+      matches: alreadySaid.found.map((f) => ({
+        moment_id: f.moment_id,
+        passages: f.passages,
+        longest_words: f.longest_words,
+      })),
+    });
+  }
 
   /*
    * ONE-STEP MODE STOPS HERE, AND THIS IS THE LINE HE WAS COMPLAINING ABOUT.
@@ -480,6 +585,7 @@ async function capture(
       name: title,
       mode: "one_step",
       action: "no_question",
+      resembles: alreadySaid,
       /*
        * "Fill the ten fields" is what this said until 28 Oct 2026, and the shape has eighteen.
        *
@@ -509,6 +615,7 @@ async function capture(
     moment_id: moment.id,
     name: title,
     mode: "interviewed",
+    resembles: alreadySaid,
     ...step,
     next: step.action === "asked"
       ? "Ask him this question, then pass his answer to answer_interview."

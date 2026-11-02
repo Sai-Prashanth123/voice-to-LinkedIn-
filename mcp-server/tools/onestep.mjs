@@ -92,7 +92,11 @@ export const oneStepTools = [
         "checked back against this text span by span, so an improvement here becomes a fabrication " +
         `two steps later. The reply carries the extraction brief; fill all ${FIELD_COUNT} fields ` +
         "from his own words — including every name he mentioned — and call write_post. This works " +
-        "whether or not one-step mode is on.",
+        "whether or not one-step mode is on. " +
+        "THE REPLY ALSO CARRIES `resembles`: whether he has used some of these exact words in an " +
+        "earlier idea. If it names one, say so in passing and let HIM decide — a second angle on " +
+        "the same material is normal and a retelling is not. Never park or kill anything over it, " +
+        "and read its `means`: `checked: 0` means nothing was compared, not that nothing matched.",
       inputSchema: {
         text: z.string().min(1).describe("What he said, verbatim"),
         name: z.string().max(80).optional()

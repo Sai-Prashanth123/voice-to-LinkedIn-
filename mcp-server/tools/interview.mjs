@@ -75,7 +75,12 @@ export const interviewTools = [
         "the FIRST interview question: tell them both, ask the question, then pass their answer to " +
         "answer_interview. If the name is wrong they say so, and you call name_idea. " +
         "The interview happens in the session: ask what comes back, and pass his answer to " +
-        "answer_interview exactly as he said it.",
+        "answer_interview exactly as he said it. " +
+        "THE REPLY ALSO CARRIES `resembles`: whether he has used some of these exact words in an " +
+        "earlier idea. If it names one, say so in passing and let HIM decide — a second angle on " +
+        "the same material is normal and a retelling is not, and only he can tell them apart. " +
+        "Never park or kill anything over it, and read its `means` before repeating it. " +
+        "A `checked: 0` means nothing was compared, which is not the same as nothing found.",
       inputSchema: {
         text: z.string().min(1).describe(
           "What happened, in his words. A fragment is fine — the interview is what fills it out.",
