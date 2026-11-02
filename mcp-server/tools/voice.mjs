@@ -1273,6 +1273,22 @@ export const sentinelTools = [
             names_the_reader_pct: s.names_the_reader_pct,
           })),
           across_all: aw.line_one_words ?? null,
+          /*
+           * WHAT THE BIGGEST SHAPE IS ACTUALLY DOING, carried into the brief rather than left in
+           * the artefact — which is where it sat for the first twenty minutes of its life.
+           *
+           * `statement` is over half the corpus and is the classifier's fallthrough, so a drafter
+           * told "statement is the commonest opening" has been told nothing. These seven kinds came
+           * from reading 478 of them. `assertion` is still the bulk of it and that is the finding:
+           * most openings in this corpus are a claim about how the world works, which is the most
+           * generic move available and the easiest one to write badly.
+           */
+          when_it_is_a_statement: aw.statement_is_really ?? null,
+          /*
+           * The second line, which his hooks section describes as a tool and nothing had measured.
+           * "Two stacked gaps": line two refuses to answer line one.
+           */
+          line_two: aw.line_two ?? null,
         },
         /*
          * The measurement his complaint was actually about. "It's just a wall of text… there's
@@ -1327,10 +1343,16 @@ export const sentinelTools = [
           }
         })(),
         corpora: hooks?.basis ?? null,
+        /*
+         * The error on the soft figures, carried with them. A detector that was reported at 2.9%
+         * and found two of every nine was cut on 2 November; the one that survived ships its
+         * recall and precision so nobody reads it as a count.
+         */
+        how_good_the_soft_measures_are: aw.investment_detector_accuracy ?? null,
         not_a_quota:
           "None of this is a target. The corpus says what these writers do; it cannot say what " +
           "this post needs. An investment-element floor was proposed on 2 November and the corpus " +
-          "refused it — the eight carry two or more in 8.4% of their openings.",
+          "refused it — the writers carry both surviving elements in 6% of their openings.",
       };
     },
   },
