@@ -40,6 +40,12 @@ import { shapedWriterRows } from "../shape-rows.mjs";
 import { REFERENCE_WRITERS, WRITER_CHOICES } from "../writers.mjs";
 import voiceprint from "../../data/josh/law/voiceprint.json" with { type: "json" };
 import sentinels from "../../data/josh/sentinels/latest.json" with { type: "json" };
+/*
+ * The hook patterns, derived by scripts/build-hook-patterns.mjs and imported the same way the
+ * sentinel measurements are — a file read, no database call. Structure only: the script refuses to
+ * write if any post's text reaches it, so nothing here can be quoted into a draft.
+ */
+import hooks from "../../data/josh/hooks/latest.json" with { type: "json" };
 import law from "../../data/josh/law/law.json" with { type: "json" };
 
 /** The four whose structure matches what his own rules describe. See resources.mjs for why. */
@@ -961,6 +967,75 @@ export async function writerShapeBlock(db, handle) {
  * It is the same loader and the same function the ninth gate check uses, unfiltered, so the number
  * the drafter aims at is the number the draft is measured against.
  */
+/**
+ * LINE ONE, from 2 November. The thing the brief has never carried.
+ *
+ * Josh, 30 October, looking at a draft the gate had passed: "the hooks need to be stronger… it's
+ * too long… it almost gives away what the post is going to be about in the hook itself rather than
+ * leaving people wanting to click more."
+ *
+ * The ninth check judged the first THREE lines together, so a long opening sentence followed by two
+ * short ones measured the same as three even lines. `opening_words` had been stored on all 1,839
+ * measurable posts since the loader was written and reached nothing.
+ *
+ * WHAT IS DELIBERATELY NOT HERE: a floor on the hooks section's three investment elements. The plan
+ * this was built from asked for a minimum of two in every first line. Measured across the same
+ * 1,839 posts, the writers Josh chose hit two or more 8.6% of the time — specificity 76.7%, stakes
+ * 10.3%, emotion 2.7%. Requiring two would fail about nine in ten of the posts he picked as his own
+ * references. The triad is good advice about what makes a reader care; it is not these writers'
+ * measured habit, and a brief that stated it as a target would be inventing a standard and
+ * attributing it to them.
+ *
+ * So the floor is length and withholding, which are measured, and the triad is reported as what it
+ * is. Both figures come from data/josh/hooks/latest.json, re-derivable by script.
+ */
+function lineOne() {
+  const aw = hooks?.all_writers;
+  if (!aw?.line_one_words?.median) return [];
+  const byShape = (hooks.shapes ?? [])
+    .filter((s) => s.posts >= 50 && s.shape !== "question")
+    .map((s) => `${s.shape.replace(/_/g, " ")} ${s.line_one_words.median}`)
+    .join(", ");
+
+  const out = [
+    `LINE ONE IS ITS OWN MEASUREMENT: their first lines run a median ${aw.line_one_words.median} ` +
+    `words, and nine in ten are under ${aw.line_one_words.p90}. By shape, the medians are ` +
+    `${byShape}. The hook check reads only the first line, and so should you when you have ` +
+    "written it.",
+  ];
+
+  if (typeof aw.first_figure_after_line_one_pct === "number") {
+    out.push(
+      `WITHHOLD THE FINDING, NOT THE SUBJECT. In ${aw.first_figure_after_line_one_pct}% of their ` +
+      "posts the first figure arrives after line one. That is the curiosity gap as his hooks " +
+      "section defines it: investment first, then the cut. Naming the method while withholding the " +
+      "finding passes the check; naming the finding in line one only passes if the post still owes " +
+      "the reader why it is true.",
+    );
+  }
+
+  if (typeof aw.two_or_more_investment_elements_pct === "number") {
+    const c = aw.investment_components_pct ?? {};
+    out.push(
+      "HIS SECTION ASKS FOR SPECIFICITY, STAKES AND A REAL EMOTION IN THE OPENING, AND THESE EIGHT " +
+      `DO NOT RELIABLY DO IT: specificity ${c.specificity}% of first lines, stakes ${c.stakes}%, ` +
+      `emotion ${c.emotion}%, two or more together ${aw.two_or_more_investment_elements_pct}%. ` +
+      "Reported so nobody builds a quota out of it. It is his advice about what makes a reader " +
+      "care, not a measured habit of theirs, and a draft is not better for ticking two.",
+    );
+  }
+
+  if (typeof aw.names_the_reader_pct === "number") {
+    out.push(
+      `NAMING WHO IT IS FOR is what his hooks section calls the highest-value tool available. They ` +
+      `do it in ${aw.names_the_reader_pct}% of first lines — so it is a real move and not a ` +
+      "default. Worth reaching for when the post is only for one kind of reader.",
+    );
+  }
+
+  return out;
+}
+
 export async function corpusShapeBlock(db) {
   const rows = await shapedWriterRows(db);
   const all = writerShapeTargets(rows);
@@ -988,9 +1063,15 @@ export async function corpusShapeBlock(db) {
    * The distribution has existed the whole time, in the per-writer reports, and reached no brief.
    * `hook_opens_loop` fails 59% of drafts, the worst rate of the nine after claims_trace.
    *
-   * READ FROM THE STORED REPORT, not from `rows`, for the same reason the sd figure is: those rows
-   * carry handle, paragraphs and above_fold_words only, and widening that query would change what
-   * the ninth gate check loads. Same measurements, no extra call.
+   * READ FROM THE STORED REPORT, not from `rows`, for the same reason the sd figure is: the stored
+   * report already holds the tally, so this needs no extra call.
+   *
+   * That paragraph used to end "widening that query would change what the ninth gate check loads",
+   * which was the right caution and is no longer true of `opening_words`. It joined
+   * SHAPE_ROWS_SELECT on 2 November, and `writerShapeTargets` collects it beside the original
+   * joint guard rather than inside it — so a row with a null `opening_words` still counts toward
+   * the paragraph and above-fold tallies exactly as it did before. The two bands every recorded
+   * `shape` verdict rests on are unchanged, which is the only reason the widening was allowed.
    */
   const openTally = {};
   let openBasis = 0;
@@ -1012,6 +1093,7 @@ export async function corpusShapeBlock(db) {
       "that is none of these shapes is usually a topic announcement, which is the commonest way " +
       "this draft will fail the hook check. Question openings are in the data and are ruled out " +
       "for him: his hooks section forbids opening on one, and that rule is his.",
+      ...lineOne(),
     ]
     : [];
 
@@ -1029,6 +1111,21 @@ export async function corpusShapeBlock(db) {
       "WHAT TO TAKE FROM THEM is where the post gets in, where it turns and how it lands — not a " +
         "length. If you want one writer's habits rather than the range, that is a different ask " +
         "and it needs their name.",
+      /*
+       * WHERE IT TURNS, said rather than implied. The line above has promised "where it turns"
+       * since it was written and no brief has ever carried a number for it. `turnAt` has been in
+       * prose.mjs since 26 October and measure_draft reports it, but only after a draft exists —
+       * which is the wrong end. Josh's word for the problem, 30 October, was that a post reads
+       * flat.
+       */
+      ...(typeof hooks?.all_writers?.has_a_marked_turn_pct === "number"
+        ? [
+          `WHERE IT TURNS: ${hooks.all_writers.has_a_marked_turn_pct}% of their posts reverse on a ` +
+          "marked turn — but, then, turns out, except, the problem. The rest have none, which is a " +
+          "real shape and not a fault. It does mean that if a draft reads flat, this is the first " +
+          "place to look: nothing in it changes direction.",
+        ]
+        : []),
       "THE SHAPE IS NOT THE SENTENCE. A number-claim opening means a first line built on a real " +
         "figure of his, not one of theirs reworded. The figure has to be in the moment, and the " +
         "words have to be yours.",

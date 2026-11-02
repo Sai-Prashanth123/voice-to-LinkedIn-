@@ -55,6 +55,12 @@ import { isClearedNow, needsAClearanceDecision } from "../../supabase/functions/
 // 8.3 — "Take the shape. Never the words." The index holds hashes of the reference writers' word
 // runs, never their sentences, so consulting it puts none of their text near a drafter.
 import { hashRun, shinglesOf } from "../../supabase/functions/_shared/shingles.ts";
+import {
+  FOLD_BLANK_COST,
+  FOLD_CHARS_PER_LINE,
+  FOLD_LINES,
+  measureShape,
+} from "../../supabase/functions/_shared/shape.ts";
 import { CLAIMABLE_FIELDS, sourceEntry } from "../../supabase/functions/_shared/entry.ts";
 /*
  * ONE DECLARATION, SHARED WITH write_post.
@@ -69,6 +75,7 @@ import { EXTRACTION, FIELD_COUNT } from "./extraction-shape.mjs";
 import { writingSources } from "../sources.mjs";
 import { HIGH_CONFIDENCE, scan } from "../aitells.mjs";
 import { PREFILE_CHECKS, prefileVerdict } from "../prefile.mjs";
+import { selfEcho, selfEchoReport } from "../self-echo.mjs";
 // 9.3 — the recorded framework, normalised on the way in and checked against his own section.
 import { isNamedFramework, namedFrameworks, tidyFramework } from "../frameworks.mjs";
 
@@ -321,6 +328,30 @@ export const writeTools = [
       const borrowedIndex = await borrowedIndexFor(db, args.body);
       const shingleRuns = shinglesOf(args.body).length;
 
+      /*
+       * HAS HE WRITTEN THIS BEFORE? Added 2 November, and it is the cheap half of a check that has
+       * been starved since the embeddings stopped.
+       *
+       * The retelling check compares an EMBEDDING of the moment. On 2 November there were 122
+       * moments and six embeddings, and `published_archive` was empty — so it has been comparing
+       * against almost nothing and reporting "clear". Four drafts for four different moments opened
+       * on the identical sentence on 29 October and nothing noticed.
+       *
+       * This needs no provider: exact runs over rows already in the database. It reads the drafts
+       * table directly rather than through the retelling path because it is answering a different
+       * question — not "has this STORY been told" but "have these WORDS been written".
+       *
+       * Capped at the most recent 200. The whole table is 114 rows today, so the cap does nothing
+       * yet; it is here so this cannot become the slow part of filing a draft a year from now, and
+       * because PostgREST would silently stop at 1,000 anyway.
+       */
+      const priorDrafts = await db.select("drafts", {
+        select: "id,moment_id,body",
+        order: "id.desc",
+        limit: "200",
+      });
+      const echo = selfEcho(args.body, args.moment_id, priorDrafts);
+
       const verification = verifyDraft(
         args.body,
         args.claims,
@@ -545,6 +576,64 @@ export const writeTools = [
             reported_not_refused: prefile.advisory.map((f) => `${f.source}: ${f.matched}`),
           }),
         },
+        /*
+         * HIS OWN WORDS, TWICE. Reported on every draft including the clean ones, for the reason the
+         * two comments above give: a check whose silence means something has to say it ran.
+         *
+         * This sits beside `retelling` rather than inside it deliberately. They answer different
+         * questions and they fail differently — retelling needs an embedding provider and has been
+         * returning "clear" against six embeddings, while this needs only the drafts table. Folding
+         * them together would let one answer cover for the other's silence.
+         */
+        /*
+         * WHAT HE WILL SEE BEFORE "SEE MORE" — carried here 2 November.
+         *
+         * Josh, 30 October, pasting a draft into a preview tool on the call: "it's just a wall of
+         * text… there's nothing here." He was reading his own post the way his reader would, in a
+         * separate tool, while this system could already render it and did not show him.
+         *
+         * `measure_draft` has returned this since 26 October as `fold.what_he_would_see`, and
+         * measure_draft is advisory and easy not to call. The draft he was looking at had been
+         * filed without it. So the preview comes back on the thing that always runs.
+         *
+         * THE CAVEAT TRAVELS WITH THE NUMBER, deliberately and verbatim. The constants are
+         * uncalibrated — LinkedIn does not publish where the cut falls and it moves with the phone,
+         * the text size and the app version. `hook_lands_above_it` only flips when the error is
+         * bigger than the gap, so it is the one signal worth acting on, and it is kept out of every
+         * gate rubric. A word count quoted to Josh as a measurement would be the lie this block is
+         * written to avoid.
+         */
+        above_the_fold: (() => {
+          const m = measureShape(args.body);
+          return {
+            what_he_would_see: m.above_fold_rendered,
+            hook_lands_above_it: m.hook_above_fold,
+            first_line_words: m.opening_words,
+            measured_with: `${FOLD_CHARS_PER_LINE} characters a line, a blank line costing ` +
+              `${FOLD_BLANK_COST}, cut after ${FOLD_LINES} lines`,
+            how_much_to_trust_it:
+              "PROVISIONAL. LinkedIn does not publish where the cut falls and it moves with the " +
+              "phone, the text size and the app version, so this is a simulation with " +
+              "uncalibrated constants. Act on hook_lands_above_it and on the preview text; do " +
+              "not quote a word count to Josh as a measurement.",
+            why_it_is_here:
+              "Read him the preview before he reads the post. The first line is the only one most " +
+              "of his readers will ever see, and it is the only line the hook check judges.",
+          };
+        })(),
+        own_words: (() => {
+          const report = selfEchoReport(echo);
+          return report
+            ? { checked: `${echo.checked} earlier draft(s), excluding this moment's own`, found: report }
+            : {
+              checked: `${echo.checked} earlier draft(s), excluding this moment's own`,
+              found: 0,
+              means: echo.checked === 0
+                ? "No earlier drafts to compare against. Not a pass — nothing looked."
+                : "No earlier draft for another moment opens on this line or shares a seven-word " +
+                  "run with it.",
+            };
+        })(),
         ...arguable,
       };
     },

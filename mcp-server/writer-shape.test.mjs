@@ -384,11 +384,27 @@ test("a line he changed is shown as a pair, because that is the only positive ex
   // He was given "My holidays used to have client meetings in them. Now I say no." and cut the
   // second sentence — the one that answered his own hook, which is exactly what hook_opens_loop
   // had flagged on that draft. A verdict says what was wrong; a change says what better was.
-  const notes = await db.rpc("joshs_notes", { p_limit: 12 });
+  /*
+   * ASKED OVER THE WINDOW THE BRIEF ACTUALLY READS — widened 2 November.
+   *
+   * This asked for 12 and started failing, and it was right to: the first pair had moved to
+   * position 15 as Josh's own activity pushed older notes down, and the BRIEF was asking for 10. So
+   * the test caught a live regression in the product and read as flaky, because a hard-coded
+   * recency window against growing data fails for a reason that has nothing to do with the code it
+   * guards.
+   *
+   * The brief now keeps every pair inside a 120-note window regardless of age. This asks the same
+   * question of the same window, so the two cannot drift apart again.
+   */
+  const notes = await db.rpc("joshs_notes", { p_limit: 120 });
   const pairs = (notes ?? []).filter(
     (n) => n.before_text && n.after_text && n.before_text !== n.after_text,
   );
-  assert.ok(pairs.length > 0, "no before/after pair survived the read");
+  assert.ok(
+    pairs.length > 0,
+    "no before/after pair survived the read — the brief's only positive example of what better " +
+      "looks like is the thing this guards",
+  );
 
   const brief = await tools.find((t) => t.name === "get_drafting_brief")
     .handler({ moment_id: 111 }, { db, url: creds.url });

@@ -100,7 +100,20 @@ export const PUNCTUATION_DASH = /[—–―‒]/g;
  *
  * So: page. A single large limit cannot work, because the ceiling is the server's and it is silent.
  */
-export const SHAPE_ROWS_SELECT = "handle,paragraphs,above_fold_words";
+/*
+ * `opening_words` joined this list on 2 November, and it is additive on purpose.
+ *
+ * The column has existed on every row since the loader was written and reached nothing — no brief,
+ * no rubric, no measurement of a draft. Josh on 30 October: "the hooks need to be stronger… it's
+ * too long". The one number that says how long a first line is was already stored 1,839 times and
+ * had never been read.
+ *
+ * Adding a column to a select cannot move the two medians the ninth check judges, and
+ * `writerShapeTargets` guards it separately below so a null `opening_words` cannot drop a row out
+ * of the paragraph or above-fold tallies. That matters: those two bands are what every recorded
+ * `shape` verdict rests on, and this change must not re-point them.
+ */
+export const SHAPE_ROWS_SELECT = "handle,paragraphs,above_fold_words,opening_words";
 export const SHAPE_ROWS_PAGE = 1000;
 
 /* ── The fold, as a phone actually renders it ─────────────────────────────────
@@ -313,7 +326,7 @@ export function measureShape(text: string | null | undefined): Shape {
  */
 export function shapeAgainst(
   shape: Shape,
-  targets: { paragraphs: number[]; aboveFold: number[] },
+  targets: { paragraphs: number[]; aboveFold: number[]; openingWords?: number[] },
 ): string[] {
   const notes: string[] = [];
   const range = (xs: number[]) =>
@@ -328,6 +341,37 @@ export function shapeAgainst(
   notes.push(
     `The writers he chose: ${range(targets.paragraphs)} paragraphs, ` +
       `${range(targets.aboveFold)} words above the fold.`,
+  );
+
+  /*
+   * LINE ONE, carried from 2 November. Josh, 30 October: "the hooks need to be stronger… it's too
+   * long… it almost gives away what the post is going to be about".
+   *
+   * This check judged the first three lines together and never the first one alone, so a long
+   * opening sentence followed by two short lines measured the same as three even lines. The band is
+   * the per-writer median of `opening_words`, a column that has been stored on all 1,839 measurable
+   * posts since the loader was written and reached no rubric until now.
+   */
+  if (targets.openingWords?.length) {
+    notes.push(
+      `Its first line is ${shape.opening_words} word(s), where their medians run ` +
+        `${range(targets.openingWords)}. A long first line is the commonest reason a hook reads as ` +
+        `a topic announcement, which is what the hooks section calls "no gap at all".`,
+    );
+  }
+
+  /*
+   * WHICH NUMBER IS WHICH, said out loud to the judge.
+   *
+   * `above_fold_words` above is AUTHORED — the first three lines as written, blanks filtered. The
+   * reader sees the first three lines as DRAWN, which caps near 25 words on a phone. Measured pairs
+   * on 28 October: 19 drawn against 72 authored, 21 against 65. A judge told only "words above the
+   * fold" reasonably assumes the second and is reading the first.
+   */
+  notes.push(
+    `The word count above the fold is AUTHORED — the first three lines as written. It is not what a ` +
+      `phone draws, which is capped near 25 words and can be a third of this number. Judge the ` +
+      `breaking, and do not treat this figure as what the reader sees.`,
   );
 
   return notes;
@@ -346,18 +390,38 @@ export function shapeAgainst(
  * exists on those rows.
  */
 export function writerShapeTargets(
-  rows: { handle?: string | null; paragraphs?: number | null; above_fold_words?: number | null }[],
-): { paragraphs: number[]; aboveFold: number[] } {
-  const byHandle = new Map<string, { paragraphs: number[]; aboveFold: number[] }>();
+  rows: {
+    handle?: string | null;
+    paragraphs?: number | null;
+    above_fold_words?: number | null;
+    opening_words?: number | null;
+  }[],
+): { paragraphs: number[]; aboveFold: number[]; openingWords: number[] } {
+  const byHandle = new Map<
+    string,
+    { paragraphs: number[]; aboveFold: number[]; openingWords: number[] }
+  >();
 
   for (const r of rows ?? []) {
     const handle = r.handle ?? "";
     if (!handle) continue;
+    const e = byHandle.get(handle) ?? { paragraphs: [], aboveFold: [], openingWords: [] };
+    /*
+     * THE ORIGINAL GUARD IS KEPT VERBATIM, AND THE NEW MEASURE IS GUARDED BESIDE IT.
+     *
+     * The joint test below is deliberate: before 2 November a row missing either measure counted
+     * toward NEITHER tally, and the two bands every recorded `shape` verdict rests on were computed
+     * that way. Splitting it into independent tests would have admitted rows that used to be
+     * skipped and moved both bands — a change to the standard, disguised as adding a column.
+     *
+     * `opening_words` is therefore collected on its own line, after the guard, so it can be present
+     * or absent without touching what came before it.
+     */
+    if (typeof r.opening_words === "number") e.openingWords.push(r.opening_words);
+    byHandle.set(handle, e);
     if (typeof r.paragraphs !== "number" || typeof r.above_fold_words !== "number") continue;
-    const e = byHandle.get(handle) ?? { paragraphs: [], aboveFold: [] };
     e.paragraphs.push(r.paragraphs);
     e.aboveFold.push(r.above_fold_words);
-    byHandle.set(handle, e);
   }
 
   const median = (xs: number[]) => {
@@ -369,12 +433,15 @@ export function writerShapeTargets(
 
   const paragraphs: number[] = [];
   const aboveFold: number[] = [];
+  const openingWords: number[] = [];
   for (const e of byHandle.values()) {
     const p = median(e.paragraphs);
     const a = median(e.aboveFold);
+    const o = median(e.openingWords);
     if (p !== null) paragraphs.push(p);
     if (a !== null) aboveFold.push(a);
+    if (o !== null) openingWords.push(o);
   }
 
-  return { paragraphs, aboveFold };
+  return { paragraphs, aboveFold, openingWords };
 }

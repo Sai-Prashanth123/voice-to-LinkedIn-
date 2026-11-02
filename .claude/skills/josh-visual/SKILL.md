@@ -77,6 +77,29 @@ Four mechanical, and it names them:
 `//cdn...` passes the validator and renders as nothing.** The check is an `https?:` prefix test, not
 a proof of self-containment. An embedded `data:` URI is the only external image that actually works.
 
+### His headshot, which he asked for — and the size ceiling that decides it
+
+Josh asked on 30 October for his headshot in a corner of the creative. Three things were unknown
+and are now settled:
+
+- **resvg draws an embedded raster.** Measured 2 November by rendering the same SVG twice through
+  the real rasteriser, once with a `data:` URI `<image>` and once without, and comparing the PNGs.
+  They differ, and the image is where it was placed. Not inferred from the font behaviour — that
+  points the other way, and `@font-face` really is ignored.
+- **The validator allows it.** Both image refusals anchor on an `https?:` prefix, so `data:` passes.
+- **His brand permits it.** The Never list rules out *"a logo of any kind, including his own unless
+  he asks for it"*. He is asking.
+
+**The ceiling is what will actually stop you.** Base64 costs about a third more than the file, and
+the practical limit on an SVG here is around 16–20 KB of text — the real visuals on moment 111 are
+11–12 KB each. A photograph at any normal size does not fit. What fits is a small, hard-optimised
+crop: roughly 120×120, JPEG rather than PNG for a photograph, under about 6 KB before encoding.
+
+So: **ask him for that file rather than resizing something yourself**, place it small in a corner,
+and keep the rest of the image inside the budget. If it does not fit, say so — an image that fails
+to rasterise is worse than one without a headshot, and the PNG is stored separately from the SVG so
+a bloated file fails late.
+
 ### Fonts are not an exception you can argue with
 
 There is no route to a typeface from inside the SVG. `@import` is refused, `<link>` is refused,
@@ -85,8 +108,13 @@ URI.** The renderer's font list is the only font source there is.
 
 Since 29 October that list carries DM Serif Display (regular and italic), DM Sans, JetBrains Mono
 and DejaVu. Name those and they render. Name anything else and it falls back silently, correctly, in
-the wrong face, and **nothing in the system will tell you** — there is no way to look at a stored
-visual, and the first reader would be whoever saw it on LinkedIn.
+the wrong face, and **nothing in the system will tell you** — a PNG does not record which typeface
+drew it, and no check reads an SVG.
+
+That sentence used to end "there is no way to look at a stored visual", which was wrong and is the
+reason every heading rasterised in a grotesque for two days with nobody noticing. **You can look.**
+Fetch `renders/{moment}/v{n}.png` from storage with the project key, as `josh-visual-audit` says to.
+Look before you tell him it is done.
 
 For two days before that the list was DejaVu alone, so every serif heading this system ever
 rasterised came out a grotesque. Do not assume a face is available because the brand names it.

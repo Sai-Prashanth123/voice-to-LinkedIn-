@@ -64,20 +64,29 @@ Postgres.
 | "not that one" / "not yet" | `kill_idea` with a reason / `park_idea` |
 | "never open with a question" | `add_library_rule`, immediately, in his words |
 | "show me Matt Barker" | `get_reference_posts`, `analyse_reference_writer` |
+| "the hook isn't strong enough" | the **josh-hook** skill — not a rewrite from instinct |
+| "draft me some comments" | the **josh-comment** skill. He pastes the posts; nothing scrapes |
 | "make an image for this" | `get_visual_brief`, then the skill that fits — see **Pictures** |
 | anything he was sent — an email, a screenshot | the **josh-artefact** skill, which anonymises first |
 
 ## The skills
 
-Ten, in `.claude/skills/`. Use them rather than writing from instinct.
+Twelve, in `.claude/skills/`. Use them rather than writing from instinct.
 
 **The words:**
 
 - **josh-voice** — before writing, editing or judging anything in his voice.
 - **draft-post** — writing a post from an idea, or redrafting after a rejection.
 - **gate-check** — every check the brief hands back, judged on its own rubric, adversarially.
+- **josh-hook** — the first line, added 2 November. The only line most readers see and the only
+  one `hook_opens_loop` judges. It carries what the eight writers measurably do with an opening,
+  and the two detectors that were refusing the hook he asked for out loud.
 - **barker-audit** — only when he asks why a draft feels flat structurally. It reports the
   measured shape against the draft's and stops; it is not a tenth check and it never rewrites.
+- **josh-comment** — comments on other people's posts, added 2 November after he asked for them on
+  30 October. Drafts only: it never posts, never scrapes and never picks whose posts to reply to.
+  Nothing checks a comment — no gate, no ledger, no shingle guard — so the writer is the only guard
+  there is.
 
 **The pictures,** added 29 October:
 
@@ -178,8 +187,12 @@ mcp-server/            the tools, prompts and resources. node mcp-server/index.m
 supabase/functions/    the server: the write door (cc-submit), the workers, the connector
 supabase/migrations/   schema. Applied in order; never edit one that has shipped
 scripts/               doctor.mjs first — does this clone work. Then scrape, refresh
-                       measurements, rebuild the law set
-data/josh/             the law set and the measured voiceprint
+                       measurements, rebuild the law set. calibrate-aitells.mjs answers
+                       "is this threshold too strict" with the corpus rather than an opinion
+data/josh/             the law set, the measured voiceprint, the sentinel measurements and
+                       hooks/latest.json — what the eight do with a first line, structure only.
+                       Rebuild with scripts/build-hook-patterns.mjs, which refuses to write if
+                       any post's text reaches the output (8.3)
 data/local/            the whole bank as JSONL, so a clone has real content to work against
 local/                 the local stack: real Postgres, real PostgREST, cc-submit, storage
 docs/                  runbook, handover, the cost model, and his own material in from-josh/
@@ -227,6 +240,36 @@ Two conventions worth knowing because they will bite otherwise:
   `DELETE` is granted to nobody. A kill needs a reason, because the exclusion is invisible later.
 - **Write through `cc-submit`.** The connector's database role has no UPDATE or DELETE anywhere. A
   tool that writes directly appears to work today and fails the day the scoped key is minted.
+
+## The defect that keeps happening here
+
+**A value nothing reads, or a check with nothing to check. Both report success.** This has now been
+found about twenty times in this repository, and every instance looked like working code.
+
+Four live examples, all found on 2 November and all fixed:
+
+- `opening_words` was stored on all 1,839 reference posts from the day the loader was written and
+  reached no brief, no rubric and no measurement. Josh spent a call saying his hooks were too long
+  while the one number that says so sat unread.
+- The drafting brief read his ten most recent notes. His three before-and-after pairs — the only
+  record this system holds of what *better* looked like — had drifted to position fifteen as his own
+  activity pushed them down. The read succeeded, returned ten rows, and none of them was the thing
+  the feature existed to deliver.
+- The retelling check compares embeddings. There are 122 moments and **six** embeddings, and
+  `published_archive` is empty, so it answered "clear" honestly and uselessly. Four drafts for four
+  different moments opened on the identical sentence and nothing noticed.
+- `measure_draft` has rendered the above-the-fold preview since 26 October, in a tool nobody has to
+  call.
+
+The habit that catches these: **a check must report that it ran.** `create_draft` does this for
+borrowed phrases, for the pre-filing checks and now for `own_words` and the fold, and each says its
+basis — *"0 found across 114 drafts"* and *"nothing to compare against"* are different answers and
+only one of them is good news. When you add a check, make its silence mean something.
+
+The second habit: **before trusting a threshold, measure it against the eight writers Josh chose.**
+`scripts/calibrate-aitells.mjs` does this. A rule that fires on half of the posts he picked as
+models is detecting writing, not generated text — which is how a refusal that would have blocked 129
+of his own reference posts survived for weeks.
 
 ## When something looks wrong
 

@@ -40,6 +40,12 @@
  */
 
 import { sentences, tokens, words } from "../scripts/lib/prose.mjs";
+/*
+ * The same set the voiceprint builder and measure_draft filter with. Imported rather than re-listed
+ * so there cannot be two opinions about which words carry no topic — the failure its own header
+ * warns about, and the one 2C-17 now depends on for whether a finding may refuse a draft.
+ */
+import { FUNCTION_WORDS } from "../scripts/lib/stopwords.mjs";
 // What a bullet is, spelled once. See the note on BULLET_MARKER: this file and shape.ts each had
 // their own answer, the two disagreed, and neither could see the marker Josh's drafts use.
 import { BULLET_MARKER, PUNCTUATION_DASH } from "../supabase/functions/_shared/shape.ts";
@@ -453,13 +459,38 @@ export const RULES = [
        * So three is reported and four refuses. Draft 90 had eight bullets opening on "Pro", which
        * is not a three-item list being unlucky. If he wants the line drawn elsewhere it moves
        * through propose_library_change on banned_phrases, never a code edit (12.10).
+       *
+       * A FUNCTION WORD IS NOT "THE SAME WORD" FOR THE PURPOSE OF REFUSING — 2 November.
+       *
+       * The threshold above is left exactly where Josh set it, because the note above says it is
+       * his to move and it is. What changed is narrower: which shared word may refuse a draft.
+       *
+       * Measured by scripts/calibrate-aitells.mjs against the 1,839 reference posts Josh chose as
+       * his own examples of good writing: this rule fires on 46.2% of them and REFUSES 129. Per
+       * writer it reaches 83.6% of Curtis Howland's posts, 76.3% of Adam Treboutat's and 54.8% of
+       * Matt Barker's — the writer Josh said he wanted to lean into most. A detector that refuses
+       * one in fourteen of the posts someone picked as models is not detecting generated text.
+       *
+       * The refusals say why. They are `4 bullets all open with "what"`, `"you"`, `"we"`, `"it"`,
+       * `"do"`, `"then"`. A list of parallel questions, or of steps each beginning "Then", shares an
+       * interrogative or a connective and nothing else — the ITEMS are uneven, which is what this
+       * rule's own rationale asks for. "Pro" and "prospect" are the shape it was written for, and
+       * those still refuse.
+       *
+       * So the group still REPORTS at three whatever the word is — nothing is hidden from Josh —
+       * and it may only REFUSE on a content word. FUNCTION_WORDS is the set build-voiceprint and
+       * measure_draft already share, so there is no second opinion about which words those are.
        */
       for (const [first, group] of byFirst) {
         if (group.length >= 3) {
+          const refusable = group.length >= 4 && !FUNCTION_WORDS.has(first);
           out.push({
-            matched: `${group.length} bullets all open with "${first}"`,
+            matched: `${group.length} bullets all open with "${first}"` +
+              (group.length >= 4 && !refusable
+                ? ` — reported, not refused: "${first}" carries no topic, so the items may still be uneven`
+                : ""),
             line: group[0].line,
-            ...(group.length < 4 && { blocking: false }),
+            ...(!refusable && { blocking: false }),
           });
         }
       }
@@ -495,10 +526,49 @@ export const RULES = [
     why: "Announcing that something is about to be said, instead of saying it. `here's` is also on "
       + "the list of words the reference writers use far more than Josh does.",
     fix: "Delete the opener. The sentence after it is the sentence.",
-    detect: (body) => matches(
-      body,
-      /\b(?:here'?s (?:the thing|what|why|how|something)|the truth is|let me be clear|i'?ll say it again|can we talk about|it turns out|the reality is)\b/gi,
-    ),
+    /*
+     * NARROWED TO THE FORMS HIS LIBRARY NAMES — 2 November.
+     *
+     * This refused 279 of the 1,839 reference posts Josh chose, 15.2% of them, the highest refusal
+     * rate of any rule in the set (scripts/calibrate-aitells.mjs). The blocking matches were
+     * "Here's how", "Here's what", "Here's why".
+     *
+     * What his banned_phrases section actually names is narrower than what this matched:
+     *
+     *   "Throat-clearing: \"Here's the thing:\" / \"Here's what I learned:\" / \"The truth is,\""
+     *
+     * Those are a clause that IS the line — a throat-clear followed by a colon or a full stop, with
+     * the real sentence after it. "Here's how I detect what software a company runs" is not that
+     * shape: the promise and the substance are the same sentence, and the library never named it.
+     *
+     * Josh on 30 October, dictating the kind of hook he wants, said the words out loud: "Since
+     * doing this one thing, they've improved 10x or something like that. Here's… here's why." The
+     * system refused the construction he was asking for, which is the same collision his own open
+     * proposal 19 describes on the engagement-ask rule: the detector picked the broader reading of
+     * a rule that names forms.
+     *
+     * So: the named forms still refuse. The wider family still REPORTS, so nothing is hidden and
+     * he can still be told the opener is weak — it simply cannot stop the draft existing. Where the
+     * line belongs is his (12.10) and the measurement goes to him with the rest.
+     */
+    detect: (body) => {
+      /*
+       * No trailing `\b` on this one. It had one, and a word boundary after a colon requires a word
+       * character immediately next — so "Here's the thing: nobody asked" did not match the very
+       * form the library names, while the wider pattern below caught it and only reported. The
+       * named forms end on punctuation, which is exactly where `\b` cannot help.
+       */
+      const named = matches(
+        body,
+        /\b(?:here'?s (?:the thing|what i learned)\s*[:.]|the truth is\s*,|let me be clear\b|i'?ll say it again\b|can we talk about\b)/gi,
+      );
+      const namedAt = new Set(named.map((m) => m.line));
+      const wider = matches(
+        body,
+        /\b(?:here'?s (?:the thing|what|why|how|something)|the truth is|it turns out|the reality is)\b/gi,
+      ).filter((m) => !namedAt.has(m.line)).map((m) => ({ ...m, blocking: false }));
+      return [...named, ...wider];
+    },
   },
 
   {
@@ -507,10 +577,48 @@ export const RULES = [
     name: "Formulaic reveal",
     why: "\"Let me explain\" is a sentence that explains nothing. Just explain.",
     fix: "Cut the line. Keep what follows it.",
-    detect: (body) => matches(
-      body,
-      /\b(?:let me explain|here'?s why|here'?s what happened|let me tell you|so what happened)\b/gi,
-    ),
+    /*
+     * THE SAME NARROWING AS 2C-22, AND THE ONE THAT MATTERS MOST FOR HOOKS — 2 November.
+     *
+     * His banned_phrases section names these as lines that stand alone and explain nothing:
+     *
+     *   "Formulaic reveal: \"Let me explain.\" / \"Here's why.\" / \"Here's what happened.\"
+     *    Just say it."
+     *
+     * Note the full stops. The complaint is a sentence that announces a reveal and delivers none —
+     * the reader is made to wait a line for nothing. That is not the same as "Here's why:" setting
+     * up the thing that immediately follows it, which is the colon_setup shape, 8% of the reference
+     * corpus, and one of the six tools in his own hooks section.
+     *
+     * Josh, 30 October, dictating the hook he wanted and not getting it: "Since doing this one
+     * thing, they've improved 10x or something like that. Here's… here's why." He said the words
+     * aloud as his example of a good opening, and this rule refused them — 36 of the reference
+     * posts too (scripts/calibrate-aitells.mjs). He then spent the call explaining that the hooks
+     * were too weak.
+     *
+     * So a reveal that IS the whole line still refuses. A reveal that introduces the next clause
+     * reports and does not block. Where the line belongs is his; the measurement goes with it.
+     */
+    detect: (body) => {
+      /*
+       * A SENTENCE THAT IS ONLY THE REVEAL. Under /m, `$` is the line end, so this is the phrase
+       * starting a sentence and finishing the line with nothing after it.
+       *
+       * The lookbehind rather than a consuming `(?:^|[.!?]\s)` is load-bearing: `matches()` reports
+       * `lineAt(body, m.index)`, so a pattern that swallowed the previous sentence's full stop
+       * would report the PREVIOUS line's number — which then breaks the dedup below, and did.
+       */
+      const standalone = matches(
+        body,
+        /(?<=^|[.!?"”]\s)(?:let me explain|here'?s why|here'?s what happened|let me tell you|so what happened)\s*[.!?]?\s*$/gim,
+      );
+      const at = new Set(standalone.map((m) => m.line));
+      const wider = matches(
+        body,
+        /\b(?:let me explain|here'?s why|here'?s what happened|let me tell you|so what happened)\b/gi,
+      ).filter((m) => !at.has(m.line)).map((m) => ({ ...m, blocking: false }));
+      return [...standalone, ...wider];
+    },
   },
 
   {

@@ -475,9 +475,42 @@ export const briefTools = [
        * Never allowed to fail a draft: if the read errors, the brief is built without it. A new
        * input is not worth making the write path fragile for.
        */
+      /*
+       * A FLAT "MOST RECENT TEN" LOST THE ONLY POSITIVE EXAMPLES THERE ARE — found 2 November.
+       *
+       * This asked for `p_limit: 10` and the before/after pairs the paragraph above is about had
+       * fallen out of the window. Measured: three pairs exist in the most recent 200 notes, and the
+       * FIRST of them is at position 15. So every drafting brief since Josh's activity pushed them
+       * down has carried his pushback notes and none of his changes — the feature went inert
+       * without failing, which is the defect this repository keeps finding and the exact thing the
+       * paragraph above was written to end.
+       *
+       * The pairs are rare by nature: he rewrites a line far less often than he rejects one. A
+       * recency window will therefore always lose them eventually, so recency is the wrong
+       * instrument for this half of the read.
+       *
+       * So: read a wider window, keep the most recent ten of anything, and keep every pair in that
+       * window regardless of age. A pair is the only thing in this system that says what BETTER
+       * looked like rather than what wrong looked like, and there are three of them in the project's
+       * whole history.
+       *
+       * `writer-shape.test.mjs` asserts a pair survives the read. It was asking the RPC for 12 and
+       * failing for the same reason the brief was — the test was right and both windows were short.
+       */
+      const RECENT = 10;
+      const WINDOW = 120;
       const taste = await (async () => {
         try {
-          return await db.rpc("joshs_notes", { p_limit: 10 });
+          const all = await db.rpc("joshs_notes", { p_limit: WINDOW });
+          const rows = all ?? [];
+          const recent = rows.slice(0, RECENT);
+          const kept = new Set(recent);
+          const pairs = rows.filter(
+            (n) => n.before_text && n.after_text && n.before_text !== n.after_text && !kept.has(n),
+          );
+          // Pairs after the recent block: they are the rarer signal, and the renderer groups by
+          // kind rather than reading the order, so appending cannot reorder what he said.
+          return [...recent, ...pairs];
         } catch {
           return [];
         }
@@ -1155,6 +1188,32 @@ export const briefTools = [
            * widen the filter.
            */
           source_entry: entry,
+          /*
+           * HOW MUCH OF THIS IS HIS — added 2 November, and it exists to stop one specific wrong
+           * verdict.
+           *
+           * Josh, 30 October, on claims_trace: "The reality is some posts, I'm going to speak more
+           * and kind of create more of the skeleton for the LLM to fill in than other posts. Other
+           * posts, I might just be like, hey, come up with a post about X. And so again, it
+           * shouldn't necessarily punish that."
+           *
+           * A judge asked "does every claim trace to his words" cannot answer fairly without
+           * knowing whether his words were three paragraphs or nine. Nothing in this brief said,
+           * so the check applied the same standard to both and failed 70% of drafts — the worst
+           * rate of the nine.
+           *
+           * COUNTED, NOT JUDGED. There is no threshold here and the rubric is told not to invent
+           * one. The honest caveat is that `his_words` is the join of EVERY raw_inputs row for the
+           * moment (sources.mjs:35), so a second paste, a re-opened idea or a pasted strategy
+           * document all inflate it — it is a floor on what he supplied, never a measure of how
+           * much he thought about it.
+           */
+          his_words_chars: (entry.his_words ?? "").length,
+          his_words_chars_means:
+            "Characters Josh himself supplied for this moment, as stored. It is the join of every " +
+            "raw input on the moment, so a second paste inflates it and a pasted document counts " +
+            "as his material. There is no threshold: it tells a judge whether he wrote the " +
+            "skeleton or asked for a post about a topic, and nothing else.",
         }),
         library_pointers: {
           view: "gating",

@@ -331,6 +331,60 @@ export const DRAFT_USER = (opts: {
   lines.push(`\nAudience for this post: ${opts.audience ?? "not recorded — infer from the moment"}`);
   lines.push(`Pillar: ${opts.pillar ?? "not recorded"}`);
 
+  /*
+   * WHAT OF HIS OWN THIS POST CAN STAND ON — added 2 November, and it is the half of the lived
+   * experience fix that is new behaviour rather than a correction.
+   *
+   * The gate half shipped on 31 October: `anyone_else` now passes a post anchored in work he did
+   * rather than only a room he sat in. That was the blocking half. This is the one Naga actually
+   * promised him on the call: "each time we ideate or produce a draft, it should check against your
+   * call recordings and all the data it has to surface any angles or pointers from your experience
+   * that can be included there. If yes, we include it. If not, we just go ahead and do the post
+   * instead of blocking it."
+   *
+   * And Josh, agreeing, setting the ceiling on it: "if there's nothing there, it doesn't
+   * necessarily matter. It can highlight that, hey, this is not something that is necessarily
+   * unique to you, but it shouldn't constantly script against that rule."
+   *
+   * So this NAMES WHAT IS AVAILABLE and says plainly when nothing is. It is not a check, it has no
+   * pass or fail, and the drafter is told in the same breath to proceed either way. A block that
+   * said "no lived experience found" and stopped there would be the hard rule he asked us to
+   * soften, wearing a different hat.
+   */
+  {
+    const has = (k: string) => Boolean((opts.entry as Record<string, string>)[k]?.trim());
+    const own = [
+      has("the_moment") && "a scene he was in",
+      has("the_detail") && "a detail only he would have",
+      has("their_actual_words") && "something somebody actually said to him",
+      has("what_changed") && "a result he watched change",
+      has("how_he_felt") && "what it felt like at the time",
+      has("receipts") && "his receipts — career, method and numbers he has given us over time",
+      has("his_words") && "what he typed about this himself",
+    ].filter(Boolean) as string[];
+
+    lines.push(
+      own.length > 0
+        ? `\n---\n\nWHAT OF HIS OWN THIS POST CAN STAND ON\n\n` +
+          `The fields above carry: ${own.join("; ")}.\n\n` +
+          `Use what genuinely bears on the point. Anchoring the post in one of these is what makes ` +
+          `it his rather than anyone's, and the first gate check asks exactly that. But do not ` +
+          `bolt one on: a scene dragged in to satisfy a rule reads worse than a clean argument, ` +
+          `and the check was amended on 31 October precisely so that work he did counts and a ` +
+          `recap with an anecdote stapled to it does not.`
+        : `\n---\n\nNOTHING OF HIS OWN IS ON FILE FOR THIS ONE, AND THAT IS NOT A BLOCKER\n\n` +
+          `There is no scene, no quote and no number of his against this moment. Write the post ` +
+          `anyway, on his reasoning and his read of the material.\n\n` +
+          `Say so when you hand it over: this is a point of view rather than something only he ` +
+          `could have witnessed, and he may want to add a line of his own before it goes out. He ` +
+          `asked for it this way on 30 October — a post that is a contrarian take, a news event or ` +
+          `a point of view is one he wants to be able to write, and the system is not to keep ` +
+          `bumping it against the lived-experience rule.\n\n` +
+          `What does NOT change: invent nothing. No quote, no number, no name, no scene that was ` +
+          `not given to you. Thin material is a reason to write a thinner post.`,
+    );
+  }
+
   if (opts.clearedNames.length > 0) {
     lines.push(`\nNames cleared for use in this post: ${opts.clearedNames.join(", ")}`);
   }
@@ -664,7 +718,23 @@ export const GATE_CHECKS: GateCheckSpec[] = [
       `Added 31 October. This is the most-failed check in the system, and three drafts before the ` +
       `one that prompted it failed on the same shape: an honest "my bet is" read as a stance he ` +
       `never took. The rubric had two categories, in the source and added, and an interpretation is ` +
-      `neither — so it kept landing in the wrong one.`,
+      `neither — so it kept landing in the wrong one.\n\n` +
+      `HOW MUCH HE SUPPLIED IS PART OF THE QUESTION. The brief carries his_words_chars: the ` +
+      `characters Josh himself wrote for this moment. Read it before you judge.\n\n` +
+      `Where he dictated the substance, hold the post to all of it. Where he supplied a line — ` +
+      `"write me a post about X" — the test is NOT that every sentence traces to words he did not ` +
+      `say, because then nothing could ever be written from a short instruction. The test there is ` +
+      `that nothing is asserted as fact which nobody established: no invented quote, no number ` +
+      `nobody supplied, no named person, no specific scene presented as something that happened. ` +
+      `General reasoning about a public topic, marked as his, is his to offer.\n\n` +
+      `Added 2 November, in his words on 30 October: "some posts I'm going to speak more and create ` +
+      `more of the skeleton for the LLM to fill in than other posts. Other posts I might just be ` +
+      `like, hey, come up with a post about X. And so it shouldn't necessarily punish that."\n\n` +
+      `THIS CHANGES THE STANDARD FOR REASONING AND NOTHING ELSE. A quote, a number, a name and a ` +
+      `scene are judged exactly as strictly however little he supplied — a thin instruction is a ` +
+      `reason to write a thinner post, never a licence to invent the detail that was missing. And ` +
+      `there is no threshold on that number: do not treat some character count as the line between ` +
+      `two standards, and do not fail a post for the count itself.`,
   },
   {
     key: "hook_opens_loop",
