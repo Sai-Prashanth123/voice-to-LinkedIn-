@@ -44,11 +44,20 @@
  * drafter to aim at "none of the above". Said out loud in the output.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { measureShape } from "../supabase/functions/_shared/shape.ts";
 import { words, median, openingShape, turnAt, sentences } from "./lib/prose.mjs";
+// His own standard, not a second opinion about what slop is. See rejectReason below.
+import { scan, HIGH_CONFIDENCE } from "../mcp-server/aitells.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIR = join(ROOT, "data", "josh", "hooks");
@@ -85,7 +94,7 @@ async function allPosts() {
   const out = [];
   for (let offset = 0;; offset += 1000) {
     const q = new URLSearchParams({
-      select: "activity_id,handle,text,opening_words,opening_shape,above_fold_words,paragraphs",
+      select: "activity_id,handle,text,opening_words,opening_shape,above_fold_words,paragraphs,reaction_count",
       has_line_breaks: "is.true",
       order: "activity_id.asc",
       offset: String(offset),
@@ -97,7 +106,65 @@ async function allPosts() {
     out.push(...page);
     if (page.length < 1000) break;
   }
-  return out.filter((p) => SENTINELS.has(p.handle) && (p.text ?? "").trim());
+  return out
+    .filter((p) => SENTINELS.has(p.handle) && (p.text ?? "").trim())
+    .map((p) => ({ ...p, source: "josh_eight", reactions: p.reaction_count ?? null }));
+}
+
+/*
+ * SOURCE B — the content-agent clients, read off disk.
+ *
+ * WHY A SECOND READER RATHER THAN A WIDER FILTER. The SENTINELS gate above is correct and stays:
+ * clause 8.3 names eight, and `scrape-sentinels.mjs` says the same about its own copy — "hardcoded,
+ * not an argument, so a careless run cannot widen the set". These are not Josh's writers and must
+ * never be counted as them, so they arrive through their own door and carry their own label.
+ *
+ * WHY THEY ARE NOT WRITTEN TO `reference_writer_posts`, WHICH WOULD HAVE BEEN EASIER. Three reads
+ * of that table have no handle filter, and each would absorb them silently:
+ *
+ *   - `build-reference-shingles.mjs` builds the borrowed-run index from the whole table. Every
+ *     seven-word run of fourteen other people's clients would become a refusal surface for Josh's
+ *     drafts — and migration 0051 revoked DELETE, so it could not be taken back without a
+ *     migration.
+ *   - `shape-rows.mjs` and `handlers/gate.ts` feed the ninth gate check's target band.
+ *   - `corpusShapeBlock` would go on calling itself "the eight together".
+ *
+ * So this is a derived artefact and nothing else. Measured 2 November: 993 LinkedIn posts cached,
+ * 873 with real line breaks, 14 clients, and 872 of the 873 carrying a reaction count — which is
+ * the mirror image of Josh's corpus, where seven of eight writers have none at all.
+ */
+function contentAgentPosts() {
+  const roots = [
+    join(ROOT, "..", "..", "content-agent", "content-agent", "data", "clients"),
+    "D:/content-agent/content-agent/data/clients",
+  ];
+  const dir = roots.find((d) => existsSync(d));
+  if (!dir) return [];
+
+  const out = [];
+  for (const slug of readdirSync(dir)) {
+    const file = join(dir, slug, "cache", "scrape.json");
+    if (!existsSync(file)) continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(readFileSync(file, "utf8"));
+    } catch {
+      continue; // a half-written cache is not a reason to fail the whole run
+    }
+    for (const post of parsed?.posts?.linkedin ?? []) {
+      const text = String(post?.text ?? "").replace(/\r/g, "");
+      if (!text.trim() || post?.is_reshare) continue;
+      out.push({
+        activity_id: post.url ?? `${slug}:${post.date ?? ""}`,
+        handle: slug,
+        text,
+        source: "content_agent",
+        reactions: typeof post.reactions === "number" ? post.reactions : null,
+        posted_at: post.date ?? null,
+      });
+    }
+  }
+  return out;
 }
 
 /* ── The investment features ──────────────────────────────────────────────────
@@ -150,6 +217,50 @@ const EMOTION = new RegExp(
   "i",
 );
 
+/* ── His own standard, applied before anything enters the corpus ──────────────
+ *
+ * WHY A FILTER AT ALL. The widest-reaching opening in the content-agent store is a bait-and-switch:
+ * a marathon time, a promise of three business lessons, then "No, I'm joking haha." Josh's hooks
+ * section has exactly two nevers, and one of them is **No bait** — "Deliberately provoking a
+ * reaction to lift reach is effective and unwanted." Ranking 2,000 openings by engagement and
+ * learning from the top would teach the drafter the one move his own rules forbid outright.
+ *
+ * WHY IT IS HIS RULES AND NOT A NEW DETECTOR. `scan()` already encodes the constructions his
+ * library rules out, it is already calibrated against the writers he chose, and a second opinion
+ * about what counts as slop is the failure this repository keeps finding. The only thing added here
+ * is the question-opening rule, which is his and is about openings specifically.
+ *
+ * WHAT IS REPORTED. The count and a sample, in the artefact. A filter nobody has read is a filter
+ * nobody can argue with, and on 2 November reading the sample is what showed the bullet rule was
+ * still refusing numbered tiers.
+ */
+function rejectReason(line1) {
+  if (!line1.trim()) return { why: "empty first line", matched: "" };
+  // His rule, and the only one that is about the opening rather than the prose.
+  if (/\?\s*$/.test(line1.trim())) {
+    return { why: "opens on a question (his rule, hooks section)", matched: "?" };
+  }
+
+  const blocking = scan(line1).findings.filter(
+    (f) => f.blocking !== false && HIGH_CONFIDENCE.has(f.rule),
+  );
+  if (blocking.length) {
+    /*
+     * The MATCHED STRING travels with the reason, and it has to.
+     *
+     * The first version returned the rule name alone, so the printed sample read "2C-8: formulaic
+     * reveal" beside a line whose first 76 characters contained nothing of the sort — the trigger
+     * was further along a first line that ran to 55 words. A sample you cannot check is a count
+     * wearing a sample's clothes, which is the thing reading it was supposed to prevent.
+     */
+    return {
+      why: `${blocking[0].rule}: ${blocking[0].name.toLowerCase()}`,
+      matched: String(blocking[0].matched ?? ""),
+    };
+  }
+  return null;
+}
+
 /* ── Measure one post ─────────────────────────────────────────────────────── */
 
 function measureOne(p) {
@@ -185,13 +296,35 @@ function measureOne(p) {
   const emotion = EMOTION.test(line1);
   const invCount = [specific, stakes, emotion].filter(Boolean).length;
 
+  /*
+   * HOW MUCH OF THE FOLD THE HOOK ITSELF EATS — the measurement nothing in this system had.
+   *
+   * A reader sees about three lines before "see more". `above_fold_words` counts the first three
+   * lines AS WRITTEN; `hook_above_fold` asks whether the first SENTENCE fits. Neither answers the
+   * thing Josh actually complained about, which is that the opening leaves nothing visible after
+   * it: "it's just a wall of text… there's nothing here."
+   *
+   * So: render line one on its own and count the lines it draws. One or two leaves room for
+   * something else above the cut; three fills it; four or more means the hook does not fit above
+   * the fold at all.
+   *
+   * INHERITS THE UNCALIBRATED CONSTANTS, and the output says so. FOLD_CHARS_PER_LINE is 42 and
+   * FOLD_LINES is 3, both flagged PROVISIONAL in shape.ts and never fitted against a real phone.
+   * The direction is worth acting on; the number is not a measurement.
+   */
+  const foldLinesUsed = measureShape(line1).rendered_lines;
+
   return {
     handle: p.handle,
+    source: p.source ?? "josh_eight",
+    reactions: typeof p.reactions === "number" ? p.reactions : null,
     shape: p.opening_shape ?? openingShape(line1),
+    line1,
     line1_words: typeof p.opening_words === "number" ? p.opening_words : words(line1),
     line2_words: words(line2),
     above_fold_words: shape.above_fold_words,
     hook_above_fold: shape.hook_above_fold,
+    fold_lines_used: foldLinesUsed,
     ends_on_colon: /:\s*$/.test(line1),
     names_reader: READER.test(line1),
     figure_at: figureAt,
@@ -206,6 +339,79 @@ function measureOne(p) {
 /* ── Aggregate ────────────────────────────────────────────────────────────── */
 
 const pct = (n, of) => (of ? +((n / of) * 100).toFixed(1) : 0);
+
+/**
+ * How many of the three fold lines the hook uses, as a distribution.
+ *
+ * `fills_or_overflows` is the headline: the share of openings that leave nothing visible above the
+ * cut. Measured 2 November across the content-agent corpus it was 35%.
+ */
+function foldUse(rows) {
+  const b = { one: 0, two: 0, three: 0, four_or_more: 0 };
+  for (const r of rows) {
+    if (r.fold_lines_used <= 1) b.one++;
+    else if (r.fold_lines_used === 2) b.two++;
+    else if (r.fold_lines_used === 3) b.three++;
+    else b.four_or_more++;
+  }
+  const n = rows.length;
+  return {
+    lines_the_hook_uses: {
+      one: pct(b.one, n),
+      two: pct(b.two, n),
+      three: pct(b.three, n),
+      four_or_more: pct(b.four_or_more, n),
+    },
+    leaves_room_pct: pct(b.one + b.two, n),
+    fills_or_overflows_pct: pct(b.three + b.four_or_more, n),
+  };
+}
+
+/**
+ * Reactions by fold-use bucket, each post scored against its OWN author's median.
+ *
+ * Normalised within author because follower counts differ by two orders of magnitude across these
+ * accounts, and an un-normalised median would simply rank the biggest account's habits first.
+ * Authors with fewer than 15 measured posts are dropped: a median of six posts is not one.
+ *
+ * REPORTED, NEVER TURNED INTO A RULE. Migration 0004 is explicit about why — "A system optimising
+ * freely against LinkedIn engagement finds its way to engagement bait, because that is what the
+ * metric rewards." This ranks a swipe file for a human to read and goes no further.
+ */
+function engagementByFoldUse(rows) {
+  const byAuthor = {};
+  for (const r of rows) {
+    if (typeof r.reactions !== "number" || r.reactions <= 0) continue;
+    (byAuthor[r.handle] ??= []).push(r);
+  }
+  const buckets = {};
+  let authors = 0;
+  for (const rs of Object.values(byAuthor)) {
+    if (rs.length < 15) continue;
+    authors++;
+    const med = median(rs.map((r) => r.reactions)) || 1;
+    for (const r of rs) {
+      const k = r.fold_lines_used <= 1 ? "one"
+        : r.fold_lines_used === 2 ? "two"
+        : r.fold_lines_used === 3 ? "three"
+        : "four_or_more";
+      (buckets[k] ??= []).push(r.reactions / med);
+    }
+  }
+  if (!authors) return null;
+  const out = { authors, means: "1.00 is that author's own median post." };
+  for (const k of ["one", "two", "three", "four_or_more"]) {
+    if (buckets[k]?.length) {
+      out[k] = { posts: buckets[k].length, relative_reactions: +median(buckets[k]).toFixed(2) };
+    }
+  }
+  out.how_much_to_trust_it =
+    "SUGGESTIVE, NOT A MEASUREMENT. The buckets rest on FOLD_CHARS_PER_LINE = 42 and FOLD_LINES = " +
+    "3, both flagged PROVISIONAL in shape.ts and never fitted against a real phone. The spread is " +
+    "about 20% and the direction is worth acting on; the figure is not something to quote at Josh " +
+    "as a finding.";
+  return out;
+}
 const p90 = (xs) => {
   if (!xs.length) return null;
   const s = [...xs].sort((a, b) => a - b);
@@ -225,6 +431,8 @@ function aggregate(rows) {
         posts: rs.length,
         share_pct: pct(rs.length, rows.length),
         line_one_words: { median: median(l1), p90: p90(l1) },
+        // What the hook costs of the three lines a reader sees. New on 2 November.
+        fold: foldUse(rs),
         hook_clears_the_fold_pct: pct(rs.filter((r) => r.hook_above_fold).length, rs.length),
         names_the_reader_pct: pct(rs.filter((r) => r.names_reader).length, rs.length),
         ends_on_a_colon_pct: pct(rs.filter((r) => r.ends_on_colon).length, rs.length),
@@ -253,11 +461,64 @@ function aggregate(rows) {
       means:
         "Only posts that kept their line breaks. The scraping console returns most posts as one " +
         "unbroken line, and counting those would report the scraper as a habit of the writer.",
+      /*
+       * TWO CORPORA, AND THEY ARE NOT THE SAME THING.
+       *
+       * `josh_eight` are the writers Josh chose for their storytelling structure. `content_agent`
+       * are fourteen other people's clients, read from a sibling repo — a different population,
+       * some of it agency personal-brand content, and NOT his roster. Every figure below that is
+       * split says which it came from, because a number labelled "the writers he chose" that
+       * silently includes fourteen strangers is the standard changing without him.
+       */
+      by_source: Object.fromEntries(
+        ["josh_eight", "content_agent"].map((s) => {
+          const rs = rows.filter((r) => r.source === s);
+          return [s, {
+            posts: rs.length,
+            accounts: new Set(rs.map((r) => r.handle)).size,
+            with_reactions: rs.filter((r) => typeof r.reactions === "number" && r.reactions > 0).length,
+          }];
+        }),
+      ),
+      whose_they_are: {
+        josh_eight:
+          "The eight Josh chose, for their storytelling structure. THIS IS THE STANDARD. Where the " +
+          "two corpora disagree about what a good opening looks like, these win. Engagement exists " +
+          "for mattjbarker1 only.",
+        content_agent:
+          "Clients of the sibling content-agent project, read from its on-disk caches. Not Josh's " +
+          "writers and never to be reported as them. Their value is volume, fourteen more voices, " +
+          "and engagement on almost every post — which his own corpus does not have.",
+      },
+      /*
+       * WHAT SOURCE B IS NOT GOOD FOR, found by reading it rather than counting it.
+       *
+       * These are working B2B creators, not a reference library chosen for structure, and some of
+       * what they post is personal-brand marketing: listicle-and-arrow openings, hiring ads run as
+       * content, lifestyle posts. His rules catch the constructions they name — a question opening,
+       * a throat-clear, a formulaic reveal — and they do NOT catch "If you run GTM, this one is for
+       * you" with an arrow after it, because nothing in his library bans that shape.
+       *
+       * Deliberately not fixed by writing a bait detector. His library is the standard and a second
+       * opinion about what slop is would be two standards. The honest handling is to say so here,
+       * keep the corpora separable, and let the brief lean on source A for what good looks like.
+       */
+      source_b_caveat:
+        "Working creators, not a structure reference. Some of it is personal-brand marketing that " +
+        "his rules do not name and therefore do not exclude. Use source B for volume, for the fold " +
+        "distribution and for engagement evidence; use source A for what a good opening is.",
     },
     what_these_are:
       "STRUCTURE ONLY. No sentence from any post is in this file, and the run refuses to write if " +
       "one is. Take the shape, never the words (8.3) — and create_draft refuses any draft sharing " +
       "a seven-word run with a stored reference post, so a borrowed opening would not file anyway.",
+    the_number_claim_caveat:
+      "`number_claim` means a number ABOUT THE WRITER, not any number. openingShape requires a " +
+      "figure AND a first-person pronoun in the same line (scripts/lib/prose.mjs), so \"3,941 " +
+      "practices, read one at a time off a vendor's booking page\" classifies as `statement` " +
+      "despite leading on a figure. Found 2 November by running candidate hooks through the " +
+      "classifier. It is not a bug — the distinction is real and useful — but a drafter aiming at " +
+      "`number_claim` has to put himself in the line, and nothing said so before.",
     the_statement_caveat:
       "`statement` is the largest bucket and is not a shape. It is openingShape()'s fallthrough: " +
       "the openings that matched none of the other six (scripts/lib/prose.mjs:88). Aiming at it " +
@@ -306,6 +567,19 @@ function aggregate(rows) {
         emotion: pct(rows.filter((r) => r.emotion).length, rows.length),
       },
       names_the_reader_pct: pct(rows.filter((r) => r.names_reader).length, rows.length),
+      /*
+       * THE HEADLINE FINDING, and the reason this corpus was widened at all.
+       *
+       * Josh, 30 October, pasting a draft into a preview tool: "it's just a wall of text… there's
+       * nothing here." Nothing in this system measured how much of the fold the OPENING consumes —
+       * `above_fold_words` counts the first three lines as written, `hook_above_fold` asks whether
+       * the first sentence fits, and neither says whether anything is left visible after it.
+       *
+       * Measured across the content-agent corpus on 2 November: 35% of openings fill the three
+       * lines or overflow them, so a third of posts show their reader the hook and nothing else.
+       */
+      fold: foldUse(rows),
+      reactions_by_fold_use: engagementByFoldUse(rows),
       hook_clears_the_fold_pct: pct(rows.filter((r) => r.hook_above_fold).length, rows.length),
       first_figure_after_line_one_pct: pct(rows.filter((r) => r.figure_at === "later").length, rows.length),
       has_a_marked_turn_pct: pct(rows.filter((r) => r.turn_at !== null).length, rows.length),
@@ -328,12 +602,55 @@ function aggregate(rows) {
 /* ── Run ──────────────────────────────────────────────────────────────────── */
 
 console.log("\n  Reading the reference corpus...");
-const posts = await allPosts();
-console.log("  " + posts.length + " posts with line breaks, across " +
-  new Set(posts.map((p) => p.handle)).size + " writers");
+const joshEight = await allPosts();
+console.log("  source A — the eight he chose: " + joshEight.length + " posts, " +
+  new Set(joshEight.map((p) => p.handle)).size + " writers");
 
-const rows = posts.map(measureOne);
+const contentAgent = contentAgentPosts();
+const caShaped = contentAgent.filter((p) => p.text.includes("\n"));
+console.log("  source B — content-agent     : " + caShaped.length + " posts with line breaks, " +
+  new Set(caShaped.map((p) => p.handle)).size + " clients" +
+  (contentAgent.length === 0 ? "  (cache not found — source A only)" : ""));
+
+/*
+ * Only posts that kept their line breaks, for both sources and the same reason: a post that arrived
+ * as one unbroken line would report the scraper's behaviour as a habit of the writer.
+ */
+const posts = [...joshEight, ...caShaped];
+
+/*
+ * HIS OWN STANDARD, BEFORE ANYTHING IS COUNTED. See rejectReason. Both the count and a sample go
+ * into the artefact, so the line being drawn can be read rather than trusted.
+ */
+const rejected = [];
+const kept = [];
+for (const p of posts) {
+  const line1 = (p.text ?? "").replace(/\r/g, "").split("\n").map((l) => l.trim()).filter(Boolean)[0] ?? "";
+  const verdict = rejectReason(line1);
+  if (verdict) {
+    rejected.push({ source: p.source, handle: p.handle, why: verdict.why, matched: verdict.matched, line1 });
+  } else kept.push(p);
+}
+console.log("  excluded by his own rules    : " + rejected.length +
+  " of " + posts.length + " (" + ((100 * rejected.length) / posts.length).toFixed(1) + "%)");
+
+const rows = kept.map(measureOne);
 const next = aggregate(rows);
+next.excluded_by_his_rules = {
+  count: rejected.length,
+  of: posts.length,
+  why_a_filter:
+    "His hooks section has two nevers and one of them is No bait. The widest-reaching opening in " +
+    "the content-agent store is a bait-and-switch — a marathon time, three promised business " +
+    "lessons, then \"No, I'm joking haha.\" Ranking by engagement and learning from the top would " +
+    "teach the drafter the one move his rules forbid outright.",
+  what_judged_it:
+    "scan() from mcp-server/aitells.mjs, which encodes the constructions his library rules out, " +
+    "plus his rule against opening on a question. Not a second opinion about what slop is.",
+  by_reason: Object.entries(
+    rejected.reduce((a, r) => ((a[r.why] = (a[r.why] ?? 0) + 1), a), {}),
+  ).sort((a, b) => b[1] - a[1]),
+};
 
 console.log("\n  LINE ONE, by opening shape:\n");
 console.log("    shape             posts  median   p90  reader   2+inv  figure after L1");
@@ -359,8 +676,53 @@ console.log("    investment: specificity " + aw.investment_components_pct.specif
   "%, stakes " + aw.investment_components_pct.stakes +
   "%, emotion " + aw.investment_components_pct.emotion +
   "%  -> two or more " + aw.two_or_more_investment_elements_pct + "%");
+const f = aw.fold;
+console.log("\n  WHAT THE HOOK COSTS OF THE FOLD — the measurement nothing had:");
+console.log("    the hook alone uses  1 line " + f.lines_the_hook_uses.one +
+  "%  2 lines " + f.lines_the_hook_uses.two +
+  "%  3 lines " + f.lines_the_hook_uses.three +
+  "%  4+ " + f.lines_the_hook_uses.four_or_more + "%");
+console.log("    leaves room for something else above the cut: " + f.leaves_room_pct + "%");
+console.log("    FILLS OR OVERFLOWS the three lines         : " + f.fills_or_overflows_pct +
+  "%   <- his \"wall of text\", measured");
+if (aw.reactions_by_fold_use) {
+  const r = aw.reactions_by_fold_use;
+  console.log("    reactions vs that, within author (" + r.authors + " authors, 1.00 = their median):");
+  console.log("      " + ["one", "two", "three", "four_or_more"]
+    .filter((k) => r[k])
+    .map((k) => k.replace("_or_more", "+") + " " + r[k].relative_reactions)
+    .join("   ") + "   SUGGESTIVE ONLY — uncalibrated fold constants");
+}
+
 console.log("\n    NOTE: two-or-more at " + aw.two_or_more_investment_elements_pct +
   "% means an investment floor would fail most of the writers he chose. Reported, never enforced.");
+
+/*
+ * A SAMPLE OF WHAT HIS RULES EXCLUDED, printed and never written.
+ *
+ * The plan says to read the sample by eye, and on 2 November reading one is what showed the bullet
+ * rule was still refusing numbered tiers. But these are real openings by real people: putting them
+ * in the artefact would be the swipe file this file exists to refuse, and the leak guard below
+ * would stop it anyway. So they go to the terminal for whoever ran the script.
+ */
+if (rejected.length) {
+  console.log("\n  A SAMPLE OF WHAT HIS RULES EXCLUDED — read it, do not just count it:\n");
+  // Up to two per REASON rather than every nth row: an even sample of 190 rejections is eight
+  // examples of whichever reason is commonest, which tells you nothing about the other reasons.
+  const seen = {};
+  for (const r of rejected) {
+    seen[r.why] ??= [];
+    if (seen[r.why].length < 2) seen[r.why].push(r);
+  }
+  for (const [why, items] of Object.entries(seen)) {
+    console.log("    " + why + "  (" + next.excluded_by_his_rules.by_reason
+      .find(([w]) => w === why)?.[1] + " in all)");
+    for (const r of items) {
+      console.log("      matched " + JSON.stringify(r.matched));
+      console.log("        " + r.line1.slice(0, 84).replace(/\s+/g, " "));
+    }
+  }
+}
 
 /*
  * THE LEAK GUARD. Same test as sentinel-refresh.mjs:522, and the reason clause 8.3 is mechanical

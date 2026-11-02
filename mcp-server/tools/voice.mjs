@@ -46,6 +46,9 @@ import sentinels from "../../data/josh/sentinels/latest.json" with { type: "json
  * write if any post's text reaches it, so nothing here can be quoted into a draft.
  */
 import hooks from "../../data/josh/hooks/latest.json" with { type: "json" };
+// The first line of a draft, spelled once. Shared with the own-words check so the two cannot
+// disagree about what an opening is.
+import { firstLine } from "../self-echo.mjs";
 import law from "../../data/josh/law/law.json" with { type: "json" };
 
 /** The four whose structure matches what his own rules describe. See resources.mjs for why. */
@@ -1170,6 +1173,94 @@ export async function corpusShapeBlock(db) {
 }
 
 export const sentinelTools = [
+  {
+    name: "get_hook_brief",
+    config: {
+      title: "What a first line has to do, measured",
+      description:
+        "Everything needed to WRITE an opening rather than judge one: how long first lines run by " +
+        "shape, how much of the three visible lines the hook itself eats, how often the finding is " +
+        "withheld past line one, and the openings Josh has already used so a new one does not " +
+        "repeat them. Measurements only — no sentences from anybody's posts. Use it with the " +
+        "josh-hook-lab skill when he wants options, and read the hooks library section alongside " +
+        "it, because that section is the standard and this is only what the corpus does.",
+      inputSchema: {
+        moment_id: z.number().int().optional().describe(
+          "Narrows the recent-openings list to everything EXCEPT this moment's own drafts, so a " +
+            "redraft is not warned about repeating itself. Omit it and every recent opening is " +
+            "returned.",
+        ),
+      },
+    },
+    /*
+     * A TOOL RATHER THAN A FILE, and that is the whole reason it exists.
+     *
+     * Josh has never used a clone — every session he has run went through the hosted connector. A
+     * skill that read data/josh/hooks/latest.json would work on this laptop and do nothing for
+     * him, which is the shape of defect this repository keeps finding. The visual skills already
+     * solve it the right way by fetching `visual_brand`, and this follows them.
+     */
+    handler: async (args, { db }) => {
+      const aw = hooks?.all_writers ?? {};
+      const recent = await (async () => {
+        try {
+          const rows = await db.select("drafts", {
+            select: "id,moment_id,body",
+            order: "id.desc",
+            limit: "60",
+          });
+          return (rows ?? [])
+            .filter((r) => !args.moment_id || Number(r.moment_id) !== Number(args.moment_id))
+            .map((r) => firstLine(r.body))
+            .filter(Boolean);
+        } catch {
+          return null; // advisory; a brief is not worth failing over a read
+        }
+      })();
+
+      return {
+        read_the_standard_first: {
+          section: "hooks",
+          how: 'get_library with key: "hooks"',
+          why: "3,677 characters of his own rules, including the two nevers and the three ways a " +
+            "curiosity gap fails. Everything below is what a corpus DOES; that section is what he " +
+            "has decided. Where they disagree, he wins (12.10).",
+        },
+        line_one: {
+          by_shape: (hooks?.shapes ?? []).map((s) => ({
+            shape: s.shape,
+            posts: s.posts,
+            words: s.line_one_words,
+            fold: s.fold,
+            first_figure_after_line_one_pct: s.first_figure_arrives?.later ?? null,
+            names_the_reader_pct: s.names_the_reader_pct,
+          })),
+          across_all: aw.line_one_words ?? null,
+        },
+        /*
+         * The measurement his complaint was actually about. "It's just a wall of text… there's
+         * nothing here" — 30 October, reading his own post in a preview tool.
+         */
+        what_the_hook_costs_of_the_fold: aw.fold ?? null,
+        reactions_by_fold_use: aw.reactions_by_fold_use ?? null,
+        withholding: {
+          first_figure_after_line_one_pct: aw.first_figure_after_line_one_pct ?? null,
+          means:
+            "The share of posts whose first digit arrives after line one. That is the curiosity " +
+            "gap as his hooks section defines it: investment first, then the cut.",
+        },
+        openings_he_has_used: recent === null
+          ? { checked: false, why: "The read of his earlier drafts failed, so nothing was compared." }
+          : { checked: recent.length, lines: recent },
+        corpora: hooks?.basis ?? null,
+        not_a_quota:
+          "None of this is a target. The corpus says what these writers do; it cannot say what " +
+          "this post needs. An investment-element floor was proposed on 2 November and the corpus " +
+          "refused it — the eight carry two or more in 8.4% of their openings.",
+      };
+    },
+  },
+
   {
     name: "get_sentinels",
     config: {

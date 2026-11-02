@@ -78,7 +78,7 @@ Postgres.
 
 ## The skills
 
-Twelve, in `.claude/skills/`. Use them rather than writing from instinct.
+Thirteen, in `.claude/skills/`. Use them rather than writing from instinct.
 
 **The words:**
 
@@ -86,8 +86,12 @@ Twelve, in `.claude/skills/`. Use them rather than writing from instinct.
 - **draft-post** — writing a post from an idea, or redrafting after a rejection.
 - **gate-check** — every check the brief hands back, judged on its own rubric, adversarially.
 - **josh-hook** — the first line, added 2 November. The only line most readers see and the only
-  one `hook_opens_loop` judges. It carries what the eight writers measurably do with an opening,
-  and the two detectors that were refusing the hook he asked for out loud.
+  one `hook_opens_loop` judges. It carries what the writers measurably do with an opening, and the
+  two detectors that were refusing the hook he asked for out loud. It JUDGES one line.
+- **josh-hook-lab** — the same subject, the opposite job: six candidate openings in different
+  measured shapes, each shown as it will appear above the fold, each checked and ranked, and then
+  it stops. For "give me some hooks for this", which is what he actually asked for on 30 October —
+  fix it before the gate rather than after. It never files a draft.
 - **barker-audit** — only when he asks why a draft feels flat structurally. It reports the
   measured shape against the draft's and stops; it is not a tenth check and it never rewrites.
 - **josh-comment** — comments on other people's posts, added 2 November after he asked for them on

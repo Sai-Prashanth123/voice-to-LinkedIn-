@@ -742,6 +742,23 @@ export const measureTools = [
         shape: {
           paragraphs: m.paragraphs,
           lines: m.lines,
+          /*
+           * THE FIRST LINE, ON ITS OWN — surfaced 2 November, after a skill was written telling a
+           * reader to use `shape.opening_words` and the field came back `undefined`.
+           *
+           * `measureShape` has returned it all along and `measure_draft` never printed it. That is
+           * the third time in two days that a value nothing reads has shipped from this work, and
+           * the only reason it was caught is that six candidate hooks were actually run through the
+           * tool instead of the tool being read.
+           *
+           * It matters more than the three-line count for a hook: the hook check reads only the
+           * first line, and 39% of measured openings fill or overflow the three lines a reader
+           * sees before "see more".
+           */
+          opening_words: m.opening_words,
+          opening_words_is: "The first line alone, which is the only line hook_opens_loop judges " +
+            "and usually the only one a reader sees. The writers he chose run a median of 12 and " +
+            "nine in ten under 30.",
           above_fold_words: m.above_fold_words,
           above_fold_words_is: "AUTHORED. The words in the first three lines AS WRITTEN. This is " +
             "the number the drafting brief's target is built from and the one the ninth gate " +

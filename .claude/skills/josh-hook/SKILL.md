@@ -66,10 +66,18 @@ writing two days earlier.
 If you write a strong hook and the check fails it, say so in those terms rather than rewriting a
 good line. The rubric carries a dated note conceding it misreads its own rule.
 
+## When he wants options rather than a verdict
+
+This skill judges one line. If he says "give me some hooks for this" — or you are about to rewrite
+an opening he will rewrite again — use **josh-hook-lab** instead. It writes six in different
+measured shapes, shows each as it will appear above the fold, and lets him pick.
+
 ## The measured floor
 
-From `data/josh/hooks/latest.json`, derived across the reference posts by
-`scripts/build-hook-patterns.mjs`. **Do not copy these numbers into a draft or into this file's
+Fetch it with `get_hook_brief` — do not read the file, because Josh works through the hosted
+connector and never from a clone. It is derived by `scripts/build-hook-patterns.mjs` across two
+corpora: the eight he chose, which are the standard, and a second set of B2B creators which adds
+volume and engagement his own corpus does not have. Every figure says which it came from. **Do not copy these numbers into a draft or into this file's
 head — re-read them, because they move when the corpus is re-measured.**
 
 - **Length.** Their first lines run a median of about eleven words and nine in ten are under about

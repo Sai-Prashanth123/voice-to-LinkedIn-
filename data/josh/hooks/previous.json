@@ -1,0 +1,482 @@
+{
+  "measured_at": "2026-11-02T10:53:57.359Z",
+  "basis": {
+    "posts": 2522,
+    "writers": 22,
+    "means": "Only posts that kept their line breaks. The scraping console returns most posts as one unbroken line, and counting those would report the scraper as a habit of the writer.",
+    "by_source": {
+      "josh_eight": {
+        "posts": 1682,
+        "accounts": 8,
+        "with_reactions": 231
+      },
+      "content_agent": {
+        "posts": 840,
+        "accounts": 14,
+        "with_reactions": 839
+      }
+    },
+    "whose_they_are": {
+      "josh_eight": "The eight Josh chose, for their storytelling structure. THIS IS THE STANDARD. Where the two corpora disagree about what a good opening looks like, these win. Engagement exists for mattjbarker1 only.",
+      "content_agent": "Clients of the sibling content-agent project, read from its on-disk caches. Not Josh's writers and never to be reported as them. Their value is volume, fourteen more voices, and engagement on almost every post — which his own corpus does not have."
+    },
+    "source_b_caveat": "Working creators, not a structure reference. Some of it is personal-brand marketing that his rules do not name and therefore do not exclude. Use source B for volume, for the fold distribution and for engagement evidence; use source A for what a good opening is."
+  },
+  "what_these_are": "STRUCTURE ONLY. No sentence from any post is in this file, and the run refuses to write if one is. Take the shape, never the words (8.3) — and create_draft refuses any draft sharing a seven-word run with a stored reference post, so a borrowed opening would not file anyway.",
+  "the_statement_caveat": "`statement` is the largest bucket and is not a shape. It is openingShape()'s fallthrough: the openings that matched none of the other six (scripts/lib/prose.mjs:88). Aiming at it means aiming at none of the above, which is not an instruction.",
+  "approximations": "line_one_words, share_pct, hook_clears_the_fold_pct and first_figure_arrives rest on stored columns counted by scripts/lib/prose.mjs. names_the_reader_pct and investment_elements_in_line_one are REGEX APPROXIMATIONS of prose judgements: they see form, never meaning. A line can name real stakes in words no list holds. Report them as estimates or not at all.",
+  "definitions": {
+    "names_the_reader": "A job title, a team noun or a direct address in line one. The hooks section calls this the highest-value tool available. Cannot tell a department from a noun; misses any title not on the list.",
+    "investment_elements": "How many of specificity, stakes and emotion line one carries, by word list. The hooks section says a hook missing all three cannot be rescued by a better cut. Specificity is a figure or a non-initial capitalised word; the other two are word lists.",
+    "first_figure_arrives": "Where the post's first digit appears. A post whose figures all arrive after line one has withheld something. Blind to a finding that is not a number; counts a date as a figure."
+  },
+  "shapes": [
+    {
+      "shape": "statement",
+      "posts": 1288,
+      "share_pct": 51.1,
+      "line_one_words": {
+        "median": 11,
+        "p90": 28
+      },
+      "fold": {
+        "lines_the_hook_uses": {
+          "one": 26,
+          "two": 39,
+          "three": 15.8,
+          "four_or_more": 19.2
+        },
+        "leaves_room_pct": 65,
+        "fills_or_overflows_pct": 35
+      },
+      "hook_clears_the_fold_pct": 61.4,
+      "names_the_reader_pct": 16.5,
+      "ends_on_a_colon_pct": 0,
+      "first_figure_arrives": {
+        "line_one": 30.4,
+        "line_two": 19.8,
+        "later": 33.1,
+        "no_figure": 16.7
+      },
+      "investment_elements_in_line_one": {
+        "none": 27.6,
+        "one": 65.1,
+        "two_or_more": 7.4
+      }
+    },
+    {
+      "shape": "number_claim",
+      "posts": 642,
+      "share_pct": 25.5,
+      "line_one_words": {
+        "median": 16,
+        "p90": 34
+      },
+      "fold": {
+        "lines_the_hook_uses": {
+          "one": 23.7,
+          "two": 27.3,
+          "three": 14.3,
+          "four_or_more": 34.7
+        },
+        "leaves_room_pct": 50.9,
+        "fills_or_overflows_pct": 49.1
+      },
+      "hook_clears_the_fold_pct": 66.7,
+      "names_the_reader_pct": 15.4,
+      "ends_on_a_colon_pct": 23.7,
+      "first_figure_arrives": {
+        "line_one": 100,
+        "line_two": 0,
+        "later": 0,
+        "no_figure": 0
+      },
+      "investment_elements_in_line_one": {
+        "none": 0,
+        "one": 88.8,
+        "two_or_more": 11.2
+      }
+    },
+    {
+      "shape": "first_person",
+      "posts": 215,
+      "share_pct": 8.5,
+      "line_one_words": {
+        "median": 13,
+        "p90": 30
+      },
+      "fold": {
+        "lines_the_hook_uses": {
+          "one": 24.7,
+          "two": 32.6,
+          "three": 17.7,
+          "four_or_more": 25.1
+        },
+        "leaves_room_pct": 57.2,
+        "fills_or_overflows_pct": 42.8
+      },
+      "hook_clears_the_fold_pct": 66,
+      "names_the_reader_pct": 10.7,
+      "ends_on_a_colon_pct": 11.2,
+      "first_figure_arrives": {
+        "line_one": 6,
+        "line_two": 18.1,
+        "later": 57.7,
+        "no_figure": 18.1
+      },
+      "investment_elements_in_line_one": {
+        "none": 33.5,
+        "one": 60.5,
+        "two_or_more": 6
+      }
+    },
+    {
+      "shape": "colon_setup",
+      "posts": 200,
+      "share_pct": 7.9,
+      "line_one_words": {
+        "median": 9,
+        "p90": 24
+      },
+      "fold": {
+        "lines_the_hook_uses": {
+          "one": 35,
+          "two": 40.5,
+          "three": 12,
+          "four_or_more": 12.5
+        },
+        "leaves_room_pct": 75.5,
+        "fills_or_overflows_pct": 24.5
+      },
+      "hook_clears_the_fold_pct": 31.5,
+      "names_the_reader_pct": 20.5,
+      "ends_on_a_colon_pct": 100,
+      "first_figure_arrives": {
+        "line_one": 43.5,
+        "line_two": 19,
+        "later": 30.5,
+        "no_figure": 7
+      },
+      "investment_elements_in_line_one": {
+        "none": 25,
+        "one": 70,
+        "two_or_more": 5
+      }
+    },
+    {
+      "shape": "consensus_claim",
+      "posts": 92,
+      "share_pct": 3.6,
+      "line_one_words": {
+        "median": 11,
+        "p90": 29
+      },
+      "fold": {
+        "lines_the_hook_uses": {
+          "one": 20.7,
+          "two": 47.8,
+          "three": 12,
+          "four_or_more": 19.6
+        },
+        "leaves_room_pct": 68.5,
+        "fills_or_overflows_pct": 31.5
+      },
+      "hook_clears_the_fold_pct": 79.3,
+      "names_the_reader_pct": 14.1,
+      "ends_on_a_colon_pct": 9.8,
+      "first_figure_arrives": {
+        "line_one": 16.3,
+        "line_two": 23.9,
+        "later": 42.4,
+        "no_figure": 17.4
+      },
+      "investment_elements_in_line_one": {
+        "none": 37,
+        "one": 47.8,
+        "two_or_more": 15.2
+      }
+    },
+    {
+      "shape": "time_anchored",
+      "posts": 85,
+      "share_pct": 3.4,
+      "line_one_words": {
+        "median": 21,
+        "p90": 35
+      },
+      "fold": {
+        "lines_the_hook_uses": {
+          "one": 4.7,
+          "two": 29.4,
+          "three": 17.6,
+          "four_or_more": 48.2
+        },
+        "leaves_room_pct": 34.1,
+        "fills_or_overflows_pct": 65.9
+      },
+      "hook_clears_the_fold_pct": 69.4,
+      "names_the_reader_pct": 23.5,
+      "ends_on_a_colon_pct": 38.8,
+      "first_figure_arrives": {
+        "line_one": 69.4,
+        "line_two": 10.6,
+        "later": 17.6,
+        "no_figure": 2.4
+      },
+      "investment_elements_in_line_one": {
+        "none": 5.9,
+        "one": 83.5,
+        "two_or_more": 10.6
+      }
+    }
+  ],
+  "all_writers": {
+    "line_one_words": {
+      "median": 12,
+      "p90": 30
+    },
+    "two_or_more_investment_elements_pct": 8.4,
+    "investment_components_pct": {
+      "specificity": 74.9,
+      "stakes": 10.3,
+      "emotion": 3
+    },
+    "names_the_reader_pct": 16.2,
+    "fold": {
+      "lines_the_hook_uses": {
+        "one": 25.1,
+        "two": 35.6,
+        "three": 15.2,
+        "four_or_more": 24.1
+      },
+      "leaves_room_pct": 60.7,
+      "fills_or_overflows_pct": 39.3
+    },
+    "reactions_by_fold_use": {
+      "authors": 15,
+      "means": "1.00 is that author's own median post.",
+      "one": {
+        "posts": 157,
+        "relative_reactions": 1.1
+      },
+      "two": {
+        "posts": 479,
+        "relative_reactions": 1
+      },
+      "three": {
+        "posts": 202,
+        "relative_reactions": 0.9
+      },
+      "four_or_more": {
+        "posts": 232,
+        "relative_reactions": 0.9
+      },
+      "how_much_to_trust_it": "SUGGESTIVE, NOT A MEASUREMENT. The buckets rest on FOLD_CHARS_PER_LINE = 42 and FOLD_LINES = 3, both flagged PROVISIONAL in shape.ts and never fitted against a real phone. The spread is about 20% and the direction is worth acting on; the figure is not something to quote at Josh as a finding."
+    },
+    "hook_clears_the_fold_pct": 61.7,
+    "first_figure_after_line_one_pct": 26.4,
+    "has_a_marked_turn_pct": 44.4
+  },
+  "per_writer": {
+    "adam-treboutat": {
+      "posts": 213,
+      "line_one_words_median": 7,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 8.5,
+      "two_or_more_investment_elements_pct": 6.1,
+      "has_a_marked_turn_pct": 33.8
+    },
+    "alex-vacca": {
+      "posts": 101,
+      "line_one_words_median": 13,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 17.8,
+      "two_or_more_investment_elements_pct": 8.9,
+      "has_a_marked_turn_pct": 55.4
+    },
+    "amangrowth": {
+      "posts": 224,
+      "line_one_words_median": 8,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 16.1,
+      "two_or_more_investment_elements_pct": 5.8,
+      "has_a_marked_turn_pct": 33
+    },
+    "anthony-viviani": {
+      "posts": 23,
+      "line_one_words_median": 15,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 26.1,
+      "two_or_more_investment_elements_pct": 17.4,
+      "has_a_marked_turn_pct": 4.3
+    },
+    "cem-baris": {
+      "posts": 40,
+      "line_one_words_median": 12,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 12.5,
+      "two_or_more_investment_elements_pct": 10,
+      "has_a_marked_turn_pct": 20
+    },
+    "curtishowland": {
+      "posts": 204,
+      "line_one_words_median": 7,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 4.9,
+      "two_or_more_investment_elements_pct": 2.5,
+      "has_a_marked_turn_pct": 32.4
+    },
+    "demandjen1": {
+      "posts": 212,
+      "line_one_words_median": 21,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 26.9,
+      "two_or_more_investment_elements_pct": 13.2,
+      "has_a_marked_turn_pct": 63.2
+    },
+    "gil-allouche": {
+      "posts": 55,
+      "line_one_words_median": 17,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 21.8,
+      "two_or_more_investment_elements_pct": 7.3,
+      "has_a_marked_turn_pct": 29.1
+    },
+    "henry-mann": {
+      "posts": 25,
+      "line_one_words_median": 13,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 12,
+      "two_or_more_investment_elements_pct": 8,
+      "has_a_marked_turn_pct": 24
+    },
+    "ivan-falco": {
+      "posts": 42,
+      "line_one_words_median": 11,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 19,
+      "two_or_more_investment_elements_pct": 9.5,
+      "has_a_marked_turn_pct": 78.6
+    },
+    "juliacarter98": {
+      "posts": 233,
+      "line_one_words_median": 16,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 16.7,
+      "two_or_more_investment_elements_pct": 14.2,
+      "has_a_marked_turn_pct": 23.6
+    },
+    "kenny-damian": {
+      "posts": 45,
+      "line_one_words_median": 12,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 20,
+      "two_or_more_investment_elements_pct": 6.7,
+      "has_a_marked_turn_pct": 62.2
+    },
+    "mai-lan-khong": {
+      "posts": 58,
+      "line_one_words_median": 15,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 6.9,
+      "two_or_more_investment_elements_pct": 13.8,
+      "has_a_marked_turn_pct": 53.4
+    },
+    "mattjbarker1": {
+      "posts": 231,
+      "line_one_words_median": 20,
+      "commonest_shape": "number_claim",
+      "names_the_reader_pct": 15.2,
+      "two_or_more_investment_elements_pct": 15.2,
+      "has_a_marked_turn_pct": 75.8
+    },
+    "max-pecherskyi": {
+      "posts": 89,
+      "line_one_words_median": 19,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 10.1,
+      "two_or_more_investment_elements_pct": 9,
+      "has_a_marked_turn_pct": 28.1
+    },
+    "michel-lieben": {
+      "posts": 99,
+      "line_one_words_median": 10,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 22.2,
+      "two_or_more_investment_elements_pct": 4,
+      "has_a_marked_turn_pct": 38.4
+    },
+    "nate-andorsky": {
+      "posts": 51,
+      "line_one_words_median": 16,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 15.7,
+      "two_or_more_investment_elements_pct": 5.9,
+      "has_a_marked_turn_pct": 29.4
+    },
+    "nicolas-finet": {
+      "posts": 37,
+      "line_one_words_median": 19,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 35.1,
+      "two_or_more_investment_elements_pct": 10.8,
+      "has_a_marked_turn_pct": 48.6
+    },
+    "outboundphd": {
+      "posts": 228,
+      "line_one_words_median": 26,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 10.5,
+      "two_or_more_investment_elements_pct": 9.6,
+      "has_a_marked_turn_pct": 60.5
+    },
+    "pierre-herubel": {
+      "posts": 132,
+      "line_one_words_median": 8,
+      "commonest_shape": "number_claim",
+      "names_the_reader_pct": 34.1,
+      "two_or_more_investment_elements_pct": 1.5,
+      "has_a_marked_turn_pct": 53.8
+    },
+    "robert-craigs": {
+      "posts": 43,
+      "line_one_words_median": 13,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 7,
+      "two_or_more_investment_elements_pct": 2.3,
+      "has_a_marked_turn_pct": 18.6
+    },
+    "ryanscarlin": {
+      "posts": 137,
+      "line_one_words_median": 8,
+      "commonest_shape": "statement",
+      "names_the_reader_pct": 18.2,
+      "two_or_more_investment_elements_pct": 2.9,
+      "has_a_marked_turn_pct": 38
+    }
+  },
+  "excluded_by_his_rules": {
+    "count": 190,
+    "of": 2712,
+    "why_a_filter": "His hooks section has two nevers and one of them is No bait. The widest-reaching opening in the content-agent store is a bait-and-switch — a marathon time, three promised business lessons, then \"No, I'm joking haha.\" Ranking by engagement and learning from the top would teach the drafter the one move his rules forbid outright.",
+    "what_judged_it": "scan() from mcp-server/aitells.mjs, which encodes the constructions his library rules out, plus his rule against opening on a question. Not a second opinion about what slop is.",
+    "by_reason": [
+      [
+        "opens on a question (his rule, hooks section)",
+        176
+      ],
+      [
+        "2C-2: negative parallelism (not x but y)",
+        6
+      ],
+      [
+        "2C-8: formulaic reveal",
+        6
+      ],
+      [
+        "2C-22: throat-clearing opener",
+        2
+      ]
+    ]
+  }
+}
