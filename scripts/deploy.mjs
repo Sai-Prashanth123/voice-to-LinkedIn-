@@ -26,8 +26,8 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -118,7 +118,94 @@ try {
 }
 
 restore();
-console.log(
-  "\nCheck it landed: system_status should report build.commit = " + commit + ".\n" +
-    'If it says "unknown", the stamp did not travel and the deploy did not do what it claims.',
-);
+
+/*
+ * AND THEN PROVE IT, RATHER THAN PRINTING AN INSTRUCTION.
+ *
+ * This used to end by telling the operator to go and check system_status. That closes nothing: the
+ * line that says "check it landed" is read by the same person who already believes it landed, and
+ * on 27 October two features were pushed, deployed, live and completely inert with everybody
+ * involved convinced otherwise.
+ *
+ * It also could not have been checked for this function even by someone who tried. `system_status`
+ * is served by `mcp` and reports `mcp`'s stamp. `cc-submit` imported none of it, so the function
+ * holding every write in the system was the one whose version was unknowable — and a deploy of it
+ * was indistinguishable from a deploy that silently did nothing. That is what the `build` route
+ * added on 2 November exists for, and this is what reads it.
+ *
+ * Credentials by the same convention as doctor.mjs: the environment first, then mcp-server/.env.
+ * Where there are none it says it could not verify. "Not checked" and "checked and correct" are
+ * different outcomes and only one of them is good news.
+ */
+async function verifyStamp(expected) {
+  let url = process.env.SUPABASE_URL;
+  let key = process.env.CONTENT_MCP_KEY;
+  const envPath = join(REPO, "mcp-server", ".env");
+  if (existsSync(envPath)) {
+    const file = readFileSync(envPath, "utf8");
+    const field = (k) => (file.match(new RegExp(`^${k}=(.*)$`, "m")) ?? [])[1]?.trim();
+    url ??= field("SUPABASE_URL");
+    key ??= field("CONTENT_MCP_KEY");
+  }
+
+  if (!url || !key) {
+    console.log(
+      "\nNOT VERIFIED. No SUPABASE_URL and CONTENT_MCP_KEY here, so this script cannot ask the\n" +
+        "deployed function which build it is. Read it yourself before believing the deploy:\n" +
+        `  cc-submit's \`build\` route should report commit ${expected}.`,
+    );
+    return true;
+  }
+
+  // An edge deploy takes a moment to become the live version, so a single miss is not a failure.
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      const res = await fetch(`${url}/functions/v1/cc-submit`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "build" }),
+      });
+      const body = await res.json().catch(() => ({}));
+      const got = body?.build?.commit ?? null;
+
+      if (got === expected) {
+        console.log(`\nVERIFIED: the deployed cc-submit reports ${got} (${body.build.source}).`);
+        return true;
+      }
+
+      if (attempt === 4) {
+        console.error(
+          `\nTHE DEPLOY DID NOT DO WHAT IT CLAIMS.\n` +
+            `  stamped and sent: ${expected}\n` +
+            `  deployed function reports: ${got ?? JSON.stringify(body).slice(0, 120)}\n` +
+            "Nothing was rolled back, so the live function is whatever it was. Do not tell anyone\n" +
+            "this shipped until the two agree.",
+        );
+        return false;
+      }
+    } catch (err) {
+      if (attempt === 4) {
+        console.error(
+          `\nCOULD NOT REACH the deployed function to verify (${err?.message ?? err}).\n` +
+            "The deploy may well have worked. It is unconfirmed, which is not the same thing.",
+        );
+        return false;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 1500 * attempt));
+  }
+  return false;
+}
+
+if (targets.includes("cc-submit")) {
+  const ok = await verifyStamp(commit);
+  if (!ok) process.exit(3);
+}
+
+if (targets.includes("mcp")) {
+  console.log(
+    `\nFor the connector, system_status should report build.commit = ${commit}.\n` +
+      'If it says "unknown", the stamp did not travel. That one needs an MCP handshake, so it is\n' +
+      "not checked here.",
+  );
+}

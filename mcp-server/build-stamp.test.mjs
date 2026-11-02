@@ -77,3 +77,73 @@ test("announce and system_status cannot disagree about the build", () => {
 test("buildCommit is the same commit buildStamp reports", () => {
   assert.equal(buildCommit(), buildStamp().commit);
 });
+
+/*
+ * THE WRITE DOOR'S OWN VERSION, added 2 November 2026.
+ *
+ * Everything above closed the question for the connector. It stayed open for `cc-submit`, which is
+ * the function that holds every write in the system: it imported none of this, `system_status` is
+ * served by `mcp` and reports `mcp`'s stamp, and so a deploy of cc-submit was indistinguishable
+ * from a deploy that silently did nothing. The same fault as 27 October, in the half nobody
+ * checked, for six days.
+ */
+
+test("cc-submit can say which build it is, and the route writes nothing", () => {
+  const source = readFileSync(new URL("../supabase/functions/cc-submit/index.ts", import.meta.url), "utf8");
+
+  // Static import, or it does not travel in the bundle — the whole lesson of build-info.mjs.
+  assert.match(
+    source,
+    /^import \{ buildStamp \} from "\.\.\/\.\.\/\.\.\/mcp-server\/build-stamp\.mjs";$/m,
+    "cc-submit does not statically import the stamp, so it cannot report its own build",
+  );
+
+  // And a route that serves it.
+  assert.match(source, /^\s*build: \(\) => Promise\.resolve\(json\(/m, "there is no build route");
+
+  // It must not touch the database. A diagnostic route that writes is not a diagnostic route, and
+  // this one exists to be safe to call against Josh's live project at any time.
+  const route = source.slice(source.indexOf("    build: () =>"));
+  const oneLine = route.slice(0, route.indexOf("\n"));
+  for (const forbidden of ["db.", "insert", "update", "delete"]) {
+    assert.ok(!oneLine.includes(forbidden), `the build route touches the database (${forbidden})`);
+  }
+});
+
+test("the deploy proves the stamp landed instead of asking someone to check", () => {
+  const source = readFileSync(new URL("../scripts/deploy.mjs", import.meta.url), "utf8");
+
+  assert.match(source, /async function verifyStamp/, "deploy.mjs does not verify anything");
+  // It must ask the DEPLOYED function, not re-read its own stamp.
+  assert.match(source, /kind: "build"/, "the verification does not call the build route");
+  assert.match(source, /body\?\.build\?\.commit/, "it does not compare the deployed commit");
+  // A mismatch has to fail, or the check is decoration.
+  assert.match(source, /process\.exit\(3\)/, "a failed verification does not fail the script");
+  // And missing credentials must not read as success.
+  assert.match(source, /NOT VERIFIED/, "it cannot distinguish unchecked from checked-and-correct");
+});
+
+test("health reports both builds and says when they disagree", async () => {
+  const { health } = await import("./tools/health.mjs");
+  const source = readFileSync(new URL("./tools/health.mjs", import.meta.url), "utf8");
+
+  assert.match(source, /bothBuilds/, "health does not compare the two surfaces");
+  assert.match(source, /write_door/, "health does not report cc-submit's build");
+  assert.match(source, /agree/, "health does not say whether they agree");
+
+  // The readings it could not take must be named, not silently absent: three failures that look
+  // identical from outside are what this whole tool exists to tell apart.
+  for (const state of ["not_asked", "unreadable", "unreachable"]) {
+    assert.ok(source.includes(state), `health cannot report the state "${state}"`);
+  }
+
+  // And it must never throw, whatever the far end does.
+  const out = await health[0].handler({}, {
+    db: { ping: async () => ({ granted: true, detail: "" }) },
+    url: "https://nonexistent-xyzzy-deploy-check.supabase.co",
+    key: "irrelevant",
+  });
+  assert.equal(out.ok, true, "health failed because a build reading failed");
+  assert.equal(out.builds.agree, false);
+  assert.match(out.builds.write_door.source, /unreachable|unreadable/);
+});

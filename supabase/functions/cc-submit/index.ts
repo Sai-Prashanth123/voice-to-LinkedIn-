@@ -41,6 +41,14 @@ import {
 import { appendTurn, loadSession, renderTranscript } from "../_shared/session.ts";
 import { autoName, setIdeaName } from "../_shared/idea-names.ts";
 import { type ResemblesResult, resembles } from "../_shared/resembles.ts";
+/*
+ * WHICH cc-submit IS ANSWERING. Reached across to mcp-server/ the same way the connector does,
+ * because a second reader of the stamp is the defect this repository keeps finding.
+ *
+ * It must be a STATIC import or it does not travel: an edge bundle carries the import graph and
+ * nothing else, which is how `build.json` reported "unknown" on the first deploy after it shipped.
+ */
+import { buildStamp } from "../../../mcp-server/build-stamp.mjs";
 import {
   joshSaid,
   missingNames,
@@ -102,6 +110,23 @@ Deno.serve(async (req) => {
    * `extraction` is deliberately not in here: its route is the body of this function, below.
    */
   const ROUTES: Record<string, (db: SupabaseClient, body: Body) => Promise<Response>> = {
+    /*
+     * WHICH BUILD IS ANSWERING. The only route here that writes nothing, and it exists because
+     * until 2 November nothing could say which cc-submit was live.
+     *
+     * `scripts/deploy.mjs` closed that question for the connector on 27 October, after two
+     * features were pushed, deployed, live and completely inert with nothing anybody could read to
+     * say so. It closed it for `mcp` only: the stamp is served by `system_status`, which this
+     * function does not serve, and `cc-submit` imported none of it. So the function holding EVERY
+     * write in the system was the one whose version was unknowable — and a deploy of it could not
+     * be told from a deploy that silently did nothing.
+     *
+     * It is a POST like everything else because this function is POST-only, and it needs the key
+     * like everything else. A commit hash is not a secret, but an open route on the write door is
+     * a worse idea than a consistent one.
+     */
+    build: () => Promise.resolve(json({ ok: true, function: "cc-submit", build: buildStamp() })),
+
     // Capture and the interview — the way in.
     capture: (d, b) => capture(d, b),
     candidates: (d, b) => submitCandidates(d, b),
