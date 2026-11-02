@@ -53,6 +53,33 @@ For every candidate, call **`measure_draft`** with the candidate as the body. Fr
 | which shape it actually is | `opening.yours` |
 | any construction his library rules out | `will_refuse` and `ai_tells` |
 
+## Two things that pass every check and still read as generated
+
+**Once a post exists under the hook, measure these as well.** They are not hook properties — a
+first line cannot fix either on its own — so report them when there is a draft and stay quiet when
+there are only openings.
+
+| | where | what good looks like |
+|---|---|---|
+| sentence variation | `rhythm.sentence_words_sd` | inside `rhythm.against_the_corpus` |
+| does it turn | `reading_order.turn_marker_found` | 45% of the corpus reverses |
+
+Both are already returned by `measure_draft` and nothing has ever acted on them.
+
+**This is not theory.** On 2 November a sample post for moment 125 came back clean on everything
+above — no refusal, zero AI tells, zero scrub findings, hook above the fold, no repeated opening —
+and was still flat. Its sentence variation was **5.9** where the eight writers run 7.1 to 18.8, and
+it had **no turn at all**. His `banned_phrases` section calls uniform sentence length *"the
+strongest statistical signal of generated text"*, and *flat* is his own word for a post that never
+changes direction.
+
+A human caught both. Every automated check passed it. That is why they are in this table.
+
+The fix is not subtle and does not need to be. One genuinely long sentence next to a two-word one
+moved that draft from 5.9 to **9.0**, and one marked reversal — *"Turns out the vendor publishes
+it, one page at a time"* — put a turn at 20% of the way in. Nudging a 19-word sentence to 17 does
+nothing; the spread is the point.
+
 **The fold is the point.** Across the measured corpus, **39% of openings fill all three visible
 lines or overflow them** — the reader sees the hook and nothing else. That is exactly what Josh was
 describing when he pasted a post into a preview tool and said *"it's just a wall of text… there's

@@ -921,6 +921,19 @@ export async function writerShapeBlock(db, handle) {
         "same-sized sentences is what it catches.",
     );
   }
+  /*
+   * WHERE IT TURNS, which this block was missing while corpusShapeBlock carried it. Same discovery,
+   * same 2 November check, opposite direction — see the note on SENTENCE VARIATION in the corpus
+   * block. A drafter aiming at one writer needs the turn as much as one aiming at the band.
+   */
+  if (typeof hooks?.all_writers?.has_a_marked_turn_pct === "number") {
+    lines.push(
+      `WHERE IT TURNS: ${hooks.all_writers.has_a_marked_turn_pct}% of the corpus reverses on a ` +
+        "marked turn — but, then, turns out, except, the problem. The rest have none, which is a " +
+        "real shape and not a fault. If a draft reads flat, this is the first place to look: " +
+        "nothing in it changes direction.",
+    );
+  }
   if (closes.length) {
     const [shape, n] = closes[0];
     lines.push(
@@ -1133,6 +1146,30 @@ export async function corpusShapeBlock(db) {
       `ABOVE THE FOLD: they run ${band(all.aboveFold)} words. That is the range the shape check ` +
         "will measure this draft against.",
       `PARAGRAPHS: they run ${band(all.paragraphs)}.`,
+      /*
+       * SENTENCE VARIATION, which this block was missing while writerShapeBlock carried it.
+       *
+       * Found 2 November by checking both blocks for the same two signals: the writer block had sd
+       * and no turn, this one had the turn and no sd. So what a drafter was told about rhythm
+       * depended on whether Josh happened to name a writer — two readers of one standard, which is
+       * the defect this repository keeps finding.
+       *
+       * It matters because it is the figure that catches a flat draft. A sample post written on
+       * 2 November passed every mechanical check and came back at sd 5.9, below all eight, and his
+       * banned_phrases section calls uniform sentence length the strongest statistical signal of
+       * generated text.
+       */
+      ...(() => {
+        const sdBand = corpusBand("sd_median");
+        return typeof sdBand?.low === "number"
+          ? [
+            `SENTENCE VARIATION: the eight run an sd of ${sdBand.low} to ${sdBand.high} words. ` +
+            "measure_draft reports this for a draft, so it is the one to check before the gate. " +
+            "It is a spread, not a length — a run of same-sized sentences is what it catches, and " +
+            "the fix is one long sentence next to a short one rather than trimming a medium one.",
+          ]
+          : [];
+      })(),
       "THE RANGE IS NOT A TARGET. It is eight writers who disagree with each other, and the " +
         "middle of it is nobody's habit. Land anywhere inside it deliberately; being outside it " +
         "is not automatically wrong, and the check is told so.",
