@@ -878,6 +878,19 @@ export async function writerShapeBlock(db, handle) {
     `ABOVE THE FOLD: ${one(mine.aboveFold)} words, where the eight run ${band(all.aboveFold)}. ` +
       "That is the number the shape check will measure this draft against.",
   );
+  /*
+   * LINE ONE REACHES THIS PATH TOO — 2 November, corrected the same day.
+   *
+   * `lineOne()` was called only from `corpusShapeBlock`. But `brief.mjs` calls THIS function
+   * whenever Josh names a writer, and naming a writer — Matt Barker more than anyone — is his
+   * commonest ask. So the headline answer to "the hooks need to be stronger" was absent from the
+   * most common drafting path, and nothing reported that it was absent.
+   *
+   * The data is corpus-level, so it is the same block here. It sits after this writer's own
+   * opening line rather than replacing it: one says what THIS writer does, the other says how long
+   * a first line runs across all eight, and a drafter aiming at one writer needs both.
+   */
+  lines.push(...lineOne());
   lines.push(
     `PARAGRAPHS: ${one(mine.paragraphs)}, where the eight run ${band(all.paragraphs)}.`,
   );
@@ -992,16 +1005,20 @@ export async function writerShapeBlock(db, handle) {
 function lineOne() {
   const aw = hooks?.all_writers;
   if (!aw?.line_one_words?.median) return [];
+  // A shape with no median would render "colon setup undefined", and an empty list would leave the
+  // sentence as "the medians are ." Today's file is complete; this is a guard, not a fix.
   const byShape = (hooks.shapes ?? [])
-    .filter((s) => s.posts >= 50 && s.shape !== "question")
+    .filter((s) =>
+      s.posts >= 50 && s.shape !== "question" && typeof s.line_one_words?.median === "number"
+    )
     .map((s) => `${s.shape.replace(/_/g, " ")} ${s.line_one_words.median}`)
     .join(", ");
 
   const out = [
     `LINE ONE IS ITS OWN MEASUREMENT: their first lines run a median ${aw.line_one_words.median} ` +
-    `words, and nine in ten are under ${aw.line_one_words.p90}. By shape, the medians are ` +
-    `${byShape}. The hook check reads only the first line, and so should you when you have ` +
-    "written it.",
+    `words, and nine in ten are under ${aw.line_one_words.p90}.` +
+    (byShape ? ` By shape, the medians are ${byShape}.` : "") +
+    " The hook check reads only the first line, and so should you when you have written it.",
   ];
 
   if (typeof aw.first_figure_after_line_one_pct === "number") {
@@ -1093,7 +1110,6 @@ export async function corpusShapeBlock(db) {
       "that is none of these shapes is usually a topic announcement, which is the commonest way " +
       "this draft will fail the hook check. Question openings are in the data and are ruled out " +
       "for him: his hooks section forbids opening on one, and that rule is his.",
-      ...lineOne(),
     ]
     : [];
 
@@ -1102,6 +1118,15 @@ export async function corpusShapeBlock(db) {
     name: "the eight together",
     lines: [
       ...gettingIn,
+      /*
+       * Outside `gettingIn` from 2 November, the same day it went in.
+       *
+       * It was spread inside that array, which is `[]` unless the stored sentinel report happens to
+       * carry an opening tally. So the line-one block — the headline answer to Josh's 30 October
+       * complaint — was conditional on an unrelated artefact, and silently absent when it was empty.
+       * It is corpus-level data and belongs on every corpus brief unconditionally.
+       */
+      ...lineOne(),
       `ABOVE THE FOLD: they run ${band(all.aboveFold)} words. That is the range the shape check ` +
         "will measure this draft against.",
       `PARAGRAPHS: they run ${band(all.paragraphs)}.`,

@@ -84,6 +84,41 @@ export const joshTools = [
   },
 
   {
+    name: "record_posted_by_hand",
+    config: {
+      title: "Record that he posted one himself",
+      description:
+        "He copies posts out and publishes them by hand, and until this is called the system does " +
+        "not know a post ever went out. Use it when he says one is live: \"that went out this " +
+        "morning\", \"I posted the dental one yesterday\". Paste the text AS IT ACTUALLY APPEARS " +
+        "on LinkedIn if you can get it — he edits in the box, and the difference between what was " +
+        "approved and what he posted is the strongest signal this system has (12.2). " +
+        "IT DOES NOT PUBLISH ANYTHING and it is not a way to approve a post: it refuses one he " +
+        "never marked ready, and the database refuses it again. It records something that already " +
+        "happened. Three things switch on when it is called — the post joins the retelling index " +
+        "so the same story is not told twice, get_outcomes can finally show what he changed, and " +
+        "record_post_verdict has something to attach to.",
+      inputSchema: {
+        post_id: z.number().int().describe("From list_calendar — a post he has already approved"),
+        body: z.string().optional().describe(
+          "The post as it actually went out, if it differs from what he approved. Leave it out " +
+            "and the approved text is recorded as-is — which is a real answer and means he " +
+            "changed nothing.",
+        ),
+        posted_on: z.string().optional().describe(
+          "The date it went out, as YYYY-MM-DD. Defaults to today. A date before he approved it " +
+            "is treated as a slip and today is used instead.",
+        ),
+        verdict: z.string().optional().describe(
+          "One line from him about how it landed, if he offers one. Worth more than any " +
+            "engagement number, because the numbers cannot say why.",
+        ),
+      },
+    },
+    handler: (args, { url, key }) => post(url, key, { kind: "published_by_hand", ...args }),
+  },
+
+  {
     name: "hold_post",
     config: {
       title: "Put an approved post back to draft",

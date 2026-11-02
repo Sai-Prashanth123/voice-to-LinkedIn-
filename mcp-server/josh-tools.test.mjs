@@ -116,6 +116,7 @@ test("the tools a person would reach for by name all exist", () => {
     "append_voice_transcript", // "here is a transcript of me talking"
     "record_post_verdict", // "that one landed"
     "record_conversation", // "it got me a call"
+    "record_posted_by_hand", // "I posted the dental one this morning"
     "mark_notices_read",
     // Running the machinery, rather than waiting for its schedule.
     "run_worker", // "why has nothing been chosen"

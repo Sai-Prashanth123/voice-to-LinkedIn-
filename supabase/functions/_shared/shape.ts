@@ -344,21 +344,16 @@ export function shapeAgainst(
   );
 
   /*
-   * LINE ONE, carried from 2 November. Josh, 30 October: "the hooks need to be stronger… it's too
-   * long… it almost gives away what the post is going to be about".
+   * THE FIRST LINE IS NOT MEASURED HERE, and that is deliberate.
    *
-   * This check judged the first three lines together and never the first one alone, so a long
-   * opening sentence followed by two short lines measured the same as three even lines. The band is
-   * the per-writer median of `opening_words`, a column that has been stored on all 1,839 measurable
-   * posts since the loader was written and reached no rubric until now.
+   * It was, from 2 November until the same day. `shapeAgainst`'s output reaches exactly one check
+   * (views.ts: CHECK_SEES_SHAPE), and that check's rubric says "DO NOT fail it for anything that is
+   * not shape… whether the hook opens a loop — eight other checks own those." Putting a line-one
+   * measurement here handed the shape judge a hook argument and a number to fail on, while the hook
+   * judge — which is denied shape numbers on purpose — never saw the measurement built for it.
+   *
+   * It lives in `firstLineAgainst` below, gated to hook_opens_loop.
    */
-  if (targets.openingWords?.length) {
-    notes.push(
-      `Its first line is ${shape.opening_words} word(s), where their medians run ` +
-        `${range(targets.openingWords)}. A long first line is the commonest reason a hook reads as ` +
-        `a topic announcement, which is what the hooks section calls "no gap at all".`,
-    );
-  }
 
   /*
    * WHICH NUMBER IS WHICH, said out loud to the judge.
@@ -375,6 +370,40 @@ export function shapeAgainst(
   );
 
   return notes;
+}
+
+/**
+ * The first line, measured, for the one check that reads only the first line.
+ *
+ * Josh, 30 October: "the hooks need to be stronger… it's too long… it almost gives away what the
+ * post is going to be about in the hook itself rather than leaving people wanting to click more."
+ *
+ * `hook_opens_loop` judged the opening with no measurement of it at all, while the ninth check
+ * measured the first THREE lines together — so a long opening sentence followed by two short ones
+ * scored the same as three even lines, and the one number that says how long a first line is sat
+ * unread on 1,839 reference posts.
+ *
+ * The band is the min-to-max of per-writer medians, which makes its upper end the most permissive
+ * writer. Said out loud below rather than left for a judge to assume otherwise — shape-rows.mjs
+ * makes the same criticism of the above-fold band and it applies here too.
+ */
+export function firstLineAgainst(
+  shape: Shape,
+  targets: { openingWords?: number[] },
+): string[] {
+  if (!targets.openingWords?.length) return [];
+  const lo = Math.min(...targets.openingWords);
+  const hi = Math.max(...targets.openingWords);
+  return [
+    `This post's first line is ${shape.opening_words} word(s).`,
+    `The eight writers he chose have first-line medians from ${lo} to ${hi} words. That is a ` +
+      `spread across eight people who disagree, not a target, and its top end is whichever of them ` +
+      `writes longest.`,
+    `COUNTED, NOT JUDGED, and length alone fails nothing. A short line can state its conclusion ` +
+      `and a long one can withhold the finding. Use it only as corroboration when you have already ` +
+      `decided the opening announces the topic — that is this check's commonest failure, and an ` +
+      `unusually long first line is often how it happens.`,
+  ];
 }
 
 /**

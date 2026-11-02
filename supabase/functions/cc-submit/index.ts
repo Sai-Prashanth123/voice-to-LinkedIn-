@@ -119,6 +119,8 @@ Deno.serve(async (req) => {
     // The calendar. `mark_ready` is the only authorisation to publish in this system (11.2).
     mark_ready: decisions.approvePost,
     hold: decisions.holdPostRoute,
+    // He posted it himself. Records what went out; it is not a route to publishing (R3).
+    published_by_hand: decisions.publishedByHandRoute,
     edit_post: decisions.editPost,
 
     // The idea bank.

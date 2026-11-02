@@ -62,6 +62,38 @@ test("a shared seven-word run is found across moments and not within one", () =>
   assert.equal(within.shared_runs.length, 0, "the same moment is skipped entirely");
 });
 
+test("one shared sentence is ONE passage, not ten overlapping windows", () => {
+  /*
+   * The first version collected every matching seven-word window separately. The real sentence
+   * below produced ten findings and the report quoted three near-identical fragments of it. Josh
+   * reads this; inflating it tenfold is how a check gets ignored.
+   */
+  const sentence = "We moved a reporting job from 40 hours a week down to 6 hours a week.";
+  const prior = [{ id: 40, moment_id: 30, body: sentence + "\n\nThat was the whole change." }];
+  const echo = selfEcho(sentence + "\n\nA different second line.", 31, prior);
+
+  assert.equal(echo.shared_runs.length, 1, "one sentence, one passage");
+  assert.ok(
+    echo.shared_runs[0].run.split(" ").length > 7,
+    "and the passage is longer than a single window, so the merge really happened",
+  );
+  assert.deepEqual(echo.shared_runs[0].where, [{ draft_id: 40, moment_id: 30 }]);
+});
+
+test("`checked` counts what was compared, not what was handed in", () => {
+  // It counted rows.length, and the reply renders it as "N earlier drafts, excluding this moment's
+  // own". On a moment at version 7 that claimed a basis it did not have.
+  const sameMoment = [
+    { id: 90, moment_id: 119, body: "One.\n\nTwo." },
+    { id: 91, moment_id: 119, body: "Three.\n\nFour." },
+  ];
+  const echo = selfEcho("Anything.", 119, sameMoment);
+  assert.equal(echo.checked, 0, "every row belonged to this moment, so nothing was compared");
+
+  const mixed = selfEcho("Anything.", 119, [...sameMoment, priorDrafts[1]]);
+  assert.equal(mixed.checked, 1, "only the other moment's draft counts");
+});
+
 test("an empty prior set is reported as nothing looked, not as clean", () => {
   const echo = selfEcho(COLD_CALL, 1, []);
   assert.equal(echo.checked, 0);

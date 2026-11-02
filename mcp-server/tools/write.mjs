@@ -345,12 +345,28 @@ export const writeTools = [
        * yet; it is here so this cannot become the slow part of filing a draft a year from now, and
        * because PostgREST would silently stop at 1,000 anyway.
        */
-      const priorDrafts = await db.select("drafts", {
-        select: "id,moment_id,body",
-        order: "id.desc",
-        limit: "200",
-      });
-      const echo = selfEcho(args.body, args.moment_id, priorDrafts);
+      /*
+       * WRAPPED, because this is advisory and the write path is not.
+       *
+       * `db.select` throws on a non-OK response, and this was unguarded — so a transient 5xx on a
+       * read that only ADVISES would have aborted create_draft with a raw PostgREST error, after
+       * the claim ledger had already passed and before anything was stored. Its sibling in
+       * brief.mjs is wrapped with the reason: "a new input is not worth making the write path
+       * fragile for." Same rule here, and `null` is reported honestly below rather than as a clean
+       * result.
+       */
+      const echo = await (async () => {
+        try {
+          const priorDrafts = await db.select("drafts", {
+            select: "id,moment_id,body",
+            order: "id.desc",
+            limit: "200",
+          });
+          return selfEcho(args.body, args.moment_id, priorDrafts);
+        } catch {
+          return null;
+        }
+      })();
 
       const verification = verifyDraft(
         args.body,
@@ -622,16 +638,28 @@ export const writeTools = [
           };
         })(),
         own_words: (() => {
+          // `found` is always an array. It was an array when something was found and the number 0
+          // when not, so a caller had to type-check a field before reading it.
+          if (!echo) {
+            return {
+              checked: false,
+              found: [],
+              why: "The read of his earlier drafts failed, so nothing was compared. Not a pass — " +
+                "nothing looked. The draft itself is unaffected: this check only advises.",
+            };
+          }
           const report = selfEchoReport(echo);
+          const checked = `${echo.checked} earlier draft(s) for other moments`;
           return report
-            ? { checked: `${echo.checked} earlier draft(s), excluding this moment's own`, found: report }
+            ? { checked, found: report }
             : {
-              checked: `${echo.checked} earlier draft(s), excluding this moment's own`,
-              found: 0,
+              checked,
+              found: [],
               means: echo.checked === 0
-                ? "No earlier drafts to compare against. Not a pass — nothing looked."
-                : "No earlier draft for another moment opens on this line or shares a seven-word " +
-                  "run with it.",
+                ? "No earlier drafts for another moment to compare against. Not a pass — nothing " +
+                  "looked."
+                : "No earlier draft for another moment opens on this line or shares a passage " +
+                  "with it.",
             };
         })(),
         ...arguable,

@@ -238,6 +238,112 @@ export async function markReady(
 }
 
 /**
+ * Record that Josh published a post HIMSELF, by hand, off a scheduled row.
+ *
+ * WHY THIS EXISTS
+ *
+ * `published_archive` is written by `worker-publish` and by nothing else, and LinkedIn has never
+ * been connected. Josh posts every week by copying the text out. So on 2 November the archive held
+ * ZERO rows, and three things were inert for that one reason:
+ *
+ *   - the retelling check's published half had nothing to compare against (7.2);
+ *   - `get_outcomes` had no published post to show, so the learning loop was starved of the
+ *     draft-versus-published signal 12.2 calls the strongest there is;
+ *   - `record_post_verdict` and `record_conversation` had nothing to attach to.
+ *
+ * R3 IS NOT WEAKENED AND MUST NOT BE. This records something that has already happened to a post
+ * HE approved: `posts_published_requires_josh` demands `marked_ready_at`, `scheduled_for` and
+ * `published_at` together, and this sets only the last of those. A post he never marked ready is
+ * refused below before the database gets the chance, so the refusal can say why.
+ *
+ * It is deliberately NOT a publishing route. Nothing here talks to LinkedIn, and the post must
+ * already carry his approval and his date before this can say anything about it.
+ *
+ * THE FINAL TEXT IS THE POINT. He edits in the LinkedIn box, so what went out is usually not what
+ * he approved. That difference is the measurement — `recordEditDiff(…, "published")` only
+ * re-measures when the body actually moved, so a post he approved and posted untouched is not
+ * reclassified by a second identical comparison.
+ */
+export async function recordPublished(
+  db: SupabaseClient,
+  postId: number,
+  opts: { body?: string | null; postedOn?: string | null } = {},
+): Promise<{ ok: true; postId: number; edited: boolean } | { ok: false; why: string }> {
+  const { data: post } = await db
+    .from("posts")
+    .select("id, moment_id, status, body, marked_ready_at, scheduled_for, published_at")
+    .eq("id", postId)
+    .maybeSingle();
+
+  if (!post) return { ok: false, why: `No post with id ${postId}.` };
+  if (post.status === "published") {
+    return {
+      ok: false,
+      why: `Post ${postId} is already recorded as published` +
+        `${post.published_at ? ` (${String(post.published_at).slice(0, 10)})` : ""}. ` +
+        `Published posts are a record, not a draft — nothing rewrites one.`,
+    };
+  }
+  if (!post.marked_ready_at || !post.scheduled_for) {
+    return {
+      ok: false,
+      why: `Post ${postId} was never approved, so there is nothing to record as published. ` +
+        `Only Josh approves a post, with mark_ready and a date (R3) — and that has to happen ` +
+        `before it goes out, not after. If he posted something the system never approved, approve ` +
+        `it first and say so.`,
+    };
+  }
+
+  const finalBody = typeof opts.body === "string" && opts.body.trim() ? opts.body : post.body;
+  // Never before he approved it: posts_ready_precedes_publish would refuse, and a date he gives
+  // that precedes his own approval is a typo rather than a fact.
+  const askedFor = opts.postedOn ? new Date(opts.postedOn) : new Date();
+  const readyAt = new Date(post.marked_ready_at);
+  const publishedAt = Number.isNaN(askedFor.getTime()) || askedFor < readyAt ? new Date() : askedFor;
+
+  const { error } = await db.from("posts").update({
+    status: "published",
+    body: finalBody,
+    published_at: publishedAt.toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq("id", postId);
+
+  if (error) return { ok: false, why: `The database refused it: ${error.message}` };
+
+  // 12.2, the half that needed a publish. Measures only if the body moved after approval.
+  const measured = await recordEditDiff(db, postId, "published");
+
+  /*
+   * The retelling index (7.2). No embedding: the fast path has been returning a billing error, and
+   * a row without a vector is still comparable by the LLM fallback and still better than no row —
+   * worker-publish takes the same position in its own catch.
+   *
+   * `origin: "system"` because this post came through this system, whoever pressed the button.
+   * "historic" is for his back catalogue, which is a different import and a different question.
+   */
+  await db.from("published_archive").insert({
+    origin: "system",
+    moment_id: post.moment_id,
+    body: finalBody,
+    posted_on: publishedAt.toISOString().slice(0, 10),
+  });
+
+  await db.from("moments").update({
+    status: "published",
+    updated_at: new Date().toISOString(),
+  }).eq("id", post.moment_id);
+
+  await logEvent(db, "published_by_hand", "info", {
+    post_id: postId,
+    moment_id: post.moment_id,
+    edited_after_approval: measured.measured,
+    edit_class: measured.editClass,
+  });
+
+  return { ok: true, postId, edited: Boolean(measured.measured) };
+}
+
+/**
  * Put an approved post back to draft — 11.2 in reverse.
  *
  * Deliberately clears both the date and the authorisation. A post that keeps `marked_ready_at` while

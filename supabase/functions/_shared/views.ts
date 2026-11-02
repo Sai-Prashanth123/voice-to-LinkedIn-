@@ -273,6 +273,30 @@ export const CHECK_SEES_CLEARED_NAMES = new Set(["names_cleared"]);
 export const CHECK_SEES_SHAPE = new Set(["shape"]);
 
 /**
+ * Only the check that asks whether the opening owes the reader anything.
+ *
+ * The first line's word count and the writers' band, and NOTHING ELSE — no paragraph count, no
+ * above-fold count. The note on CHECK_SEES_SHAPE above is the reason this is a separate set rather
+ * than hook_opens_loop being added to that one: "a judge given numbers will use them", and a hook
+ * judge shown a paragraph count starts failing posts for their shape.
+ *
+ * The mirror of that mistake was live from 2 November until this was added. The first-line
+ * measurement was put into `shapeAgainst`, whose output reaches only `shape` — so the hook judge
+ * never saw the measurement built for it, and the shape judge was handed a hook argument and a
+ * number to fail on, under a rubric that tells it the hook belongs to someone else.
+ */
+export const CHECK_SEES_FIRST_LINE = new Set(["hook_opens_loop"]);
+
+/**
+ * Only the check that asks whether every claim traces to the source.
+ *
+ * How much Josh supplied, so the check can tell a dictated post from "write me a post about X".
+ * Josh asked for this distinction on 30 October. No other check can use it: a thin brief makes an
+ * invented quote no more acceptable, which is the same argument CHECK_SEES_HIS_NOTES makes below.
+ */
+export const CHECK_SEES_HIS_WORDS_CHARS = new Set(["claims_trace"]);
+
+/**
  * Which checks are shown what Josh asked for on this post.
  *
  * Only the checks a REQUEST OF HIS can actually trip. He dictates things like "open with I
@@ -299,6 +323,8 @@ export function gateInputsFor(key: string): {
   clearedNames: boolean;
   shape: boolean;
   hisNotes: boolean;
+  firstLine: boolean;
+  hisWordsChars: boolean;
 } {
   return {
     source: CHECK_SEES_SOURCE.has(key),
@@ -306,6 +332,8 @@ export function gateInputsFor(key: string): {
     clearedNames: CHECK_SEES_CLEARED_NAMES.has(key),
     shape: CHECK_SEES_SHAPE.has(key),
     hisNotes: CHECK_SEES_HIS_NOTES.has(key),
+    firstLine: CHECK_SEES_FIRST_LINE.has(key),
+    hisWordsChars: CHECK_SEES_HIS_WORDS_CHARS.has(key),
   };
 }
 

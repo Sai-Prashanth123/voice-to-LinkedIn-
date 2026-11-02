@@ -260,4 +260,61 @@ export const cases = [
       assert.not(writesReady, "no approval path writes 'ready' — 'scheduled' is the real state");
     },
   }),
+
+  defineCase({
+    id: "S8-11",
+    stage: 8,
+    clause: "11.2 / R3 / 12.2",
+    tier: "deterministic",
+    name: "recording that he posted one by hand still needs his approval first",
+    /*
+     * `record_posted_by_hand` was added on 2 November because `published_archive` held zero rows
+     * while Josh posted every week — LinkedIn was never connected, and only worker-publish writes
+     * that table. Three things were inert for that one reason: the retelling check's published
+     * half, the draft-versus-published signal 12.2 calls the strongest there is, and anything that
+     * attaches to a published post.
+     *
+     * The risk it introduces is the only one worth testing: a route that reaches `published`
+     * without Josh. It must not be one, and the database must be the thing that says so.
+     */
+    async run({ db, assert, seen }) {
+      const moment = await minedMoment(db);
+      const draft = await makeDraft(db, moment.id);
+      const post = await makePost(db, { momentId: moment.id, draftId: draft.id });
+
+      // The shape `recordPublished` refuses in code, asserted here against the database instead —
+      // so the guarantee holds even if the tool's own check were ever removed.
+      const unapproved = await db.expectError(
+        `update public.posts set status = 'published', published_at = now() where id = ${post.id}`,
+      );
+      seen("unapproved", unapproved);
+      assert.match(
+        unapproved ?? "",
+        /posts_published_requires_josh|violates check/,
+        "a post he never approved cannot be recorded as published",
+      );
+
+      // With his approval and his date on the row, the same write is legal — that is the whole
+      // difference, and it is his.
+      await approvePost(db, post.id);
+      const [after] = await db.sql(`
+        update public.posts set status = 'published', published_at = now()
+         where id = ${post.id}
+        returning status::text, published_at is not null as published
+      `);
+      assert.same(after.status, "published", "an approved post can be recorded as having gone out");
+      assert.ok(after.published, "with the date it actually went out");
+
+      // And the archive row that turns the retelling check back on.
+      await db.sql(`
+        insert into public.published_archive (origin, moment_id, body, posted_on)
+        values ('system', ${moment.id}, 'the body as it went out', current_date)
+        returning id
+      `);
+      const [archived] = await db.sql(
+        `select count(*)::int as n from public.published_archive where moment_id = ${moment.id}`,
+      );
+      assert.same(archived.n, 1, "the post joins the retelling index (7.2)");
+    },
+  }),
 ];

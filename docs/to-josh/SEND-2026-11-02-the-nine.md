@@ -139,6 +139,22 @@ about a third more than the file size, and the practical ceiling is around 16–
 thing. A normal headshot will not fit. A hard crop at roughly 120×120, saved as a JPEG, under about
 6 KB, will. Send me that and it goes in the corner of anything you like.
 
+## One thing I need you to start doing, and it takes ten seconds
+
+When you post one, tell me — "the dental one went out this morning" — and if you edited it in the
+LinkedIn box, paste what actually went out.
+
+Until today the system had no idea any post had ever gone live. You have been posting every week and
+its published archive held **zero** rows, because the only thing that writes it is the LinkedIn
+publishing worker and LinkedIn was never connected. Three things were switched off by that one gap:
+the check that stops you retelling the same story had nothing published to compare against, the
+learning loop could not see which drafts you changed and which you posted untouched, and there was
+nothing to attach a verdict to.
+
+The difference between what the system wrote and what you actually posted is the single most useful
+signal it can get — better than any engagement number, because the numbers cannot say why. It has
+been throwing that away every week.
+
 ## And the nine decisions
 
 These have been waiting, some since 14 October. Nothing here changes until you say so — that is the
@@ -176,6 +192,26 @@ the method and you pushed back on both.
 question your own closes section calls the default close. Three drafts failed for that in ninety
 minutes on 27 October, one of them written straight after you asked in writing to invite input at
 the end.
+
+## One more decision, and it is a small one
+
+The bullet rule now refuses only when the repeated word carries meaning — "Pro", "Prospect" — and
+not when it is a grammatical one like "What" or "It's". That took the refusals on your reference
+writers from 129 to 72.
+
+Reading what it still refuses, three shapes look wrong to me and they are yours to call:
+
+- **A numbered scale.** `Tier 1 (1 pt): … / Tier 2 (3 pts): …` has to repeat "Tier". Refused.
+- **Deliberate anaphora.** `Same angle, new format / Same angle, new visual / Same angle, new
+  persona` — the repetition is the whole device. Refused.
+- **Imperative steps.** `Run this / Run that / Run the other` in a how-to. Refused.
+
+Your rule says three bullets opening on the same word reads as generated, and it is right about the
+case it was written for — a draft of yours once had eight bullets opening on "Pro". The question is
+whether the three above should be exceptions, or whether the line should move from four bullets to
+six. Six would put it at 7.6% of the lists your reference writers write, against 34.5% today.
+
+I have not changed it, because that line is yours (12.10). Say which and I will.
 
 If you only do one thing with this email, do the frameworks four — they are the ones holding up the
 most.

@@ -57,7 +57,12 @@ import {
 import { WRITTEN_UP } from "../../supabase/functions/_shared/extraction.ts";
 import { parsePillars } from "../../supabase/functions/_shared/library.ts";
 import { renderTranscript } from "../../supabase/functions/_shared/session.ts";
-import { measureShape, shapeAgainst, writerShapeTargets } from "../../supabase/functions/_shared/shape.ts";
+import {
+  firstLineAgainst,
+  measureShape,
+  shapeAgainst,
+  writerShapeTargets,
+} from "../../supabase/functions/_shared/shape.ts";
 import {
   CHECK_NEEDS_SECTION,
   gateInputsFor,
@@ -508,8 +513,16 @@ export const briefTools = [
           const pairs = rows.filter(
             (n) => n.before_text && n.after_text && n.before_text !== n.after_text && !kept.has(n),
           );
-          // Pairs after the recent block: they are the rarer signal, and the renderer groups by
-          // kind rather than reading the order, so appending cannot reorder what he said.
+          /*
+           * Pairs after the recent block, because they are the rarer signal.
+           *
+           * This said "the renderer groups by kind rather than reading the order, so appending
+           * cannot reorder what he said." That was false — prompts.ts renders `tasteNotes` as a
+           * flat list in array order. The consequence is cosmetic, because every bullet carries its
+           * own date and the post it was about, so the dates simply stop descending partway down.
+           * But a false justification in a comment licenses a worse change later, which is why it
+           * is corrected rather than deleted.
+           */
           return [...recent, ...pairs];
         } catch {
           return [];
@@ -1033,7 +1046,11 @@ export const briefTools = [
        */
       const writerRows = await shapedWriterRows(db);
       const targets = writerShapeTargets(writerRows);
-      const shapeLines = shapeAgainst(measureShape(draft.body), targets);
+      const measured = measureShape(draft.body);
+      const shapeLines = shapeAgainst(measured, targets);
+      // The first line, for hook_opens_loop alone. The same measurement, a different reader — see
+      // CHECK_SEES_FIRST_LINE for why this is not folded into shapeLines.
+      const firstLineLines = firstLineAgainst(measured, targets);
 
       /*
        * WHAT HE ASKED FOR ON THIS POST, FOR THE CHECKS A REQUEST OF HIS CAN TRIP.
@@ -1144,6 +1161,16 @@ export const briefTools = [
             clearedNames: sees.clearedNames ? cleared : undefined,
             shape: sees.shape ? shapeLines : undefined,
             hisNotes: sees.hisNotes && hisNotes.length > 0 ? hisNotes : undefined,
+            /*
+             * Both added 2 November, in the check's own text rather than only at the top level.
+             *
+             * `his_words_chars` shipped that morning as a sibling of the hoisted `source_entry`,
+             * which meant the rubric told the judge to read a number that was not in anything the
+             * judge was handed — and vanished entirely under bodies: "per_check". A field a rubric
+             * names has to be in the rubric's own prompt.
+             */
+            firstLine: sees.firstLine ? firstLineLines : undefined,
+            hisWordsChars: sees.hisWordsChars ? (entry.his_words ?? "").length : undefined,
             bodyHoisted: once,
             entryHoisted: once,
           }),

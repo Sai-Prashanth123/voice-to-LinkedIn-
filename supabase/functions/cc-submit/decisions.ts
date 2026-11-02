@@ -26,7 +26,7 @@
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
-import { holdPost, markReady } from "../_shared/approve.ts";
+import { holdPost, markReady, recordPublished } from "../_shared/approve.ts";
 import { kill, park } from "../_shared/db.ts";
 import { setClearance } from "../_shared/names.ts";
 import { appendToSection } from "../_shared/library.ts";
@@ -117,6 +117,42 @@ export async function holdPostRoute(db: SupabaseClient, body: Body): Promise<Res
     next: reason
       ? "Back to draft, and your reason is on the record — that is what the learning loop reads."
       : "Back to draft. If you say in a line what was wrong with it, that goes further than the hold does.",
+  });
+}
+
+/**
+ * He posted it himself. Record what went out, so the learning loop has something to learn from.
+ *
+ * NOT A PUBLISHING ROUTE. `recordPublished` refuses a post he never marked ready, and the database
+ * refuses it again — this sets `published_at` on a row that already carries his approval and his
+ * date. Nothing here talks to LinkedIn.
+ */
+export async function publishedByHandRoute(db: SupabaseClient, body: Body): Promise<Response> {
+  const postId = int(body.post_id);
+  if (!postId) return json({ error: "post_id is required" }, 400);
+
+  const result = await recordPublished(db, postId, {
+    body: str(body.body),
+    postedOn: str(body.posted_on),
+  });
+  if (!result.ok) return json({ error: result.why }, 409);
+
+  // Same reasoning as the hold route: asking is free, and a verdict given is worth more than every
+  // engagement number this system could collect.
+  const verdict = str(body.verdict);
+  if (verdict) await recordVerdict(db, postId, verdict);
+
+  return json({
+    ok: true,
+    post_id: postId,
+    edited_after_approval: result.edited,
+    recorded_verdict: Boolean(verdict),
+    in_the_retelling_index: true,
+    next: result.edited
+      ? "Recorded, and the text he actually posted differs from the one he approved — that " +
+        "difference is the strongest signal this system gets (12.2). It is now in get_outcomes."
+      : "Recorded. He posted it unchanged, which is itself the measurement: the strongest " +
+        "evidence a draft was right is that he changed nothing.",
   });
 }
 

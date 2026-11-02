@@ -22,6 +22,12 @@ person in his field could have written is a failure, however well written it is.
 2. **Never publish.** Nothing reaches LinkedIn except a post Josh has approved with a date, through
    `mark_ready`. The database refuses every other route, four ways. Do not imply something has gone
    out when it has not.
+
+   `record_posted_by_hand` is not an exception to this and must never be used as one. He posts by hand,
+   and it records that a post he **already approved** has gone out — it refuses one he never marked
+   ready, sets only `published_at` on a row that already carries his date, and talks to nothing.
+   Until it is called the system cannot tell a posted draft from an unposted one, which is why the
+   retelling index and the whole learning loop sat empty while he posted every week.
 3. **Never name a client.** And removing the name is not enough — a figure plus a niche plus a date
    identifies a company to anyone in his market, and his readers are in his market. Use the shape
    instead. If a moment cannot survive being anonymised, park it: that is a correct outcome.
@@ -58,6 +64,7 @@ Postgres.
 | "stop asking me questions" | `set_writing_mode` — only ever when he asks for it |
 | — | the **gate-check** skill, in a fresh breath, never while writing |
 | "put it out Tuesday" | `mark_ready` — the only thing that authorises publishing |
+| "I posted that one this morning" | `record_posted_by_hand` with the text as it actually appears |
 | "hold that" / "that's wrong" | `hold_post` with his reason / `push_back_on_draft` with his words |
 | "change this line" | `edit_post` |
 | "you can name Ben" | `clear_names` |
@@ -265,6 +272,20 @@ The habit that catches these: **a check must report that it ran.** `create_draft
 borrowed phrases, for the pre-filing checks and now for `own_words` and the fold, and each says its
 basis — *"0 found across 114 drafts"* and *"nothing to compare against"* are different answers and
 only one of them is good news. When you add a check, make its silence mean something.
+
+**And the habit that catches it in your own work: run the thing, do not read it.** Every one of the
+four above was found by a review that executed the code; none was found by writing it carefully.
+The commit that added this section shipped four more of the same defect on the same day — a rubric
+instructing a judge to read a field no judge could see, a measurement delivered to the one check
+forbidden to use it, a block unreachable on the commonest path, and a carve-out that missed every
+contracted word. All four typechecked, all four passed every existing test, and all four were
+reported as working.
+
+So: a new input is not wired until something renders it and a test asserts the rendering.
+`gate-inputs-agree.test.ts` does that for the gate — it fails if either path grants a check an input
+the prompt does not carry, and it would have caught that morning's defect. A number is not
+calibrated until a sample of what it changes has been read by eye; `calibrate-aitells.mjs` prints
+the rate and the rate is the easy half.
 
 The second habit: **before trusting a threshold, measure it against the eight writers Josh chose.**
 `scripts/calibrate-aitells.mjs` does this. A rule that fires on half of the posts he picked as

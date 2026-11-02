@@ -171,6 +171,20 @@ test("a check added later is shown the post alone until someone says otherwise",
      * private notes and failing drafts for things that were not in them.
      */
     hisNotes: false,
+    /*
+     * firstLine joined on 2 November, for hook_opens_loop alone: the first line's word count and
+     * the writers' band, and nothing else. It is a separate grant from `shape` rather than a
+     * widening of it, because the hook check is deliberately denied the shape numbers — "a judge
+     * given numbers will use them", and a hook judge shown a paragraph count starts failing posts
+     * for their shape.
+     */
+    firstLine: false,
+    /*
+     * hisWordsChars joined the same day, for claims_trace alone: how much of this moment is Josh's
+     * own words, so the worst-failing check can tell a dictated post from "write me a post about
+     * X". A new check does not get it — a thin brief makes an invented quote no more acceptable.
+     */
+    hisWordsChars: false,
   });
 });
 

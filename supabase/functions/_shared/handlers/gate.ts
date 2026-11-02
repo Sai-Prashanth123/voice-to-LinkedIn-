@@ -26,6 +26,7 @@ import { enqueue } from "../jobs.ts";
 import { loadLibrary } from "../library.ts";
 import { gateInputsFor, CHECK_NEEDS_SECTION, notJudged, unjudgeableChecks } from "../views.ts";
 import {
+  firstLineAgainst,
   measureShape,
   shapeAgainst,
   SHAPE_ROWS_PAGE,
@@ -134,10 +135,16 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
    * report the scraper as a habit of the writer.
    */
   const writerRows = await shapedWriterRows(db);
-  const shapeLines = shapeAgainst(
-    measureShape(draft.body),
-    writerShapeTargets(writerRows ?? []),
-  );
+  const measured = measureShape(draft.body);
+  const writerTargets = writerShapeTargets(writerRows ?? []);
+  const shapeLines = shapeAgainst(measured, writerTargets);
+  /*
+   * The first line, for hook_opens_loop alone — added 2 November so this path carries what the
+   * Claude path carries. Both gate paths must hand a check the same inputs or they reach different
+   * verdicts on the same draft for want of one, which is the failure views.ts:245 is about and the
+   * one this very feature shipped with for half a day.
+   */
+  const firstLineLines = firstLineAgainst(measured, writerTargets);
   // 9.10 — cleared FOR THIS POST, not for whatever this moment produced last time.
   const cleared = await clearedNames(db, momentId);
 
@@ -293,6 +300,11 @@ export async function handleGate(db: SupabaseClient, job: Job): Promise<void> {
             // paths cannot reach different verdicts on the same draft for want of one input.
             hisNotes: gateInputsFor(check.key).hisNotes && hisNotes.length > 0
               ? hisNotes
+              : undefined,
+            // Same two, same reason: one input missing on one path is two judges disagreeing.
+            firstLine: gateInputsFor(check.key).firstLine ? firstLineLines : undefined,
+            hisWordsChars: gateInputsFor(check.key).hisWordsChars
+              ? (entry.his_words ?? "").length
               : undefined,
           }),
         }],

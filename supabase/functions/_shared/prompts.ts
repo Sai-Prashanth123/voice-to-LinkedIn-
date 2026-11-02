@@ -352,15 +352,31 @@ export const DRAFT_USER = (opts: {
    * soften, wearing a different hat.
    */
   {
-    const has = (k: string) => Boolean((opts.entry as Record<string, string>)[k]?.trim());
+    /*
+     * `his_words` AND `receipts` ARE DELIBERATELY NOT IN THIS LIST — corrected 2 November.
+     *
+     * They were, and that made the second branch unreachable. `sourceEntry` carries `his_words`
+     * whenever any raw input exists for the moment, which is every single one-step post — so
+     * `own.length > 0` was always true and the "nothing of his own is on file, write it anyway"
+     * branch, the half Josh actually asked for on 30 October, never rendered once.
+     *
+     * The distinction is the point of his complaint. What he TYPED asking for a post is not lived
+     * experience; a scene, a detail, a quote, a number he watched move is. Receipts are his
+     * background rather than this moment's material. So this asks whether the MOMENT carries
+     * something of his, and the drafter still has his words and his receipts to write from either
+     * way — they are in the entry above, unchanged.
+     */
+    const has = (k: string) => Boolean(opts.entry[k]?.trim());
     const own = [
       has("the_moment") && "a scene he was in",
       has("the_detail") && "a detail only he would have",
       has("their_actual_words") && "something somebody actually said to him",
       has("what_changed") && "a result he watched change",
       has("how_he_felt") && "what it felt like at the time",
-      has("receipts") && "his receipts — career, method and numbers he has given us over time",
-      has("his_words") && "what he typed about this himself",
+      has("what_happened_before") && "what led up to it",
+      has("who_was_there") && "who else was in the room",
+      has("the_realisation") && "what he worked out from it",
+      has("the_lesson") && "the lesson he drew",
     ].filter(Boolean) as string[];
 
     lines.push(
@@ -905,6 +921,31 @@ export const GATE_USER = (opts: {
    */
   bodyHoisted?: boolean;
   entryHoisted?: boolean;
+  /**
+   * How many characters of this moment are Josh's own words. `claims_trace` only.
+   *
+   * ADDED 2 NOVEMBER, AFTER THE RUBRIC ASKED FOR IT AND NOTHING SUPPLIED IT. The clause telling
+   * the judge to read `his_words_chars` shipped on 2 November; this parameter did not, and neither
+   * did the Deno gate's call site. So the worst-failing check in the system was handed an
+   * instruction to read a field that existed nowhere in its prompt — it could only ignore the
+   * amendment or invent the number. Exactly the "a value nothing reads" defect, in the commit that
+   * added a section about it.
+   *
+   * Passed through `gateInputsFor` like every other input, so one test can prove both paths agree.
+   */
+  hisWordsChars?: number;
+  /**
+   * The first line's length, and the writers' band. `hook_opens_loop` only.
+   *
+   * NOT part of `shape`, and that separation is the whole point. `shape`'s own rubric says "DO NOT
+   * fail it for anything that is not shape… whether the hook opens a loop — eight other checks own
+   * those", and views.ts withholds shape numbers from this check for the mirror-image reason: "a
+   * judge given numbers will use them".
+   *
+   * So the hook judge gets the one measurement its own rubric is about, and nothing else. No
+   * paragraph count, no above-fold count.
+   */
+  firstLine?: string[];
 }) => {
   const parts: string[] = [];
   parts.push(`THE CHECK:\n\n${opts.check.question}`);
@@ -963,6 +1004,22 @@ export const GATE_USER = (opts: {
         opts.clearedNames.length > 0 ? opts.clearedNames.join(", ") : "(none)"
       }`,
     );
+  }
+  if (opts.hisWordsChars !== undefined) {
+    // Counted, never a threshold. The rubric says so too, and both say it because a number handed
+    // to a judge with no instruction becomes a line the judge draws itself.
+    parts.push(
+      `\n---\n\nHOW MUCH OF THIS IS HIS: Josh supplied ${opts.hisWordsChars} character(s) of his ` +
+        `own words for this moment.\n\n` +
+        `There is NO threshold on that figure and you must not invent one. It tells you whether he ` +
+        `dictated the substance or asked for a post about a topic, which changes what "traces to ` +
+        `the source" can fairly mean for REASONING — and changes nothing at all for a quote, a ` +
+        `number, a name or a scene. It is the join of every raw input on the moment, so a second ` +
+        `paste inflates it.`,
+    );
+  }
+  if (opts.firstLine?.length) {
+    parts.push(`\n---\n\nMEASURED, the first line only:\n\n${opts.firstLine.join("\n")}`);
   }
   if (opts.shape) {
     // Counted, not judged. The check is handed the numbers and the writers' numbers and decides;

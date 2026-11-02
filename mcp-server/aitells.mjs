@@ -40,15 +40,67 @@
  */
 
 import { sentences, tokens, words } from "../scripts/lib/prose.mjs";
-/*
- * The same set the voiceprint builder and measure_draft filter with. Imported rather than re-listed
- * so there cannot be two opinions about which words carry no topic — the failure its own header
- * warns about, and the one 2C-17 now depends on for whether a finding may refuse a draft.
+
+/**
+ * Words that can open four bullets without the list being a scaffold. 2C-17 only.
+ *
+ * A list of parallel questions all starting "What", or steps all starting "Then", shares a
+ * grammatical slot and nothing else — the ITEMS are uneven, which is what 2C-17's own rationale
+ * asks for. A list whose items all start "Pro", or "Prospect", is the scaffold it was written for.
+ *
+ * WHY THIS IS NOT `FUNCTION_WORDS`. That set answers "which words carry no topic", for contrasting
+ * one corpus against another. This asks a different question, and borrowing the other set got both
+ * directions wrong on the day it was tried — see the long note at the detector. Contracted forms
+ * are listed explicitly because `tokens()` keeps the apostrophe, so "it's" never matches "its".
+ *
+ * Deliberately NOT here: "no", "not", "never", "every", "most", "first", "stop", "always". Those
+ * carry a stance, and four bullets opening on one is a staged parallel — the shape this rule
+ * exists to catch.
  */
-import { FUNCTION_WORDS } from "../scripts/lib/stopwords.mjs";
+const OPENERS = new Set([
+  // pronouns and their contractions
+  "i", "i'm", "i've", "i'll", "i'd",
+  "you", "you're", "you've", "you'll", "you'd", "your",
+  "we", "we're", "we've", "we'll", "we'd", "our",
+  "he", "she", "they", "they're", "they've", "they'll", "them", "their",
+  "it", "it's", "its", "that", "that's", "this", "these", "those", "there", "there's",
+  // interrogatives and relatives
+  "what", "what's", "who", "who's", "whom", "whose", "which", "when", "where", "why", "how",
+  // articles and determiners
+  "a", "an", "the", "any", "some", "another", "both", "either",
+  // conjunctions, prepositions and connectives
+  "and", "or", "but", "so", "if", "then", "than", "because", "while", "after", "before",
+  "for", "from", "in", "into", "on", "of", "to", "with", "at", "by", "as", "about",
+  // auxiliaries and copulas
+  "is", "are", "was", "were", "be", "been", "being", "am",
+  "do", "does", "did", "don't", "doesn't", "didn't",
+  "have", "has", "had", "haven't", "hasn't", "hadn't",
+  "can", "can't", "could", "couldn't", "will", "won't", "would", "wouldn't",
+  "should", "shouldn't", "may", "might", "must",
+]);
 // What a bullet is, spelled once. See the note on BULLET_MARKER: this file and shape.ts each had
 // their own answer, the two disagreed, and neither could see the marker Josh's drafts use.
 import { BULLET_MARKER, PUNCTUATION_DASH } from "../supabase/functions/_shared/shape.ts";
+
+/**
+ * A reveal that is its own sentence — 2C-8's blocking arm.
+ *
+ * BUILT FROM `BULLET_MARKER` RATHER THAN A FOURTH BULLET CLASS. The first version of this wrote its
+ * own character class of bullet characters inline, which is the exact thing `aitells.test.mjs`
+ * guards against — and it caught it. This file and shape.ts each grew their own answer once before,
+ * the two disagreed, and neither could see the arrow marker Josh's own drafts use. A third
+ * definition would have been worse than the two that already cost a week.
+ *
+ * The phrase must START a sentence — line start, after a bullet, or after a sentence terminator —
+ * and must FINISH one. That excludes the two constructions which must not refuse: "Here's why:"
+ * introducing the next clause, and "here's why the rounds pile up" inside a sentence.
+ */
+const REVEAL_LINE = new RegExp(
+  `(?<=^|${BULLET_MARKER.source.replace(/^\^/, "^")}|[.!?"”]\\s)` +
+    `(?:let me explain|here'?s why|here'?s what happened|let me tell you|so what happened)` +
+    `\\s*[.!?](?=\\s|$)`,
+  "gim",
+);
 
 /* ── What the voiceprint proves he actually says ──────────────────────────────────────────────
  *
@@ -478,16 +530,34 @@ export const RULES = [
        * those still refuse.
        *
        * So the group still REPORTS at three whatever the word is — nothing is hidden from Josh —
-       * and it may only REFUSE on a content word. FUNCTION_WORDS is the set build-voiceprint and
-       * measure_draft already share, so there is no second opinion about which words those are.
+       * and it may only REFUSE on a grammatical opener.
+       *
+       * THIS USED FUNCTION_WORDS AND THAT WAS WRONG IN BOTH DIRECTIONS — corrected 2 November,
+       * the same day it was added, after testing it instead of reading it.
+       *
+       *   - `tokens()` keeps apostrophes on purpose (prose.mjs: "its" and "it's" are not the same
+       *     word), and FUNCTION_WORDS holds bare forms only. So "it's", "you're", "we've",
+       *     "that's", "there's" and "don't" all missed the carve-out and still refused — and those
+       *     are the openings people actually write bullets with. The fix shipped the comment and
+       *     not the behaviour.
+       *   - In the other direction FUNCTION_WORDS carries "no", "every", "each", "most", "first"
+       *     and "back". So "No budget / No timeline / No authority / No need" — a staged parallel
+       *     scaffold, exactly what this rule is for — could no longer refuse.
+       *
+       * FUNCTION_WORDS is built for a VOCABULARY CONTRAST: which words carry no topic when you are
+       * comparing two corpora. That is a different question from which words can open four bullets
+       * without the list being a scaffold. Borrowing it looked like reuse and was a category error.
+       * OPENERS below is local to this rule, and reuse is still right for `normaliseRun` and the
+       * shingle guard, where the question really is the same one.
        */
       for (const [first, group] of byFirst) {
         if (group.length >= 3) {
-          const refusable = group.length >= 4 && !FUNCTION_WORDS.has(first);
+          const refusable = group.length >= 4 && !OPENERS.has(first);
           out.push({
             matched: `${group.length} bullets all open with "${first}"` +
               (group.length >= 4 && !refusable
-                ? ` — reported, not refused: "${first}" carries no topic, so the items may still be uneven`
+                ? ` — reported, not refused: "${first}" is a grammatical opener, so the items ` +
+                  `themselves may still be uneven`
                 : ""),
             line: group[0].line,
             ...(!refusable && { blocking: false }),
@@ -608,10 +678,24 @@ export const RULES = [
        * `lineAt(body, m.index)`, so a pattern that swallowed the previous sentence's full stop
        * would report the PREVIOUS line's number — which then breaks the dedup below, and did.
        */
-      const standalone = matches(
-        body,
-        /(?<=^|[.!?"”]\s)(?:let me explain|here'?s why|here'?s what happened|let me tell you|so what happened)\s*[.!?]?\s*$/gim,
-      );
+      /*
+       * A SENTENCE, NOT A LINE — widened 2 November after testing it.
+       *
+       * The first version ended `\s*[.!?]?\s*$`, i.e. the phrase had to finish the LINE. Two holes,
+       * both found by running it:
+       *
+       *   "That broke everything. Let me explain. The vendor had changed the API."
+       *       — the library's own named form, mid-paragraph, reported and not refused. Any drafter
+       *         writing paragraphs rather than one-sentence lines escaped the rule entirely.
+       *   "- Here's why."
+       *       — a bullet marker before it defeated the lookbehind.
+       *
+       * Now: the phrase must be followed by its own terminator, and may be followed by more text.
+       * That still excludes the two things that must NOT refuse — "Here's why:" introducing the
+       * next clause (a colon is not in `[.!?]`), and "here's why the rounds pile up" (the next
+       * character is a space, not a terminator).
+       */
+      const standalone = matches(body, REVEAL_LINE);
       const at = new Set(standalone.map((m) => m.line));
       const wider = matches(
         body,

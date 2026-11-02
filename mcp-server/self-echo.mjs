@@ -38,7 +38,13 @@
  * at drafts for a DIFFERENT moment.
  */
 
-import { shinglesOf, normaliseRun, SHINGLE_WORDS } from "../supabase/functions/_shared/shingles.ts";
+import {
+  borrowedRuns,
+  hashRun,
+  normaliseRun,
+  shinglesOf,
+  SHINGLE_WORDS,
+} from "../supabase/functions/_shared/shingles.ts";
 
 /** The first non-blank line, which is the only line the hook check reads. */
 export function firstLine(body) {
@@ -57,32 +63,66 @@ export function firstLine(body) {
 export function selfEcho(body, momentId, rows) {
   const mine = firstLine(body);
   const normalisedMine = normaliseRun(mine);
-  const myRuns = new Set(shinglesOf(body));
 
   const openings = [];
-  const runs = new Map();
+  /** Only the drafts actually compared — see the note on `checked` below. */
+  const compared = [];
+  const index = new Set();
 
   for (const r of rows ?? []) {
     if (!r?.body) continue;
     // A different moment, always. Same-moment echo is a redraft and is correct.
     if (Number(r.moment_id) === Number(momentId)) continue;
+    compared.push(r);
 
     if (normalisedMine && normaliseRun(firstLine(r.body)) === normalisedMine) {
       openings.push({ draft_id: r.id, moment_id: r.moment_id });
     }
-
-    for (const run of shinglesOf(r.body)) {
-      if (!myRuns.has(run)) continue;
-      if (!runs.has(run)) runs.set(run, []);
-      const at = runs.get(run);
-      if (at.length < 3) at.push({ draft_id: r.id, moment_id: r.moment_id });
-    }
+    for (const run of shinglesOf(r.body)) index.add(hashRun(run));
   }
 
+  /*
+   * MERGED INTO PASSAGES, NOT COUNTED AS WINDOWS — corrected 2 November, the day this was written.
+   *
+   * The first version collected every matching seven-word window separately, so one shared sentence
+   * came back as ten overlapping runs and the report said "10 runs of 7 words also appear in an
+   * earlier draft" over three near-identical fragments of the same sentence. A report inflated
+   * tenfold is one Josh learns to skip, which costs more than the finding is worth.
+   *
+   * `borrowedRuns` already merges adjacent hits into one passage — it exists for exactly this, in
+   * the guard this check is modelled on — so it is reused rather than re-implemented. That also
+   * means the two can never disagree about where a shared passage starts and ends.
+   */
+  const passages = borrowedRuns(body, index);
+
+  /*
+   * Which earlier draft each passage came from. Done after the merge rather than during it, because
+   * the merge works on the NEW draft's word positions and a passage can legitimately appear in more
+   * than one earlier draft. Capped at three, because a fourth location tells Josh nothing a third
+   * did not.
+   */
+  const shared = passages.map((run) => {
+    const where = [];
+    for (const r of compared) {
+      if (where.length >= 3) break;
+      if (normaliseRun(r.body).includes(run)) where.push({ draft_id: r.id, moment_id: r.moment_id });
+    }
+    return { run, where };
+  }).filter((p) => p.where.length > 0);
+
   return {
-    checked: rows?.length ?? 0,
+    /*
+     * The drafts actually compared, not the rows handed in.
+     *
+     * This counted `rows.length` and the reply rendered it as "N earlier drafts, excluding this
+     * moment's own" — a basis it did not have. On a moment at version 7 it claimed 200 while
+     * comparing 193, and if every recent draft belonged to this moment it would have claimed 200
+     * against nothing compared, while the "nothing looked" branch never fired. A check that
+     * misstates its own basis is the failure this module's header is about.
+     */
+    checked: compared.length,
     same_opening: openings,
-    shared_runs: [...runs.entries()].map(([run, where]) => ({ run, where })),
+    shared_runs: shared,
   };
 }
 
@@ -107,8 +147,8 @@ export function selfEchoReport(echo) {
   }
   if (shared.length) {
     lines.push(
-      `${shared.length} run(s) of ${SHINGLE_WORDS} words also appear in an earlier draft for ` +
-      `another moment: ${shared.slice(0, 3).map((s) => `"${s.run}"`).join(", ")}` +
+      `${shared.length} passage(s) of ${SHINGLE_WORDS} words or more also appear in an earlier ` +
+      `draft for another moment: ${shared.slice(0, 3).map((s) => `"${s.run}"`).join(", ")}` +
       `${shared.length > 3 ? ` and ${shared.length - 3} more` : ""}.`,
     );
   }

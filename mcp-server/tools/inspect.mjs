@@ -39,6 +39,16 @@ import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
 // One rule for clearance expiry, shared with the Deno side. See clearanceSurvivesReopen.
 import { needsAClearanceDecision } from "../../supabase/functions/_shared/names.ts";
 import { isSupplied } from "../../supabase/functions/_shared/views.ts";
+import { GATE_CHECKS } from "../../supabase/functions/_shared/prompts.ts";
+
+/**
+ * When the ninth gate check started running.
+ *
+ * Drafts judged before this carry eight verdicts and can never reach nine, so `gate_passed` can
+ * never be set on them. Without this date, `system_status` reported ten August and September drafts
+ * as a stalled run every session, with no way for the count to ever fall.
+ */
+const NINTH_CHECK_ADDED = new Date("2026-10-14T00:00:00Z");
 // 9.3 — the recorded framework, compared on a key so one structure spelled two ways counts once.
 import { frameworkMix } from "../frameworks.mjs";
 import { modeName, oneStepMode } from "../mode.mjs";
@@ -880,13 +890,48 @@ export const inspectTools = [
        * verdicts whose gate_passed is still null is a draft someone judged and nobody can approve,
        * whatever stopped it.
        */
-      const openDrafts = await rows(db, "drafts?select=id&gate_passed=is.null");
-      const verdictRows = await rows(
-        db,
-        "gate_runs?select=draft_id,created_at&order=created_at.desc&limit=2000",
-      );
+      const openDrafts = await rows(db, "drafts?select=id,created_at&gate_passed=is.null");
+      /*
+       * PAGED, because `limit=2000` is not a limit of 2,000.
+       *
+       * PostgREST caps a response at 1,000 rows whatever is asked for, silently — the same ceiling
+       * shape-rows.mjs exists for, and the same silence. `gate_runs` passed 850 rows on 2 November
+       * and Josh adds about 54 in a session, so within a few sessions the oldest verdicts would
+       * have dropped out of this read and `judgedNeverClosed` would have started UNDER-reporting
+       * with nothing to say it had. A status tool that quietly stops counting is worse than one
+       * that never counted.
+       */
+      const verdictRows = [];
+      for (let offset = 0;; offset += 1000) {
+        const page = await rows(
+          db,
+          `gate_runs?select=draft_id,created_at&order=created_at.desc&limit=1000&offset=${offset}`,
+        );
+        verdictRows.push(...page);
+        if (page.length < 1000) break;
+      }
       const judged = new Set(verdictRows.map((r) => r.draft_id));
-      const judgedNeverClosed = openDrafts.filter((d) => judged.has(d.id)).length;
+      /*
+       * HOW MANY CHECKS A DRAFT WAS JUDGED AGAINST, so a draft can be told from a lost run.
+       *
+       * The ninth check was added on 14 October. Every draft judged before then carries eight
+       * verdicts and can never reach nine, so `gate_passed` can never be set on it — and this block
+       * told Josh "a run stopped part way, or something is stopping it from finishing" about ten
+       * drafts from August and September, every session, forever. Eight of those drafts are superseded
+       * by a later version of the same moment.
+       *
+       * A warning that cannot clear teaches him to skip the block, and the same block carries the
+       * retelling-index warning that IS live. So the two are now told apart.
+       */
+      const verdictCount = new Map();
+      for (const r of verdictRows) {
+        verdictCount.set(r.draft_id, (verdictCount.get(r.draft_id) ?? 0) + 1);
+      }
+      const openJudged = openDrafts.filter((d) => judged.has(d.id));
+      const stillRunnable = openJudged.filter((d) => (verdictCount.get(d.id) ?? 0) < GATE_CHECKS.length
+        && new Date(d.created_at) >= NINTH_CHECK_ADDED);
+      const preNinth = openJudged.length - stillRunnable.length;
+      const judgedNeverClosed = stillRunnable.length;
 
       const [lastSelection] = await rows(
         db,
@@ -901,6 +946,15 @@ export const inspectTools = [
             `gate_passed is still unset on them and mark_ready refuses an unjudged draft in ` +
             `every mode. Either the run stopped part way, or something is stopping it from ` +
             `finishing — read one of them back with get_gate_brief, which lists what is left.`,
+        );
+      }
+      if (preNinth > 0) {
+        // Stated once, as history rather than as a problem, so it reads as closed and not as
+        // something waiting on him.
+        stalled.push(
+          `${preNinth} older draft(s) were judged before the ninth check existed (14 October), so ` +
+            `they carry eight verdicts and can never reach nine. Nothing is stuck and there is ` +
+            `nothing to do: they are superseded or closed, and no new draft can land here.`,
         );
       }
       if (archived.length === 0) {
