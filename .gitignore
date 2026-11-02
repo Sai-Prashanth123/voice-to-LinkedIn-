@@ -92,3 +92,11 @@ local/storage/
 # Generated artefacts, not deliverables, and they hold real material from the idea bank —
 # scripts/soak-measure.mjs rebuilds the measurements from them on demand.
 scripts/soak/
+
+# The full hook-corpus dump: 2,522 opening lines, 1,682 of them from Josh's own eight
+# reference writers. Generated on demand by
+#   node scripts/build-hook-patterns.mjs --console --dump-openings
+# so it never needs to be stored, and kept out of a PUBLIC repo because it is the only
+# place those 1,682 lines would appear here. The per-account view beside it IS committed:
+# its 196 URLs are already in docs/to-josh/hook-swipe-file.md, so it adds no exposure.
+docs/verify/all-openings.md

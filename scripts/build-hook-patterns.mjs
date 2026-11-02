@@ -63,6 +63,31 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIR = join(ROOT, "data", "josh", "hooks");
 const APPLY = process.argv.includes("--apply");
 
+/*
+ * `--dump-openings [path]` — every opening this read, as text, for a human to check by eye.
+ *
+ * SEPARATE FROM THE LAW SET, ON PURPOSE, AND IT MUST STAY THAT WAY.
+ *
+ * `data/josh/hooks/latest.json` carries structure and no post text, enforced by the leak guard at
+ * the foot of this file: 8.3 is "take the shape, never the words", and a law set holding the words
+ * is a law set a draft can be written out of. That guard is not relaxed by this flag. The dump is
+ * written to its own path, defaults OUTSIDE data/josh/, and nothing in the system loads it.
+ *
+ * It exists because every number this file publishes is derived from 3,261 opening lines that
+ * nobody has ever read in one place. A rate is checkable only against the sample it came from, and
+ * "0 found across 114 drafts" and "nothing to compare against" are different answers.
+ *
+ * The same hazard as docs/to-josh/hook-swipe-file.md applies and the dump says so in its header:
+ * the content_agent and console_store openings are NOT in `reference_shingles`, so a draft that
+ * lifted one would not be refused. Josh's eight ARE in it, so those are the safe ones to read.
+ */
+const DUMP_FLAG = process.argv.indexOf("--dump-openings");
+const DUMP = DUMP_FLAG === -1
+  ? null
+  : (process.argv[DUMP_FLAG + 1] && !process.argv[DUMP_FLAG + 1].startsWith("--")
+    ? process.argv[DUMP_FLAG + 1]
+    : join(ROOT, "docs", "verify", "all-openings.md"));
+
 /* ── The eight he chose ───────────────────────────────────────────────────── */
 
 const SENTINELS = new Set([
@@ -875,6 +900,107 @@ console.log("  excluded by his own rules    : " + rejected.length +
 
 const rows = kept.map(measureOne);
 const next = aggregate(rows);
+
+/*
+ * THE DUMP. Written here because `rows` is the measured set and `rejected` is what his own rules
+ * threw out, and a verification file that showed only the survivors would hide the line being
+ * drawn — which is the half most worth checking.
+ */
+if (DUMP) {
+  const bySource = { josh_eight: [], content_agent: [], console_store: [] };
+  for (const r of rows) (bySource[r.source] ??= []).push(r);
+
+  const LABEL = {
+    josh_eight: "SOURCE A — the eight Josh chose. THE STANDARD. These ARE in reference_shingles, " +
+      "so a draft that lifted one of these lines would be refused.",
+    content_agent: "SOURCE B — clients of the sibling content-agent project, read from its " +
+      "on-disk caches. NOT Josh's writers and never to be reported as them. NOT in " +
+      "reference_shingles: a draft lifting one of these would not be refused.",
+    console_store: "SOURCE C — the scraping console's harvest store. HEADLINES ONLY: the console " +
+      "strips line breaks, so these have no body and no line two. NOT in reference_shingles.",
+  };
+
+  const out = [];
+  out.push("# Every opening the hook corpus learned from");
+  out.push("");
+  out.push("**Generated " + new Date().toISOString().slice(0, 10) + " by " +
+    "`scripts/build-hook-patterns.mjs --dump-openings`.** Regenerate rather than edit: nothing " +
+    "reads this file, and a hand-edited copy would disagree with the measurements silently.");
+  out.push("");
+  out.push("`" + rows.length + "` openings kept across `" + Object.keys(next.per_writer).length +
+    "` accounts, plus `" + rejected.length + "` his own rules excluded, out of `" + posts.length +
+    "` posts read.");
+  out.push("");
+  out.push("## Read this first");
+  out.push("");
+  out.push("**This file is for checking the corpus, not for drafting from.** `create_draft` " +
+    "refuses a draft sharing a seven-word run with Josh's eight reference writers, and that guard " +
+    "is what makes clause 8.3 real. Sources B and C are **not** in that index, so a lifted line " +
+    "from them would not be caught. Take the shape. Never the sentence.");
+  out.push("");
+  out.push("Columns are `fold · words · shape` and, where the author has reactions recorded, " +
+    "`×n` against that author's own median post so a large account and a small one compare. " +
+    "The fold is simulated at 42 characters a line and **has never been calibrated against a " +
+    "real phone**, so treat it as a direction and not a measurement.");
+  out.push("");
+
+  const bar = (n) => "▮".repeat(Math.min(n, 3)) + "▯".repeat(Math.max(0, 3 - n)) + (n > 3 ? "+" : "");
+
+  for (const source of ["josh_eight", "content_agent", "console_store"]) {
+    const group = bySource[source] ?? [];
+    if (!group.length) continue;
+    out.push("---");
+    out.push("");
+    out.push("# " + source + "  (" + group.length + " openings)");
+    out.push("");
+    out.push(LABEL[source]);
+    out.push("");
+
+    const byHandle = {};
+    for (const r of group) (byHandle[r.handle] ??= []).push(r);
+
+    for (const handle of Object.keys(byHandle).sort()) {
+      const mine = byHandle[handle];
+      // Within an author, so follower count cannot order the file.
+      const med = median(mine.map((r) => r.reactions).filter((n) => typeof n === "number")) || 0;
+      mine.sort((a, b) => (b.reactions ?? -1) - (a.reactions ?? -1));
+      out.push("## " + handle + "  (" + mine.length + ")");
+      out.push("");
+      for (const r of mine) {
+        const mult = typeof r.reactions === "number" && med > 0
+          ? "  ×" + (r.reactions / med).toFixed(1)
+          : "";
+        out.push("- `" + bar(r.fold_lines_used ?? measureShape(r.line1).rendered_lines) + "` · " +
+          String(r.line1_words).padStart(2) + "w · " + r.shape + mult + "  — " + r.line1);
+      }
+      out.push("");
+    }
+  }
+
+  out.push("---");
+  out.push("");
+  out.push("# Excluded by his own rules  (" + rejected.length + ")");
+  out.push("");
+  out.push("Not failures of the writers. These are openings his library forbids him, so they are " +
+    "excluded before anything is counted — which is why the rates above are about writing he " +
+    "would accept rather than about LinkedIn.");
+  out.push("");
+  const byWhy = {};
+  for (const r of rejected) (byWhy[r.why] ??= []).push(r);
+  for (const why of Object.keys(byWhy).sort((a, b) => byWhy[b].length - byWhy[a].length)) {
+    out.push("## " + why + "  (" + byWhy[why].length + ")");
+    out.push("");
+    for (const r of byWhy[why]) {
+      out.push("- [" + r.source + " · " + r.handle + "] " + r.line1);
+    }
+    out.push("");
+  }
+
+  mkdirSync(dirname(DUMP), { recursive: true });
+  writeFileSync(DUMP, out.join("\n") + "\n");
+  console.log("  dumped " + rows.length + " openings + " + rejected.length +
+    " excluded -> " + DUMP.replace(ROOT, "."));
+}
 next.excluded_by_his_rules = {
   count: rejected.length,
   of: posts.length,
