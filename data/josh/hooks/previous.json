@@ -1,5 +1,5 @@
 {
-  "measured_at": "2026-11-02T11:35:57.358Z",
+  "measured_at": "2026-11-02T12:19:56.700Z",
   "basis": {
     "posts": 3261,
     "writers": 51,
@@ -14,6 +14,11 @@
         "posts": 840,
         "accounts": 14,
         "with_reactions": 839
+      },
+      "console_store": {
+        "posts": 739,
+        "accounts": 41,
+        "with_reactions": 726
       }
     },
     "whose_they_are": {
@@ -62,9 +67,9 @@
         "no_figure": 32.2
       },
       "investment_elements_in_line_one": {
-        "none": 31.7,
-        "one": 61.2,
-        "two_or_more": 7.1
+        "none": 32.7,
+        "one": 61.6,
+        "two_or_more": 5.7
       }
     },
     {
@@ -96,8 +101,8 @@
       },
       "investment_elements_in_line_one": {
         "none": 0,
-        "one": 89.7,
-        "two_or_more": 10.3
+        "one": 92.1,
+        "two_or_more": 7.9
       }
     },
     {
@@ -128,9 +133,9 @@
         "no_figure": 38.1
       },
       "investment_elements_in_line_one": {
-        "none": 38.8,
-        "one": 55.7,
-        "two_or_more": 5.5
+        "none": 41.2,
+        "one": 56.7,
+        "two_or_more": 2.1
       }
     },
     {
@@ -161,9 +166,9 @@
         "no_figure": 13.7
       },
       "investment_elements_in_line_one": {
-        "none": 25.3,
-        "one": 69.5,
-        "two_or_more": 5.2
+        "none": 25.8,
+        "one": 70.8,
+        "two_or_more": 3.4
       }
     },
     {
@@ -194,9 +199,9 @@
         "no_figure": 37.3
       },
       "investment_elements_in_line_one": {
-        "none": 42.9,
-        "one": 43.7,
-        "two_or_more": 13.5
+        "none": 43.7,
+        "one": 44.4,
+        "two_or_more": 11.9
       }
     },
     {
@@ -228,8 +233,8 @@
       },
       "investment_elements_in_line_one": {
         "none": 8,
-        "one": 82.1,
-        "two_or_more": 9.8
+        "one": 83.9,
+        "two_or_more": 8
       }
     }
   ],
@@ -238,13 +243,56 @@
       "median": 12,
       "p90": 29
     },
-    "two_or_more_investment_elements_pct": 7.9,
+    "two_or_more_investment_elements_pct": 6,
     "investment_components_pct": {
       "specificity": 70.9,
       "stakes": 10.1,
-      "emotion": 2.9
+      "emotion_withdrawn": "Cut on 2 November after validation. 22% recall against 20 hand-labelled openings — it found two of every nine that genuinely carry an emotion. The 2.9% it used to report was a fact about a word list, not about writers. scripts/validate-investment.mjs."
+    },
+    "investment_detector_accuracy": {
+      "basis": "20 openings labelled by hand, scripts/validate-investment.mjs --score",
+      "stakes": {
+        "recall_pct": 67,
+        "precision_pct": 60
+      },
+      "specificity": "not scored — a figure or a proper noun is a mechanical test, not a reading",
+      "means": "Stakes finds about two thirds of the openings that carry them and is right about three in five of the ones it flags, missing implied risk and firing on 'cost' and 'dead' used in another sense. Use it as an indication and never as a count."
     },
     "names_the_reader_pct": 16.4,
+    "statement_is_really": {
+      "of": 1752,
+      "means": "Shares of the statement bucket, not of the whole corpus. Aiming at `statement` is aiming at none of the other six shapes; these say which move the line actually makes.",
+      "kinds": [
+        [
+          "assertion",
+          78.7
+        ],
+        [
+          "news",
+          8.2
+        ],
+        [
+          "conditional",
+          3.5
+        ],
+        [
+          "quote",
+          2.9
+        ],
+        [
+          "scene",
+          2.7
+        ],
+        [
+          "imperative",
+          2.3
+        ],
+        [
+          "used_to",
+          1.8
+        ]
+      ]
+    },
     "fold": {
       "lines_the_hook_uses": {
         "one": 25,
@@ -286,7 +334,7 @@
       "line_one_words_median": 7,
       "commonest_shape": "statement",
       "names_the_reader_pct": 8.6,
-      "two_or_more_investment_elements_pct": 6.3,
+      "two_or_more_investment_elements_pct": 5.4,
       "has_a_marked_turn_pct": 32.6
     },
     "alex-harbanyof": {
@@ -310,7 +358,7 @@
       "line_one_words_median": 8,
       "commonest_shape": "statement",
       "names_the_reader_pct": 16.7,
-      "two_or_more_investment_elements_pct": 5.3,
+      "two_or_more_investment_elements_pct": 4.5,
       "has_a_marked_turn_pct": 30.2
     },
     "amos-bar-joseph": {
@@ -318,7 +366,7 @@
       "line_one_words_median": 12.5,
       "commonest_shape": "statement",
       "names_the_reader_pct": 25,
-      "two_or_more_investment_elements_pct": 20,
+      "two_or_more_investment_elements_pct": 15,
       "has_a_marked_turn_pct": 0
     },
     "anthony-viviani": {
@@ -326,7 +374,7 @@
       "line_one_words_median": 15,
       "commonest_shape": "statement",
       "names_the_reader_pct": 26.1,
-      "two_or_more_investment_elements_pct": 17.4,
+      "two_or_more_investment_elements_pct": 13,
       "has_a_marked_turn_pct": 4.3
     },
     "anthonypierri": {
@@ -350,7 +398,7 @@
       "line_one_words_median": 12,
       "commonest_shape": "statement",
       "names_the_reader_pct": 12.5,
-      "two_or_more_investment_elements_pct": 10,
+      "two_or_more_investment_elements_pct": 2.5,
       "has_a_marked_turn_pct": 20
     },
     "cembaris": {
@@ -358,7 +406,7 @@
       "line_one_words_median": 12,
       "commonest_shape": "statement",
       "names_the_reader_pct": 11.1,
-      "two_or_more_investment_elements_pct": 16.7,
+      "two_or_more_investment_elements_pct": 5.6,
       "has_a_marked_turn_pct": 0
     },
     "chriswalker171": {
@@ -366,7 +414,7 @@
       "line_one_words_median": 12,
       "commonest_shape": "statement",
       "names_the_reader_pct": 20,
-      "two_or_more_investment_elements_pct": 10,
+      "two_or_more_investment_elements_pct": 0,
       "has_a_marked_turn_pct": 0
     },
     "curtishowland": {
@@ -390,7 +438,7 @@
       "line_one_words_median": 18,
       "commonest_shape": "statement",
       "names_the_reader_pct": 26.8,
-      "two_or_more_investment_elements_pct": 12.3,
+      "two_or_more_investment_elements_pct": 8.5,
       "has_a_marked_turn_pct": 57.4
     },
     "dujam-dunato": {
@@ -446,7 +494,7 @@
       "line_one_words_median": 11,
       "commonest_shape": "statement",
       "names_the_reader_pct": 19,
-      "two_or_more_investment_elements_pct": 9.5,
+      "two_or_more_investment_elements_pct": 4.8,
       "has_a_marked_turn_pct": 78.6
     },
     "ivanfalco": {
@@ -462,7 +510,7 @@
       "line_one_words_median": 16,
       "commonest_shape": "statement",
       "names_the_reader_pct": 17.8,
-      "two_or_more_investment_elements_pct": 14.2,
+      "two_or_more_investment_elements_pct": 11.9,
       "has_a_marked_turn_pct": 21.7
     },
     "justinwelsh": {
@@ -518,7 +566,7 @@
       "line_one_words_median": 14,
       "commonest_shape": "statement",
       "names_the_reader_pct": 7.6,
-      "two_or_more_investment_elements_pct": 11.4,
+      "two_or_more_investment_elements_pct": 6.3,
       "has_a_marked_turn_pct": 39.2
     },
     "mattjbarker1": {
@@ -526,7 +574,7 @@
       "line_one_words_median": 19,
       "commonest_shape": "number_claim",
       "names_the_reader_pct": 16.7,
-      "two_or_more_investment_elements_pct": 14.3,
+      "two_or_more_investment_elements_pct": 11.2,
       "has_a_marked_turn_pct": 70.1
     },
     "max-pecherskyi": {
@@ -534,7 +582,7 @@
       "line_one_words_median": 19,
       "commonest_shape": "statement",
       "names_the_reader_pct": 10.1,
-      "two_or_more_investment_elements_pct": 9,
+      "two_or_more_investment_elements_pct": 6.7,
       "has_a_marked_turn_pct": 28.1
     },
     "maxpecherskyi": {
@@ -550,7 +598,7 @@
       "line_one_words_median": 10,
       "commonest_shape": "statement",
       "names_the_reader_pct": 21.6,
-      "two_or_more_investment_elements_pct": 3.7,
+      "two_or_more_investment_elements_pct": 2.2,
       "has_a_marked_turn_pct": 28.4
     },
     "nate-andorsky": {
@@ -558,7 +606,7 @@
       "line_one_words_median": 14,
       "commonest_shape": "statement",
       "names_the_reader_pct": 11.6,
-      "two_or_more_investment_elements_pct": 5.8,
+      "two_or_more_investment_elements_pct": 1.2,
       "has_a_marked_turn_pct": 17.4
     },
     "nicolas-finet": {
@@ -582,7 +630,7 @@
       "line_one_words_median": 25,
       "commonest_shape": "statement",
       "names_the_reader_pct": 10.3,
-      "two_or_more_investment_elements_pct": 9.1,
+      "two_or_more_investment_elements_pct": 6.6,
       "has_a_marked_turn_pct": 57.2
     },
     "pierre-herubel": {
@@ -590,7 +638,7 @@
       "line_one_words_median": 8,
       "commonest_shape": "number_claim",
       "names_the_reader_pct": 34.1,
-      "two_or_more_investment_elements_pct": 1.5,
+      "two_or_more_investment_elements_pct": 0.8,
       "has_a_marked_turn_pct": 53.8
     },
     "retentionadam": {
@@ -598,7 +646,7 @@
       "line_one_words_median": 11,
       "commonest_shape": "statement",
       "names_the_reader_pct": 20.8,
-      "two_or_more_investment_elements_pct": 12.5,
+      "two_or_more_investment_elements_pct": 8.3,
       "has_a_marked_turn_pct": 4.2
     },
     "richardvanderblom": {
@@ -606,7 +654,7 @@
       "line_one_words_median": 15,
       "commonest_shape": "statement",
       "names_the_reader_pct": 0,
-      "two_or_more_investment_elements_pct": 28.6,
+      "two_or_more_investment_elements_pct": 14.3,
       "has_a_marked_turn_pct": 0
     },
     "rob-hoffman-ceo": {
@@ -622,7 +670,7 @@
       "line_one_words_median": 13,
       "commonest_shape": "statement",
       "names_the_reader_pct": 7,
-      "two_or_more_investment_elements_pct": 2.3,
+      "two_or_more_investment_elements_pct": 0,
       "has_a_marked_turn_pct": 18.6
     },
     "ruben-hassid": {
@@ -678,7 +726,7 @@
       "line_one_words_median": 11,
       "commonest_shape": "statement",
       "names_the_reader_pct": 7.1,
-      "two_or_more_investment_elements_pct": 7.1,
+      "two_or_more_investment_elements_pct": 0,
       "has_a_marked_turn_pct": 7.1
     },
     "viktorijan-mucunski": {
@@ -686,7 +734,7 @@
       "line_one_words_median": 16,
       "commonest_shape": "statement",
       "names_the_reader_pct": 14.3,
-      "two_or_more_investment_elements_pct": 28.6,
+      "two_or_more_investment_elements_pct": 14.3,
       "has_a_marked_turn_pct": 0
     }
   },

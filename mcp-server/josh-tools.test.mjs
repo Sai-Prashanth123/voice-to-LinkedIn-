@@ -117,6 +117,7 @@ test("the tools a person would reach for by name all exist", () => {
     "record_post_verdict", // "that one landed"
     "record_conversation", // "it got me a call"
     "record_posted_by_hand", // "I posted the dental one this morning"
+    "record_hook_choice", // "the second one" — and the five he turned down
     "mark_notices_read",
     // Running the machinery, rather than waiting for its schedule.
     "run_worker", // "why has nothing been chosen"

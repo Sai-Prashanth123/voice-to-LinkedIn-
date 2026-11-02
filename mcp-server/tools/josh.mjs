@@ -117,6 +117,29 @@ export const joshTools = [
     },
     handler: (args, { url, key }) => post(url, key, { kind: "published_by_hand", ...args }),
   },
+  {
+    name: "record_hook_choice",
+    config: {
+      title: "Which opening he picked, and which he turned down",
+      description:
+        "Call this the moment he chooses between candidate openings — from josh-hook-lab or from " +
+        "any set you offered him. `drafts.hook` already stores the one he took; what this adds is " +
+        "the ones he did NOT, which is where the signal is. Six openings for one moment are six " +
+        "controls: same material, same minute, and he preferred one. It is the only evidence " +
+        "about hooks in this system that comes from Josh rather than from a corpus of strangers. " +
+        "Record his reason only if he gives one, in his words.",
+      inputSchema: {
+        moment_id: z.number().int().optional().describe("The moment the openings were written for"),
+        chosen: z.string().min(1).describe("The opening he picked, verbatim"),
+        rejected: z.array(z.string()).min(1).describe(
+          "The ones he did not pick, verbatim. Required: a chosen opening with nothing beside it " +
+            "is what drafts.hook already records.",
+        ),
+        why: z.string().optional().describe("His words on why, if he said. Never your inference."),
+      },
+    },
+    handler: (args, { url, key }) => post(url, key, { kind: "hook_chosen", ...args }),
+  },
 
   {
     name: "hold_post",

@@ -695,3 +695,56 @@ export async function setWritingMode(db: SupabaseClient, body: Body): Promise<Re
         "again, next_work offers what is waiting, and the checks hold a post until they pass.",
   });
 }
+
+/**
+ * Which opening he picked, and which he turned down.
+ *
+ * THE SIGNAL THAT WAS BEING THROWN AWAY. `josh-hook-lab` offers six openings and he chooses one.
+ * `drafts.hook` already records the winner — so the system has always known what he wrote, and
+ * never once known what he rejected. A choice between six is worth more than six separate
+ * approvals, because the alternatives are the controls: same moment, same material, same minute,
+ * and he preferred one of them.
+ *
+ * That is the only hook signal in this system that comes from Josh rather than from a corpus of
+ * strangers. 3,261 measured openings say what other people do; this says what he picks.
+ *
+ * ON `system_events` RATHER THAN A NEW TABLE. His pushback notes live there and `joshs_notes` reads
+ * them back through an RPC, so the pattern, the grants and the read path already exist. A table for
+ * this would be a migration for a row shape nobody has used yet.
+ *
+ * NOT A RULE, AND IT MUST NOT BECOME ONE. Six choices are six choices. The hooks section is his
+ * (12.10) and nothing here amends it — this accumulates evidence, and if a pattern shows up it goes
+ * to him as a proposal with the count attached.
+ */
+export async function hookChoiceRoute(db: SupabaseClient, body: Body): Promise<Response> {
+  const momentId = int(body.moment_id);
+  const chosen = str(body.chosen);
+  const rejected = Array.isArray(body.rejected)
+    ? body.rejected.map((r) => String(r ?? "").trim()).filter(Boolean)
+    : [];
+
+  if (!chosen) return json({ error: "chosen is required — the opening he picked, verbatim." }, 400);
+  if (rejected.length === 0) {
+    return json({
+      error: "rejected is required and must not be empty. The whole value here is the comparison: " +
+        "a chosen opening with nothing beside it is what drafts.hook already stores.",
+    }, 400);
+  }
+
+  await logEvent(db, "hook_chosen", "info", {
+    moment_id: momentId ?? null,
+    chosen,
+    rejected,
+    of: rejected.length + 1,
+    // His words about why, when he gives them. Never inferred — a reason invented here would be
+    // read back later as something he said.
+    ...(str(body.why) ? { why: str(body.why) } : {}),
+  });
+
+  return json({
+    ok: true,
+    recorded: { chosen, rejected: rejected.length },
+    next: "get_hook_brief reads these back, so the next set of candidates is written knowing what " +
+      "he has turned down before. This is the only hook evidence in the system that is his.",
+  });
+}

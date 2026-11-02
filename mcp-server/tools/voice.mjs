@@ -1289,6 +1289,43 @@ export const sentinelTools = [
         openings_he_has_used: recent === null
           ? { checked: false, why: "The read of his earlier drafts failed, so nothing was compared." }
           : { checked: recent.length, lines: recent },
+        /*
+         * WHAT HE HAS ACTUALLY PICKED, which is the only hook evidence here that is his.
+         *
+         * Everything else in this brief is what 3,261 other people's openings do. This is what
+         * Josh chose when he was shown alternatives — and the rejected ones are the point, because
+         * they are controls: same moment, same material, same minute.
+         *
+         * Empty until he uses the lab. Said so explicitly rather than returned as an empty array,
+         * because "he has never been offered a choice" and "he has no preferences" are different
+         * answers and only one of them is true today.
+         */
+        openings_he_has_chosen: await (async () => {
+          try {
+            const rows = await db.rpc("hook_choices", { p_limit: 40 });
+            if (!rows?.length) {
+              return {
+                count: 0,
+                means: "He has not been offered a set of candidate openings yet, so there is " +
+                  "nothing here. This is not a finding about his taste — it is an empty record. " +
+                  "Call record_hook_choice the next time he picks one.",
+              };
+            }
+            return {
+              count: rows.length,
+              means: "What he picked, and what he turned down beside it. Evidence of taste, never " +
+                "a rule — the hooks section is his (12.10). Weigh this above the corpus figures: " +
+                "those are strangers, this is him.",
+              choices: rows.map((r) => ({
+                chose: r.chosen,
+                over: Array.isArray(r.rejected) ? r.rejected : [],
+                ...(r.why ? { his_reason: r.why } : {}),
+              })),
+            };
+          } catch {
+            return { count: null, why: "The read of his past choices failed. Not a pass." };
+          }
+        })(),
         corpora: hooks?.basis ?? null,
         not_a_quota:
           "None of this is a target. The corpus says what these writers do; it cannot say what " +

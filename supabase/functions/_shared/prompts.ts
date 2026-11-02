@@ -770,7 +770,22 @@ export const GATE_CHECKS: GateCheckSpec[] = [
       `On 27 October this check failed four consecutive drafts of one post, three of them for ` +
       `openings that withheld the finding, while Josh was asking in writing for exactly that ` +
       `opening. Four failures on one post is this check misreading its own rule, not a writer who ` +
-      `will not learn.`,
+      `will not learn.\n\n` +
+      `THEN CHECK THAT THE POST PAYS WHAT THE LINE PROMISED — added 2 November, because nothing in ` +
+      `this system did.\n\n` +
+      `Read the first line for the loop, as above. Then read the REST of the post and ask one more ` +
+      `question: does it answer the thing the opening withheld? A hook that opens a question the ` +
+      `body never returns to is the same failure as a hook that opens none — the reader was told ` +
+      `something was coming and it did not come. That FAILS, and the reason must name what was ` +
+      `promised and where you expected it.\n\n` +
+      `Two things this is NOT. It is not a judgement of whether the answer is good, interesting or ` +
+      `well argued — other checks own that. And it is not a demand that the answer arrive early: a ` +
+      `payoff in the last line is a structure, not a fault.\n\n` +
+      `Be careful in one direction. An opening promises a CATEGORY, not every question it brings ` +
+      `to mind. "There was one thing the list could not tell me" owes the reader that one thing ` +
+      `and nothing else. Do not fail a post for leaving unanswered a question the opening never ` +
+      `actually raised — that is the inversion this check already made once, on 5 October, when a ` +
+      `sibling check failed a post for what was MISSING rather than for what was wrong.`,
   },
   {
     key: "aimed_at_someone",

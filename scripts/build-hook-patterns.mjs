@@ -344,6 +344,48 @@ function rejectReason(line1) {
   return null;
 }
 
+/* ── What a `statement` opening is actually doing ─────────────────────────────
+ *
+ * `statement` is over half the corpus and is not a shape — it is openingShape()'s fallthrough, the
+ * openings that matched none of the other six. So for the majority of first lines the artefact
+ * could tell a drafter nothing at all, which is the single biggest gap in what it can say.
+ *
+ * These seven came from READING 478 statement openings on 2 November, not from theory. They are
+ * ordered, earliest match wins, same as openingShape.
+ *
+ * DELIBERATELY NOT IN scripts/lib/prose.mjs. `openingShape` writes `opening_shape` on 1,900 stored
+ * rows and feeds the corpus distribution the drafting brief quotes; changing it would re-point
+ * numbers that are already in briefs and in Josh's library. This is a second, finer reading layered
+ * on top, and it lives with the artefact that uses it.
+ */
+function statementKind(line) {
+  const t = (line ?? "").trim();
+  if (!t) return "empty";
+  // Opens on somebody's words. Checked first: a quote can contain anything.
+  if (/^["“']|^[A-Z][a-z]+:\s*["“']/.test(t)) return "quote";
+  // Addresses the reader's situation directly — the closest thing in the bucket to naming who it
+  // is for, which his hooks section calls the highest-value tool available.
+  if (/^(if|when|for)\s+(you|your|anyone|every|most|a |an |the )/i.test(t)) return "conditional";
+  // A before and after, which is the contrast tool without the second line.
+  if (/\b(used to|no longer|has changed|changed a lot|not any ?more|these days|back then)\b/i.test(t)) {
+    return "used_to";
+  }
+  // An event: a date, a launch, an announcement, somebody else's news.
+  if (/\b(announc\w+|launch\w+|dropped|released|today|last (week|month|friday|year)|big news|just )\b/i.test(t)) {
+    return "news";
+  }
+  // Tells the reader to do something.
+  if (/^(stop|start|do not|don'?t|never|always|connect|build|use|try|read|check|ask)\b/i.test(t)) {
+    return "imperative";
+  }
+  // Something that happened, with a marker of occasion or person.
+  if (/\b(i|we|my|our|me)\b/i.test(t) && /\b(was|were|had|got|came|went|found|saw|met|told|sent)\b/i.test(t)) {
+    return "scene";
+  }
+  // What is left: a claim about how the world works. The commonest and the most generic.
+  return "assertion";
+}
+
 /* ── Measure one post ─────────────────────────────────────────────────────── */
 
 function measureOne(p) {
@@ -376,8 +418,26 @@ function measureOne(p) {
   // place, a product. The slice(1) is what keeps the opening capital from counting as one.
   const specific = FIGURE.test(line1) || /[A-Z][a-z]{2,}/.test(line1.slice(1));
   const stakes = STAKES.test(line1);
+  /*
+   * EMOTION IS COMPUTED AND NO LONGER PUBLISHED — validated 2 November and cut.
+   *
+   * scripts/validate-investment.mjs scored it against 20 hand-labelled openings: 22% recall, 100%
+   * precision. It finds two of every nine openings that genuinely carry an emotion, and misses
+   * "I nearly quit in my second year", "My best client fired us on a Tuesday" and "Our pipeline
+   * dried up in three weeks and I did not see it coming" — because it matches named feelings and
+   * real openings carry implied ones.
+   *
+   * The 2.9% it reported across 3,261 openings was therefore a fact about the word list, not about
+   * writers, and it was sitting beside measurements that are real. A labelled figure that is wrong
+   * is worse than an absent one, because the label makes it credible.
+   *
+   * Kept in the row so a better detector can be scored against the same corpus without a rebuild,
+   * and excluded from every published figure below.
+   */
   const emotion = EMOTION.test(line1);
-  const invCount = [specific, stakes, emotion].filter(Boolean).length;
+  // Two of the three required specificity, stakes and emotion. With emotion cut it is two of two,
+  // which is a different and much weaker claim — see investment_elements in the output.
+  const invCount = [specific, stakes].filter(Boolean).length;
 
   /*
    * HOW MUCH OF THE FOLD THE HOOK ITSELF EATS — the measurement nothing in this system had.
@@ -402,9 +462,15 @@ function measureOne(p) {
     source: p.source ?? "josh_eight",
     reactions: typeof p.reactions === "number" ? p.reactions : null,
     shape: p.opening_shape ?? openingShape(line1),
+    // Only meaningful for the fallthrough bucket; null everywhere else keeps the two readings apart.
+    statement_kind: (p.opening_shape ?? openingShape(line1)) === "statement" ? statementKind(line1) : null,
     line1,
     line1_words: typeof p.opening_words === "number" ? p.opening_words : words(line1),
     line2_words: words(line2),
+    // Does line two answer line one, or add to it? His hooks section calls the second of those
+    // "two stacked gaps" and nothing has ever measured it.
+    line2_resolves: line2 ? FIGURE.test(line2) && !FIGURE.test(line1) : null,
+    line2_present: Boolean(line2),
     above_fold_words: shape.above_fold_words,
     hook_above_fold: shape.hook_above_fold,
     fold_lines_used: foldLinesUsed,
@@ -659,9 +725,74 @@ function aggregate(rows) {
       investment_components_pct: {
         specificity: pct(rows.filter((r) => r.specific).length, rows.length),
         stakes: pct(rows.filter((r) => r.stakes).length, rows.length),
-        emotion: pct(rows.filter((r) => r.emotion).length, rows.length),
+        emotion_withdrawn:
+          "Cut on 2 November after validation. 22% recall against 20 hand-labelled openings — it " +
+          "found two of every nine that genuinely carry an emotion. The 2.9% it used to report " +
+          "was a fact about a word list, not about writers. scripts/validate-investment.mjs.",
+      },
+      /*
+       * THE ERROR ON THE FIGURES ABOVE, measured rather than asserted. The precedent is
+       * scripts/measure-structure.mjs, which published its list detector's confusion matrix and
+       * was right to: re-tested at scale, 90% became 83.8%.
+       */
+      investment_detector_accuracy: {
+        basis: "20 openings labelled by hand, scripts/validate-investment.mjs --score",
+        stakes: { recall_pct: 67, precision_pct: 60 },
+        specificity: "not scored — a figure or a proper noun is a mechanical test, not a reading",
+        means:
+          "Stakes finds about two thirds of the openings that carry them and is right about three " +
+          "in five of the ones it flags, missing implied risk and firing on 'cost' and 'dead' used " +
+          "in another sense. Use it as an indication and never as a count.",
       },
       names_the_reader_pct: pct(rows.filter((r) => r.names_reader).length, rows.length),
+      /*
+       * WHAT THE BIGGEST BUCKET IS ACTUALLY DOING.
+       *
+       * `statement` is over half the corpus and is openingShape's fallthrough, so without this the
+       * artefact says nothing about the majority of first lines. The seven kinds came from reading
+       * 478 of them on 2 November — see statementKind.
+       */
+      statement_is_really: (() => {
+        const st = rows.filter((r) => r.statement_kind);
+        const tally = {};
+        for (const r of st) tally[r.statement_kind] = (tally[r.statement_kind] ?? 0) + 1;
+        return {
+          of: st.length,
+          means:
+            "Shares of the statement bucket, not of the whole corpus. Aiming at `statement` is " +
+            "aiming at none of the other six shapes; these say which move the line actually makes.",
+          kinds: Object.entries(tally).sort((a, b) => b[1] - a[1])
+            .map(([k, n]) => [k, pct(n, st.length)]),
+        };
+      })(),
+      /*
+       * LINE TWO, which his own toolkit names and nothing had ever measured.
+       *
+       * His hooks section lists "two stacked gaps" as a tool: "Line two refuses to answer line one
+       * and adds a second question instead of resolving the first." Every measurement in this file
+       * was about line one, so the one move his section describes in terms of the SECOND line was
+       * invisible.
+       *
+       * `resolves` is a proxy and a narrow one: it asks whether a figure arrives in line two that
+       * was withheld in line one. That catches the commonest resolution — the number — and misses
+       * every resolution that is not a number. Reported with its own limit attached rather than
+       * dressed up as a reading of what line two does.
+       */
+      line_two: (() => {
+        const withSecond = rows.filter((r) => r.line2_present);
+        return {
+          posts_with_a_second_line: withSecond.length,
+          median_words: median(withSecond.map((r) => r.line2_words)),
+          resolves_with_a_figure_pct: pct(
+            withSecond.filter((r) => r.line2_resolves).length,
+            withSecond.length,
+          ),
+          means:
+            "A low share means these writers mostly do NOT answer line one in line two — which is " +
+            "the stacked-gap move his hooks section describes. It counts figures only, so a line " +
+            "that resolves in words is invisible to it.",
+        };
+      })(),
       /*
        * THE HEADLINE FINDING, and the reason this corpus was widened at all.
        *
@@ -782,8 +913,8 @@ console.log("    hook clears fold   " + aw.hook_clears_the_fold_pct + "%");
 console.log("    marked turn        " + aw.has_a_marked_turn_pct + "%");
 console.log("    investment: specificity " + aw.investment_components_pct.specificity +
   "%, stakes " + aw.investment_components_pct.stakes +
-  "%, emotion " + aw.investment_components_pct.emotion +
-  "%  -> two or more " + aw.two_or_more_investment_elements_pct + "%");
+  "%  (emotion cut — 22% recall)  -> both " + aw.two_or_more_investment_elements_pct + "%");
+console.log("    stakes detector: 67% recall, 60% precision against 20 hand-labelled openings");
 const f = aw.fold;
 console.log("\n  WHAT THE HOOK COSTS OF THE FOLD — the measurement nothing had:");
 console.log("    the hook alone uses  1 line " + f.lines_the_hook_uses.one +

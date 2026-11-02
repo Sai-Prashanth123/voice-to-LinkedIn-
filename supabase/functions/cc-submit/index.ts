@@ -121,6 +121,8 @@ Deno.serve(async (req) => {
     hold: decisions.holdPostRoute,
     // He posted it himself. Records what went out; it is not a route to publishing (R3).
     published_by_hand: decisions.publishedByHandRoute,
+    // Which opening he picked, and which he turned down. The only hook signal that is his.
+    hook_chosen: decisions.hookChoiceRoute,
     edit_post: decisions.editPost,
 
     // The idea bank.
