@@ -33,37 +33,52 @@ export interface Embedding {
 }
 
 /**
- * Hugging Face first, because that is what is configured; OpenAI if a key for it appears.
+ * Which vector provider is configured, if any. **An optional accelerator, not a dependency.**
  *
- * Both are 1024-dimension choices deliberately, so a provider swap does not silently write vectors
- * the column cannot hold — text-embedding-3-small is asked for 1024 rather than its default 1536.
- * Old vectors still become uncomparable on a swap, which is what `embedding_model` records.
+ * HUGGING FACE WAS DROPPED ON 2 NOVEMBER. Its key had been returning a billing error for weeks, and
+ * every retelling check since raised a standing warning that nobody reading it could clear. The
+ * check never stopped working — clause 7.2 allows "embeddings OR an LLM comparison pass", and
+ * `dedup.ts` now runs the model comparison as the primary path. See the long note there.
+ *
+ * So this returns null on a normal deployment, and that is the intended state rather than a fault.
+ * Nothing calls `embed()` unless this returns a provider.
+ *
+ * OpenAI is kept as the one remaining option because `text-embedding-3-small` can be asked for 1024
+ * dimensions, which is what the column holds — a provider whose natural width is different would
+ * silently write vectors that cannot be compared with the ones already stored. `embedding_model` is
+ * what records which produced a given row, and vectors are only ever compared within one model.
+ *
+ * Re-adding a provider is one line. Do it for cost, never because the check is broken without one.
  */
-export function embeddingProvider(): "huggingface" | "openai" | null {
-  if (secret("HUGGINGFACE_API_KEY")) return "huggingface";
+export function embeddingProvider(): "openai" | null {
   if (secret("OPENAI_API_KEY")) return "openai";
   return null;
 }
 
-const HF_MODEL = "BAAI/bge-m3";
+/*
+ * BAAI/bge-m3 was the model here until 2 November, and the dedup thresholds were calibrated against
+ * it: 0.70 to block, 0.62 to warn. Any row still carrying that model name was measured on that
+ * scale, which is exactly why vectors are only ever compared within one `embedding_model`. The
+ * name is gone from the code and stays on the rows.
+ */
 const OPENAI_MODEL = "text-embedding-3-small";
 
 export function embeddingModel(): string | null {
-  const p = embeddingProvider();
-  if (p === "huggingface") return HF_MODEL;
-  if (p === "openai") return OPENAI_MODEL;
-  return null;
+  return embeddingProvider() === "openai" ? OPENAI_MODEL : null;
 }
 
 export async function embed(text: string): Promise<Embedding> {
   const provider = embeddingProvider();
   if (!provider) {
-    throw new Error("no embedding provider configured (HUGGINGFACE_API_KEY or OPENAI_API_KEY)");
+    /*
+     * Not an error condition on a normal deployment. Since 2 November the retelling check runs the
+     * model comparison as its primary path and only reaches here when a provider is configured, so
+     * a caller should test embeddingProvider() rather than catch this.
+     */
+    throw new Error("no embedding provider configured (OPENAI_API_KEY)");
   }
 
-  const vector = provider === "huggingface"
-    ? await embedHuggingFace(text)
-    : await embedOpenAI(text);
+  const vector = await embedOpenAI(text);
 
   if (vector.length !== EMBEDDING_DIMENSIONS) {
     // Storing this would poison every future comparison, so it fails here instead.
@@ -72,32 +87,7 @@ export async function embed(text: string): Promise<Embedding> {
     );
   }
 
-  return { vector, model: provider === "huggingface" ? HF_MODEL : OPENAI_MODEL };
-}
-
-async function embedHuggingFace(text: string): Promise<number[]> {
-  const res = await fetch(
-    `https://router.huggingface.co/hf-inference/models/${HF_MODEL}/pipeline/feature-extraction`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${secret("HUGGINGFACE_API_KEY")}`,
-        "Content-Type": "application/json",
-      },
-      // wait_for_model because a cold model returns 503 rather than queueing, and a 503 here would
-      // read as "cannot check" and hold a perfectly good moment.
-      body: JSON.stringify({ inputs: clip(text), options: { wait_for_model: true } }),
-    },
-  );
-  if (!res.ok) throw new Error(`huggingface embeddings ${res.status}: ${await res.text()}`);
-
-  const data = await res.json();
-  // The feature-extraction pipeline returns either a flat vector or a one-element batch.
-  const vector = Array.isArray(data) && Array.isArray(data[0]) ? data[0] : data;
-  if (!Array.isArray(vector) || typeof vector[0] !== "number") {
-    throw new Error("huggingface embeddings returned no vector");
-  }
-  return vector as number[];
+  return { vector, model: OPENAI_MODEL };
 }
 
 async function embedOpenAI(text: string): Promise<number[]> {

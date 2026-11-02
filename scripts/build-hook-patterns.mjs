@@ -217,6 +217,89 @@ const EMOTION = new RegExp(
   "i",
 );
 
+/*
+ * SOURCE C — the scraping console's harvest store, for HOOKS ONLY. `--console` to include it.
+ *
+ * WHY IT CAN BE USED FOR HOOKS AND NOT FOR SHAPE, which is the whole point of it being separate.
+ *
+ * The console's LinkedIn parser stopped preserving line breaks around 28 September 2026. Verified
+ * against the live API on 2 November: 200 consecutive harvest rows, ZERO newlines. That makes the
+ * store useless for every shape measurement this repo takes — paragraph count, words above the
+ * fold, list detection — because all of them are counted from line breaks, and a flat scrape once
+ * made seven writers appear to change their habits overnight (5 October). It is filed as bug 5 in
+ * docs/to-console/2026-10-19-platform-bugs.md and is still open.
+ *
+ * But a HOOK is line one, and the store carries `headline` on every row — 200 of 200, and a prefix
+ * of the body text in 196 of them. So the one measurement that survives a flattened body is the one
+ * this file is about. That is why hook collection can move off Apify now while shape collection
+ * waits for the fix.
+ *
+ * `headline` IS THE FIRST SENTENCE, NOT THE FIRST LINE. On posts that do keep their breaks the two
+ * agree about 70% of the time; on a flat post there is no first line to disagree with. Rows from
+ * here are labelled so no reader mistakes one for the other.
+ *
+ * THE LONG TAIL IS DROPPED. The store is a feed scrape, not a reference library: 933 handles across
+ * 2,042 posts, and 721 of those handles contribute exactly one post — conference check-ins and
+ * team-pride posts with no structure to learn from. MIN_POSTS keeps only accounts that post enough
+ * to have a habit.
+ */
+const MIN_POSTS_PER_HANDLE = 8;
+
+async function consoleHarvestPosts() {
+  const file = ["../.env", "../mcp-server/.env", "../eval/.env"]
+    .map((p) => {
+      try {
+        return readFileSync(join(ROOT, p.replace("../", "")), "utf8");
+      } catch {
+        return "";
+      }
+    })
+    .join("\n");
+  const field = (k) =>
+    process.env[k] ?? (file.match(new RegExp("^" + k + "=(.*)$", "m")) ?? [])[1]?.trim();
+  const base = field("XP_BASE");
+  const key = field("XP_API_KEY");
+  if (!base || !key) {
+    console.log("  source C — console           : no XP_API_KEY on disk, skipped");
+    return [];
+  }
+
+  const out = [];
+  for (let offset = 0;; offset += 200) {
+    const res = await fetch(
+      base.replace(/\/+$/, "") + `/harvest/posts?limit=200&offset=${offset}`,
+      { headers: { "X-API-Key": key } },
+    );
+    if (!res.ok) {
+      console.log("  source C — console           : " + res.status + ", skipped");
+      return [];
+    }
+    const body = await res.json();
+    const items = body.items ?? body.posts ?? [];
+    out.push(...items);
+    if (items.length < 200 || offset > 5000) break;
+  }
+
+  const counts = {};
+  for (const p of out) counts[p.author_handle] = (counts[p.author_handle] ?? 0) + 1;
+
+  return out
+    .filter((p) =>
+      !p.is_repost &&
+      String(p.headline ?? "").trim() &&
+      (counts[p.author_handle] ?? 0) >= MIN_POSTS_PER_HANDLE
+    )
+    .map((p) => ({
+      activity_id: p.activity_id,
+      handle: p.author_handle,
+      // The headline IS the line, deliberately. A flat body has no first line to take.
+      text: String(p.headline).trim(),
+      source: "console_store",
+      reactions: typeof p.reaction_count === "number" ? p.reaction_count : null,
+      posted_at: p.posted_at ?? null,
+    }));
+}
+
 /* ── His own standard, applied before anything enters the corpus ──────────────
  *
  * WHY A FILTER AT ALL. The widest-reaching opening in the content-agent store is a bait-and-switch:
@@ -471,7 +554,7 @@ function aggregate(rows) {
        * silently includes fourteen strangers is the standard changing without him.
        */
       by_source: Object.fromEntries(
-        ["josh_eight", "content_agent"].map((s) => {
+        ["josh_eight", "content_agent", "console_store"].map((s) => {
           const rs = rows.filter((r) => r.source === s);
           return [s, {
             posts: rs.length,
@@ -489,6 +572,10 @@ function aggregate(rows) {
           "Clients of the sibling content-agent project, read from its on-disk caches. Not Josh's " +
           "writers and never to be reported as them. Their value is volume, fourteen more voices, " +
           "and engagement on almost every post — which his own corpus does not have.",
+        console_store:
+          "The scraping console's harvest store, headlines only, accounts with eight or more posts. " +
+          "Widest and weakest: nobody chose these accounts and the bodies are flat. Present for " +
+          "first-line volume and engagement, and for nothing else. See source_c_caveat.",
       },
       /*
        * WHAT SOURCE B IS NOT GOOD FOR, found by reading it rather than counting it.
@@ -503,6 +590,14 @@ function aggregate(rows) {
        * opinion about what slop is would be two standards. The honest handling is to say so here,
        * keep the corpora separable, and let the brief lean on source A for what good looks like.
        */
+      source_c_caveat:
+        "HOOKS ONLY, and its line one is a first SENTENCE rather than a first line. The scraping " +
+        "console stopped preserving line breaks around 28 September 2026 — verified 2 November, " +
+        "200 consecutive rows with zero newlines — so its bodies cannot be measured for shape at " +
+        "all. What survives is the `headline` field, present on every row and a prefix of the body " +
+        "in 98% of them, which is enough for a hook and nothing else. Accounts with fewer than " +
+        "eight posts are dropped: the store is a feed scrape and most of its handles contribute " +
+        "one conference check-in. Opt in with --console; it is not in a default build.",
       source_b_caveat:
         "Working creators, not a structure reference. Some of it is personal-brand marketing that " +
         "his rules do not name and therefore do not exclude. Use source B for volume, for the fold " +
@@ -613,10 +708,23 @@ console.log("  source B — content-agent     : " + caShaped.length + " posts wi
   (contentAgent.length === 0 ? "  (cache not found — source A only)" : ""));
 
 /*
- * Only posts that kept their line breaks, for both sources and the same reason: a post that arrived
- * as one unbroken line would report the scraper's behaviour as a habit of the writer.
+ * Source C is opt-in with --console, because it changes what the corpus IS. A and B are measured
+ * first lines; C is a first sentence taken from a flattened body. Mixing them silently would make
+ * the shape distribution a fact about two different kinds of reading.
  */
-const posts = [...joshEight, ...caShaped];
+const consoleRows = process.argv.includes("--console") ? await consoleHarvestPosts() : [];
+if (consoleRows.length) {
+  console.log("  source C — console store     : " + consoleRows.length + " headlines, " +
+    new Set(consoleRows.map((p) => p.handle)).size + " accounts with " +
+    MIN_POSTS_PER_HANDLE + "+ posts  (hooks only — bodies are flat)");
+}
+
+/*
+ * Only posts that kept their line breaks, for A and B and the same reason: a post that arrived as
+ * one unbroken line would report the scraper's behaviour as a habit of the writer. Source C is
+ * exempt because it carries no body at all — only the headline, which is the line.
+ */
+const posts = [...joshEight, ...caShaped, ...consoleRows];
 
 /*
  * HIS OWN STANDARD, BEFORE ANYTHING IS COUNTED. See rejectReason. Both the count and a sample go

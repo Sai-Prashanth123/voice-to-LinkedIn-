@@ -201,7 +201,9 @@ scripts/               doctor.mjs first — does this clone work. Then scrape, r
                        measurements, rebuild the law set. calibrate-aitells.mjs answers
                        "is this threshold too strict" with the corpus rather than an opinion
 data/josh/             the law set, the measured voiceprint, the sentinel measurements and
-                       hooks/latest.json — what the eight do with a first line, structure only.
+                       hooks/latest.json — what a first line does, structure only, across three
+                       LABELLED corpora: his eight (the standard), content-agent's clients, and
+                       the console harvest store (--console, headlines only, bodies are flat).
                        Rebuild with scripts/build-hook-patterns.mjs, which refuses to write if
                        any post's text reaches the output (8.3)
 data/local/            the whole bank as JSONL, so a clone has real content to work against
@@ -266,9 +268,12 @@ Four live examples, all found on 2 November and all fixed:
   record this system holds of what *better* looked like — had drifted to position fifteen as his own
   activity pushed them down. The read succeeded, returned ten rows, and none of them was the thing
   the feature existed to deliver.
-- The retelling check compares embeddings. There are 122 moments and **six** embeddings, and
+- The retelling check compared embeddings. There were 122 moments and **six** embeddings, and
   `published_archive` is empty, so it answered "clear" honestly and uselessly. Four drafts for four
-  different moments opened on the identical sentence and nothing noticed.
+  different moments opened on the identical sentence and nothing noticed. **Fixed on 2 November by
+  inverting it:** the model comparison is the primary path and Hugging Face is gone. Clause 7.2
+  allows "embeddings OR an LLM comparison pass", so the second was never a degradation — but it was
+  reported as one on every check, in a standing warning nobody reading it could clear.
 - `measure_draft` has rendered the above-the-fold preview since 26 October, in a tool nobody has to
   call.
 

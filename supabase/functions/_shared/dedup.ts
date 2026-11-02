@@ -117,35 +117,44 @@ export async function checkRetelling(
     return { verdict: "clear", similarity: null, against: null, method: "none" };
   }
 
-  try {
-    return await byEmbeddings(db, momentId, text, thresholds);
-  } catch (err) {
-    await logEvent(db, "dedup_embeddings_failed", "warn", {
-      moment_id: momentId,
-      error: err instanceof Error ? err.message : String(err),
-      /*
-       * STANDING, not a blip — and that word is what gets it in front of Josh.
-       *
-       * `worker-ops` surfaces `error` and never `warn`, deliberately: a warning that repeats daily
-       * is a channel he learns to ignore, and its own comment records 1,581 stale events that
-       * taught exactly that lesson. But this one is not an event, it is a CONDITION: the fast
-       * embedding path is gone and every check since has run on the slower, dearer model fallback.
-       *
-       * It ran for six days unnoticed. The check itself kept working — clause 7.2 allows either
-       * method and the fallback is real — so nothing broke. It just quietly started costing more,
-       * and the only trace was a warn row nobody reads.
-       *
-       * Opt-in rather than opt-out, so widening this can never sweep in per-call noise: a
-       * `mcp_http_call` warn is one refused call and belongs to whoever made it, not to Josh.
-       */
-      standing: true,
-      means: "The fast embedding path is unavailable, so the retelling check is running on the " +
-        "slower LLM comparison. It still works. It costs more per moment.",
-    });
+  /*
+   * THE MODEL IS THE PRIMARY PATH NOW, AND EMBEDDINGS ARE AN ACCELERATOR — inverted 2 November.
+   *
+   * It used to be the other way round: embeddings first, and a `standing: true` warning every time
+   * they failed, telling Josh the check was "degraded". That framing was wrong in two ways.
+   *
+   * It was not degraded. Clause 7.2 allows either method — "needs embeddings or an LLM comparison
+   * pass" — and `byModel` is the second of those, not a fallback from it. It reads 25 recent
+   * published posts and 25 in-flight moments and asks the model directly, which is strictly more
+   * informed than a cosine distance: it can say WHY two things are the same story, and the
+   * embedding path can only say how far apart two vectors are.
+   *
+   * And the warning could never clear. The Hugging Face key has been returning a billing error for
+   * weeks, so every single check raised a standing condition that nobody could act on from inside
+   * this system. A warning that cannot be cleared by the person reading it is noise, and this
+   * repository has already learnt that lesson twice.
+   *
+   * So: the model runs first and is the intended path. Embeddings are tried only when a provider is
+   * actually configured, purely because a vector comparison is cheaper per moment — and when they
+   * fail, that is logged at `info`, because nothing is wrong.
+   *
+   * WHY THE VECTOR PATH IS KEPT AT ALL. `moment_embeddings` and `published_archive.embedding` still
+   * hold rows, the selector's recency-spacing score reads them, and a cheap pre-filter is worth
+   * having the day the provider works again. Deleting it would be a second migration to undo.
+   */
+  if (embeddingProvider()) {
+    try {
+      return await byEmbeddings(db, momentId, text, thresholds);
+    } catch (err) {
+      await logEvent(db, "dedup_embeddings_skipped", "info", {
+        moment_id: momentId,
+        error: err instanceof Error ? err.message : String(err),
+        means: "A provider is configured but did not answer, so this check ran on the model " +
+          "comparison instead. That is the primary path and nothing is degraded by it.",
+      });
+    }
   }
 
-  // The spec allows either method — "needs embeddings or an LLM comparison pass". So a missing
-  // embedding provider degrades the check rather than switching it off.
   try {
     return await byModel(db, momentId, text);
   } catch (err) {
