@@ -128,9 +128,12 @@ library actually names on 2 November.
 
 Run `measure_draft`. Three things in it are about the first line:
 
-- `fold.what_he_would_see` — the text before "see more". The constants are uncalibrated, so act on
-  the preview and on `hook_lands_above_it`, and **do not quote the word count to Josh as a
-  measurement.**
+- **`preview_post`** — call it with the line and SHOW him the result. It returns plain text, so the
+  mobile and desktop boxes arrive as lines he can read. `measure_draft`'s
+  `fold.what_he_would_see` carries the same text but comes back inside JSON with the newlines
+  escaped, which is why nobody has ever actually seen it. Read the last line of the preview before
+  quoting any number from it: while it says `NOT FITTED`, act on whether the hook lands above the
+  cut and **do not quote a word or character count to Josh as a measurement.**
 - `shape.opening_words` — line one against the writers' band.
 - `opening.yours` — which of the seven shapes it is.
 

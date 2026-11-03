@@ -1,0 +1,37 @@
+{
+  "_what_this_is": "The fold model's fitted parameters. Written by scripts/calibrate-fold.mjs and read by supabase/functions/_shared/fold-preview.ts. It is DATA on purpose: calibrating is then a paste and a command, not a code change, and the basis travels with the numbers instead of living in a comment somebody has to find.",
+  "_why_it_exists_unfitted": "A static import is the only form that reaches the hosted connector — an edge bundle carries the import graph and nothing else, which build-info.mjs learned the expensive way. So this file has to exist before it is fitted, and it says so rather than looking authoritative.",
+  "fitted": false,
+  "fitted_on": null,
+  "fitted_against": null,
+  "basis": "NOT FITTED. Carried over from shape.ts, where FOLD_LINES, FOLD_CHARS_PER_LINE and FOLD_BLANK_COST are all flagged PROVISIONAL and have never been measured against any real render. Act on whether the hook lands above the cut; do not quote a character or word count as a measurement.",
+  "surfaces": {
+    "mobile": {
+      "name": "Mobile",
+      "capacity": 42,
+      "lines": 3,
+      "blankCost": 1,
+      "seeMoreCost": 0,
+      "breaksMidWord": false,
+      "widths": null
+    },
+    "desktop": {
+      "name": "Desktop",
+      "capacity": 60,
+      "lines": 3,
+      "blankCost": 1,
+      "seeMoreCost": 0,
+      "breaksMidWord": false,
+      "widths": null
+    }
+  },
+  "residuals": null,
+  "_notes_on_each_parameter": {
+    "capacity": "Line width, in the units of `widths`. With widths null this is literally characters per line, which is shape.ts's model.",
+    "lines": "Visible lines before the cut.",
+    "blankCost": "Rendered lines a blank source line costs. May be fractional: 0.5 means every other gap costs a line, which is real when paragraph spacing is under one line height. shape.ts floors this; fold-preview.ts does not.",
+    "seeMoreCost": "Capacity consumed on the last visible line by the inline see-more link. Zero here because it has never been measured, and a guess would trade a known error for an unknown one.",
+    "breaksMidWord": "Whether the renderer clips mid-word at the clamp point or backs up to a word boundary. CSS line-clamp does the former.",
+    "widths": "Per-character relative advance, 1.0 being an average lowercase glyph. Null means a flat table, so every character is one unit — which cannot express that WWWWW is wider than iiiii, and is why a single capacity number can never be right for both."
+  }
+}

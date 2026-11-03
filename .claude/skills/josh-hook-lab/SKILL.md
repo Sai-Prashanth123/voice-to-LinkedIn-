@@ -47,8 +47,8 @@ For every candidate, call **`measure_draft`** with the candidate as the body. Fr
 
 | what to show | where it comes from |
 |---|---|
-| the preview — what he sees before "see more" | `fold.what_he_would_see` |
-| how many of the three lines the hook eats | count the lines in that preview |
+| the preview — what he sees before "see more" | **`preview_post`**, and show him its output as-is |
+| how many of the three lines the hook eats | the boxes `preview_post` draws, mobile and desktop |
 | first-line length against the corpus | `shape.opening_words` |
 | which shape it actually is | `opening.yours` |
 | any construction his library rules out | `will_refuse` and `ai_tells` |

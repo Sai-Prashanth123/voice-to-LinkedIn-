@@ -45,6 +45,7 @@ import { WRITER_CHOICES } from "../writers.mjs";
 // Import-free and type-stripped by Node, the shape.ts pattern — so this stays a tool that makes no
 // database call and no network call, which guards.test.mjs asserts by handing it an empty context.
 import { splitModes } from "../../supabase/functions/_shared/library-spans.ts";
+import { previewBlock, SURFACES } from "../../supabase/functions/_shared/fold-preview.ts";
 // The same set scripts/build-voiceprint.mjs now applies when it WRITES the peer list. Import-free,
 // so it costs this tool neither a database call nor a network call. See PEER_WORDS below for why
 // the filter has to happen again here.
@@ -967,6 +968,55 @@ export const measureTools = [
               : ".");
         })(),
       };
+    },
+  },
+{
+    name: "preview_post",
+    config: {
+      title: "Show him the post as a reader sees it",
+      description:
+        "Draws the post as LinkedIn lays it out, mobile and desktop side by side, with the " +
+        "\"see more\" cut where it actually falls. Use it before he approves a draft, when he asks " +
+        "what a post will look like, and in the hook lab where the fold IS the question.\n\n" +
+        "WHY THIS AND NOT measure_draft's fold block. This returns plain text, so the preview " +
+        "arrives as lines you can read out. Every other tool returns an object, which gets " +
+        "JSON-encoded, so the same preview has been arriving as one long line with \\n in it since " +
+        "26 October — the reason nobody has ever actually seen it.\n\n" +
+        "READ THE LAST LINE OF THE OUTPUT BEFORE QUOTING ANY OF IT. It says what the fold was " +
+        "fitted against. While it says NOT FITTED, act on whether the hook lands above the cut and " +
+        "do not quote a character or word count to Josh as a measurement — the numbers are carried " +
+        "over from constants that have never been measured against a real render.",
+      inputSchema: {
+        text: z
+          .string()
+          .min(1)
+          .describe("The post body, WITH its line breaks. The cut depends on them."),
+        title: z
+          .string()
+          .optional()
+          .describe("What to call it when showing him — the idea's name. Never an id."),
+        hook: z
+          .string()
+          .optional()
+          .describe(
+            "The first sentence, so the preview can say whether it lands above the cut. " +
+              "Omit and that line is left out rather than guessed.",
+          ),
+      },
+    },
+    /*
+     * RETURNS A STRING, DELIBERATELY.
+     *
+     * server.mjs: `text: typeof value === "string" ? value : JSON.stringify(value, null, 2)`. A
+     * string is passed through verbatim; an object is encoded, and its newlines become the two
+     * characters backslash-n inside a quoted field. This is the only tool in the repo that takes
+     * the first path, and taking it is the whole point of the tool.
+     */
+    async handler(args) {
+      return previewBlock(args.text, [SURFACES.mobile, SURFACES.desktop], {
+        title: args.title,
+        hook: args.hook,
+      });
     },
   },
 ];
