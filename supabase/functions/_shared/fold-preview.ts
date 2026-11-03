@@ -34,7 +34,14 @@
  * three constants were presented as if measured.
  */
 
-import { EMOJI_WIDTH, isEmoji, type WidthTable } from "./fold-metrics.ts";
+import {
+  displayWidth,
+  EMOJI_WIDTH,
+  FULL_WIDTH,
+  isEmoji,
+  isFullWidth,
+  type WidthTable,
+} from "./fold-metrics.ts";
 
 export type { WidthTable };
 
@@ -167,6 +174,11 @@ export function widthIn(s: string, widths?: WidthTable): number {
       const listed = widths[ch];
       if (listed !== undefined) total += listed;
       else if (isEmoji(ch)) total += EMOJI_WIDTH;
+      // Chinese, Japanese and Korean. Nothing in the table matches them, so the fallback of 1
+      // applied and a CJK post measured as fitting twice as much above the fold as it does. The
+      // scripts where this matters most are also the ones with no spaces to wrap on, so the
+      // capacity is the only thing deciding the answer.
+      else if (isFullWidth(ch)) total += FULL_WIDTH;
       else total += fallback;
     }
   }
@@ -305,7 +317,16 @@ export function foldFor(text: string | null | undefined, surface: Surface): Fold
 
 /* ── Drawing it ───────────────────────────────────────────────────────────── */
 
-const pad = (s: string, n: number) => s + " ".repeat(Math.max(0, n - graphemes(s).length));
+/**
+ * Columns a string occupies in a monospaced grid.
+ *
+ * Not the same as its grapheme count, which is what the box used to pad by: an emoji is one
+ * grapheme and two columns, so a line of them drew a frame around content twice its apparent
+ * width and the right border landed nowhere near the other box's.
+ */
+const columns = (s: string) => graphemes(s).reduce((n, g) => n + displayWidth(g), 0);
+
+const pad = (s: string, n: number) => s + " ".repeat(Math.max(0, n - columns(s)));
 
 /** Greedy wrap for the preview's own prose. Not the fold model — this is just legibility. */
 function softWrap(text: string, width: number): string[] {
@@ -331,10 +352,15 @@ function softWrap(text: string, width: number): string[] {
 function box(result: FoldResult, surface: Surface): string[] {
   // Bounded by the surface: a line cannot be wider than the container that drew it, and a box
   // 200 characters across is not a preview of a phone.
-  const widest = Math.min(
-    Math.max(10, ...result.shown.map((l) => graphemes(l).length)),
-    Math.ceil(surface.capacity),
-  );
+  /*
+   * Sized to the CONTENT's columns, not to the surface's capacity.
+   *
+   * Capacity is in model units and the frame is drawn in display columns, and for a full-width
+   * glyph those differ by two: 42 emoji is 42 units and 84 columns. Bounding the frame by capacity
+   * drew it 42 wide around content 84 wide, and the right border landed off the end of the line.
+   * A box whose border does not line up with its own content is not a preview of anything.
+   */
+  const widest = Math.max(10, ...result.shown.map((l) => columns(l)));
   const out: string[] = [];
   out.push("┌" + "─".repeat(widest + 2) + "┐");
   for (const line of result.shown) out.push("│ " + pad(line, widest) + " │");

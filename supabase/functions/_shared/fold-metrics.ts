@@ -98,6 +98,65 @@ export function isEmoji(grapheme: string): boolean {
 }
 
 /**
+ * A full-width character — Chinese, Japanese, Korean, and the full-width Latin forms — costs about
+ * two ordinary glyphs.
+ *
+ * FOUND BY AN EDGE-CASE SUITE, and it was wrong by a factor of two. Nothing in the table above
+ * matches a CJK character, so `default: 1` applied: a Chinese post measured as fitting twice as
+ * much above the fold as it actually does. The same held for Japanese and Korean.
+ *
+ * It matters beyond correctness-for-its-own-sake. These are the scripts where the space-based word
+ * wrap has nothing to break on, so every line is a hard wrap at exactly the capacity — which makes
+ * the capacity the only thing deciding the answer, and it was half what it should be.
+ */
+export const FULL_WIDTH = 2.0;
+
+/**
+ * True for a grapheme drawn at double width.
+ *
+ * The ranges are the East Asian Wide and Fullwidth blocks, written out rather than taken from
+ * `\p{East_Asian_Width=W}` because that property escape is not supported everywhere this module
+ * runs and a silent `false` would put the bug straight back.
+ */
+export function isFullWidth(grapheme: string): boolean {
+  const cp = grapheme.codePointAt(0);
+  if (cp === undefined) return false;
+  return (
+    (cp >= 0x1100 && cp <= 0x115f) || // Hangul Jamo
+    (cp >= 0x2e80 && cp <= 0x303e) || // CJK radicals, Kangxi, CJK symbols
+    (cp >= 0x3041 && cp <= 0x33ff) || // Hiragana, Katakana, Bopomofo, Hangul compat, CJK compat
+    (cp >= 0x3400 && cp <= 0x4dbf) || // CJK Extension A
+    (cp >= 0x4e00 && cp <= 0x9fff) || // CJK Unified Ideographs
+    (cp >= 0xa000 && cp <= 0xa4cf) || // Yi
+    (cp >= 0xac00 && cp <= 0xd7a3) || // Hangul syllables
+    (cp >= 0xf900 && cp <= 0xfaff) || // CJK compatibility ideographs
+    (cp >= 0xfe30 && cp <= 0xfe6f) || // CJK compatibility forms
+    (cp >= 0xff00 && cp <= 0xff60) || // Fullwidth forms
+    (cp >= 0xffe0 && cp <= 0xffe6) ||
+    (cp >= 0x1f300 && cp <= 0x1f9ff) || // pictographs, also caught by isEmoji
+    (cp >= 0x20000 && cp <= 0x3fffd) // CJK Extension B and beyond
+  );
+}
+
+/**
+ * Columns a grapheme occupies in a monospaced grid — for drawing the ASCII preview box, not for
+ * the fold model.
+ *
+ * Also found by the edge-case suite: the box padded by GRAPHEME COUNT, so a line of emoji drew a
+ * frame 42 units wide around content occupying 84 columns and the right border landed nowhere near
+ * the others. Zero-width marks pad nothing; wide characters pad two.
+ */
+export function displayWidth(grapheme: string): number {
+  const cp = grapheme.codePointAt(0);
+  if (cp === undefined) return 0;
+  // Combining marks and zero-width controls take no column of their own.
+  if (cp === 0x200b || cp === 0x200c || cp === 0x200d || cp === 0xfeff || cp === 0x00ad) return 0;
+  if (cp >= 0x0300 && cp <= 0x036f) return 0;
+  if (isEmoji(grapheme) || isFullWidth(grapheme)) return 2;
+  return 1;
+}
+
+/**
  * The two candidate models the calibration scores against each other.
  *
  * Named rather than passed as booleans so the report can say which one won in words, and so a
