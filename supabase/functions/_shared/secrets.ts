@@ -46,6 +46,19 @@ export const SECRET_NAMES = [
   "HUGGINGFACE_API_KEY",
   "GEMINI_API_KEY",
   "OPENROUTER_API_KEY",
+  /*
+   * The two scraping backends, added 3 November with the creator poll. Until then nothing in the
+   * cloud fetched LinkedIn at all — `scripts/scrape-sentinels.mjs` runs on a laptop and reads
+   * `.env`, so these had never needed to exist as vault secrets.
+   *
+   * BOTH, not one. The console is primary and it FLAPS: three profile jobs on 3 November returned
+   * 11 rows, 11 rows, and then zero while reporting success. A poller with no fallback would have
+   * reported "nobody posted" on that third run. `XP_BASE` is optional and only set to point the
+   * console somewhere other than its default.
+   */
+  "XP_API_KEY",
+  "XP_BASE",
+  "APIFY_TOKEN",
 ] as const;
 
 /**

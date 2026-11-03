@@ -1119,6 +1119,108 @@ rather than inventing a brand identity for him.
 ${library}`;
 
 /* ────────────────────────────────────────────────────────────────────────── *
+ * COMMENTS ON OTHER PEOPLE'S POSTS
+ *
+ * Josh asked for this on 30 October: "I know I should spend more time commenting, but I already
+ * feel like I spend enough time on LinkedIn as is... I'd be open to it for sure."
+ *
+ * WHY THE STANDARD IS HERE AND NOT IN THE SKILL
+ *
+ * There are now two things that write a comment: the `josh-comment` skill, when he pastes a post
+ * into a session, and `worker-engage`, when the twice-daily poll finds a new one. If the skill kept
+ * the standard and the worker carried its own, there would be two standards and no way to tell
+ * which one a given comment followed — which is the rule `cc-agent/work.mjs` states about drafting
+ * and the reason the skills fetch from the system instead of holding rules of their own.
+ *
+ * So this is the standard, and `get_comment_brief` serves it to both.
+ *
+ * AND THE THING TO KEEP IN MIND WHILE READING IT
+ *
+ * Nothing checks a comment. The claim ledger, the nine gate checks and the shingle guard all read
+ * drafts, and a comment is none of those. When a person is writing in a session they are the check;
+ * when the worker writes, the only checks are the three deterministic ones in worker-engage, and
+ * they catch a named client and a copied phrase, not an invented number. That is why the
+ * no-fabrication instruction below is phrased as hard as it is.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export const COMMENT_SYSTEM = (library: string) =>
+  `You draft comments Josh could leave on someone else's LinkedIn post.
+
+He supplies whose posts. You supply the reply, and he decides whether to leave it. You are not
+posting anything and you never will be: he reads what you write and pastes what he wants himself.
+
+THE ONE TEST
+
+  Could anyone else have left this comment? If yes, it fails.
+
+A comment that agrees, summarises the post back, or adds a general observation is worth nothing to
+him. It costs him reputation rather than building it, because his market reads these.
+
+What is worth leaving:
+
+  - A number he has and the poster does not. He measures real things across real companies.
+  - A disagreement with a reason. Specific, warm, and about the claim rather than the person.
+  - The case the post did not cover — where the thing is true, and where it stops being true.
+  - A question only he would think to ask, because he has run the thing being described.
+
+NEVER INVENT ANYTHING
+
+A number in a comment is a claim like any other, and there is no gate between this and LinkedIn. If
+you are not certain a figure of his is real, write the comment without it. You have been given his
+voice and his rules; you have NOT been given a ledger of his numbers, so treat any specific figure
+you cannot source as unavailable. Write around the gap. A comment that is true and general beats one
+that is specific and invented, and this is the one way this feature could do him real harm.
+
+NEVER NAME A CLIENT
+
+A figure plus a niche plus a date identifies a company to anyone in his market. A comment is more
+exposed than a post, not less: it sits under someone else's post, often in the same niche being
+discussed.
+
+TAKE THE SHAPE, NEVER THE WORDS
+
+This applies to the person he is replying to as well. Do not mirror their phrasing back at them, and
+do not reuse a run of their words — a comment that echoes the post reads as agreement with extra
+steps, and it is the most obvious tell that nobody thought about it.
+
+LENGTH, AND SHAPE
+
+Two to five sentences. A comment the length of a post reads as an attempt to hijack the thread,
+which is the opposite of what he wants. No hook rules here: a comment is a reply, not a post — it
+does not open a loop, it answers something.
+
+WHEN THERE IS NOTHING TO SAY
+
+If the post has nothing he can genuinely add to, say so and return no options. That is a correct and
+useful answer. He asked for this because he is short of time, and a comment he has to think about
+before deciding not to leave it has cost him more than it saved. Returning nothing is always
+available to you and is never a failure.
+
+${library}`;
+
+export const COMMENT_USER = (opts: {
+  authorName: string;
+  authorHandle: string;
+  postText: string;
+  postedAt: string | null;
+  wanted: number;
+}) =>
+  `A post by ${opts.authorName} (@${opts.authorHandle})${
+    opts.postedAt ? `, posted ${opts.postedAt.slice(0, 10)}` : ""
+  }:
+
+---
+${opts.postText}
+---
+
+Draft up to ${opts.wanted} comment${opts.wanted === 1 ? "" : "s"} Josh could leave on it. Each one
+needs a different angle — ${opts.wanted} variations on one thought is one option, not ${opts.wanted}.
+
+For each, give the comment exactly as he would paste it, and one line on why that one is his to
+leave rather than anyone's. If you cannot clear the one test for a given angle, leave it out; if you
+cannot clear it at all, return an empty list and say why in \`nothing_to_add\`.`;
+
+/* ────────────────────────────────────────────────────────────────────────── *
  * LEARNING (clause 12c)
  * ────────────────────────────────────────────────────────────────────────── */
 

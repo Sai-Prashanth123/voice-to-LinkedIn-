@@ -59,6 +59,11 @@ verify_jwt = true
 [functions.worker-ops]
 verify_jwt = true
 
+# The creator poll. pg_cron calls it through invoke_worker with the service-role key, and
+# run_worker reaches it through cc-submit — both carry a JWT, so nothing needs it open.
+[functions.worker-engage]
+verify_jwt = true
+
 # LinkedIn redirects a BROWSER here, so it cannot carry a Supabase JWT. It validates the signed
 # state parameter it issued instead. Declared because this was previously only a --no-verify-jwt
 # flag on a deploy command: sticky, therefore working, and one bulk deploy away from a 401 that

@@ -49,6 +49,22 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
+/*
+ * The fetching and normalising live in a module because worker-engage needs the same three
+ * things in Deno — fetch a profile, work out who actually wrote each row, normalise it. Two
+ * copies of handleOf is the one outcome worth avoiding here: it is the function that was one
+ * run away from filing a stranger's post under a reference writer's name.
+ */
+import {
+  apifyApi,
+  CONSOLE_BASE,
+  consoleApi,
+  fetchFromApify as harvestApify,
+  fetchFromConsole as harvestConsole,
+  normaliseRows,
+  USER_AGENT,
+} from "./lib/harvest.mjs";
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
 
@@ -64,25 +80,17 @@ const SENTINELS = {
   mattjbarker1: "Matt Barker",
 };
 
-const CONSOLE_BASE = "https://scraping.thought-pilot.co/api";
-
 /*
- * Cloudflare fronts the console and answers a default Node or urllib User-Agent with 403 "error code
- * 1010". GETs happened to pass while POST /jobs did not, so it looked like a permissions problem on
- * one endpoint rather than a UA filter. Identifying the client honestly is the right thing anyway.
+ * CONSOLE_BASE, USER_AGENT, APIFY_ACTOR, the poll interval and both deadlines now live in
+ * ./lib/harvest.mjs, imported above. The reasoning that was written here moved with them.
  */
-const USER_AGENT = "voice-to-content/1.0 (+reference-writer refresh)";
 
-const APIFY_ACTOR = "harvestapi~linkedin-profile-posts";
 /*
  * The default, not the ceiling. It was a hardcoded constant until 20 October, which capped every
  * Apify run at 50 posts per profile with nothing saying so — a run asked for 250 and returned 50
  * and looked like it had finished. `--max` overrides it; `--since` narrows the window instead.
  */
 const POSTS_PER_PROFILE = 50;
-const POLL_EVERY_MS = 10_000;
-const CONSOLE_DEADLINE_MS = 10 * 60_000;
-const APIFY_DEADLINE_MS = 15 * 60_000;
 
 const arg = (n) => {
   const i = process.argv.indexOf(n);
@@ -147,148 +155,33 @@ for (const h of handles) {
   }
 }
 
-/* ── The console ──────────────────────────────────────────────────────────── */
+/* ── The two backends, both from ./lib/harvest.mjs ──────────────────────── */
 
-const api = async (method, path, body, timeoutMs = 60_000) => {
-  const res = await fetch(`${env("XP_BASE") || CONSOLE_BASE}${path}`, {
-    method,
-    headers: {
-      "X-API-Key": env("XP_API_KEY"),
-      "Content-Type": "application/json",
-      "User-Agent": USER_AGENT,
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`${method} ${path} -> HTTP ${res.status}: ${text.slice(0, 300)}`);
-  return text ? JSON.parse(text) : {};
-};
+const creds = () => ({ key: env("XP_API_KEY"), base: env("XP_BASE") || CONSOLE_BASE });
+
+/** Kept under the old names so --check below reads exactly as it did. */
+const api = (method, path, body, timeoutMs) => consoleApi(creds(), method, path, body, timeoutMs);
+const apify = apifyApi;
+
+const progress = (line) => process.stdout.write(`\r  ${line}   `);
+const urlsFor = (profileHandles) => profileHandles.map((h) => `https://www.linkedin.com/in/${h}/`);
 
 async function fetchFromConsole(profileHandles) {
-  const urls = profileHandles.map((h) => `https://www.linkedin.com/in/${h}/`);
-
-  // ttl_seconds 0 forces a fresh read. The default is 86400, which would serve yesterday's answer to
-  // a question asked today — right for a daily harvest, wrong for "what have they posted lately".
-  const job = await api("POST", "/jobs", {
-    actor: "linkedin-harvest",
-    input: { urls, entity_type: "profile", ttl_seconds: 0 },
-  });
-  if (!job?.id) throw new Error(`no job id: ${JSON.stringify(job).slice(0, 200)}`);
-  console.log(`  console job ${job.id}, ${urls.length} profile(s)`);
-
-  const TERMINAL = ["succeeded", "completed", "success", "failed", "error", "cancelled", "canceled"];
-  const startedAt = Date.now();
-  let state = job;
-  while (!TERMINAL.includes(String(state.status).toLowerCase())) {
-    if (Date.now() - startedAt > CONSOLE_DEADLINE_MS) {
-      throw new Error(`job ${job.id} still ${state.status} after 10 minutes`);
-    }
-    await new Promise((r) => setTimeout(r, POLL_EVERY_MS));
-    state = await api("GET", `/jobs/${job.id}`);
-    process.stdout.write(`\r  ${state.status}, ${Math.round((Date.now() - startedAt) / 1000)}s   `);
-  }
+  const out = await harvestConsole({ profileUrls: urlsFor(profileHandles), ...creds(), log: progress });
   console.log();
-
-  if (!["succeeded", "completed", "success"].includes(String(state.status).toLowerCase())) {
-    throw new Error(`job ${job.id} ${state.status}: ${state.error ?? "no reason given"}`);
-  }
-
-  /*
-   * Judge the run by the rows it returns, not by its own counters.
-   *
-   * Measured 9 October: a job that returned 14 real posts reported `items_scraped: 0` and
-   * `coverage: "unknown"`. The older Python client against this API raised on exactly that
-   * combination, which here would throw away a perfectly good harvest. Those counters belong to the
-   * actors that fill them.
-   */
-  const rows = [];
-  for (let offset = 0; ; offset += 100) {
-    const page = await api("GET", `/jobs/${job.id}/linkedin-posts?limit=100&offset=${offset}`, undefined, 90_000);
-    const batch = Array.isArray(page) ? page : (page.items ?? []);
-    rows.push(...batch);
-    if (batch.length < 100) break;
-  }
-  if (rows.length === 0) {
-    throw new Error(
-      `job ${job.id} succeeded but returned no posts.\n` +
-        `  That is distinct from "they have not posted": the scraper returned without reading the\n` +
-        `  page, usually because LinkedIn is blocking the egress IP. Try --via apify.`,
-    );
-  }
-  return { rows, source: "console", job: job.id };
+  return out;
 }
 
-/* ── Apify, the fallback ──────────────────────────────────────────────────── */
-
-const apify = async (path, init = {}) => {
-  const res = await fetch(`https://api.apify.com/v2/${path}`, init);
-  const text = await res.text();
-  let body;
-  try {
-    body = JSON.parse(text);
-  } catch {
-    body = { raw: text.slice(0, 400) };
-  }
-  if (!res.ok) throw new Error(`apify ${path.split("?")[0]}: ${res.status} ${JSON.stringify(body).slice(0, 300)}`);
-  return body;
-};
-
 async function fetchFromApify(profileHandles) {
-  const token = env("APIFY_TOKEN");
-  if (!token) throw new Error("APIFY_TOKEN not set — see mcp-server/.env.example");
-
-  const started = await apify(`acts/${APIFY_ACTOR}/runs?token=${token}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    /*
-     * `targetUrls`, not `profileUrls`.
-     *
-     * This path had never run — APIFY_TOKEN was never bought — and it sent `profileUrls`, which the
-     * actor does not have. Apify ignores an unknown input key rather than refusing it, so the first
-     * real run would have started with no URLs at all and come back empty, which reads exactly like
-     * "LinkedIn blocked us" and would have been debugged as that.
-     *
-     * Read from the actor's own schema on 14 October 2026:
-     *   https://api.apify.com/v2/acts/harvestapi~linkedin-profile-posts/builds/default
-     * targetUrls, maxPosts, postedLimit, postedLimitDate, includeQuotePosts, includeReposts,
-     * scrapeReactions, maxReactions, postNestedReactions, scrapeComments, maxComments,
-     * commentsPostedLimit, postNestedComments, contextCountry.
-     *
-     * The three flags below are set explicitly rather than left to default. A repost is not their
-     * writing — clause 8.3 is about how these eight build a post — and counting one would repeat the
-     * console's worst habit of handing us somebody else's text under the subject's handle.
-     * Reactions and comments are somebody else's words and cost money to fetch.
-     */
-    body: JSON.stringify({
-      targetUrls: profileHandles.map((h) => `https://www.linkedin.com/in/${h}/`),
-      maxPosts,
-      ...(since ? { postedLimitDate: since } : {}),
-      includeReposts: false,
-      scrapeReactions: false,
-      scrapeComments: false,
-    }),
+  const out = await harvestApify({
+    profileUrls: urlsFor(profileHandles),
+    token: env("APIFY_TOKEN"),
+    maxPosts,
+    since,
+    log: progress,
   });
-  const runId = started.data?.id;
-  if (!runId) throw new Error(`no run id: ${JSON.stringify(started).slice(0, 200)}`);
-  console.log(`  apify run ${runId} — https://console.apify.com/actors/runs/${runId}`);
-
-  const startedAt = Date.now();
-  let status = started.data?.status ?? "RUNNING";
-  let datasetId = started.data?.defaultDatasetId ?? null;
-  while (["READY", "RUNNING"].includes(status)) {
-    if (Date.now() - startedAt > APIFY_DEADLINE_MS) throw new Error(`run ${runId} still ${status} after 15 minutes`);
-    await new Promise((r) => setTimeout(r, POLL_EVERY_MS));
-    const run = await apify(`actor-runs/${runId}?token=${token}`);
-    status = run.data?.status;
-    datasetId = run.data?.defaultDatasetId ?? datasetId;
-    process.stdout.write(`\r  ${status}, ${Math.round((Date.now() - startedAt) / 1000)}s   `);
-  }
   console.log();
-  if (status !== "SUCCEEDED") throw new Error(`apify run finished as ${status}`);
-
-  const items = await apify(`datasets/${datasetId}/items?token=${token}&clean=true&limit=2000`);
-  return { rows: Array.isArray(items) ? items : [], source: "apify", job: runId };
+  return out;
 }
 
 /* ── Check ────────────────────────────────────────────────────────────────── */
@@ -349,145 +242,19 @@ try {
   result = other === "apify" ? await fetchFromApify(handles) : await fetchFromConsole(handles);
 }
 
-/* ── Normalise ────────────────────────────────────────────────────────────── */
+/* ── Normalise, from ./lib/harvest.mjs ───────────────────────────────────── */
 
-const first = (row, ...names) => {
-  for (const n of names) {
-    const v = n.split(".").reduce((o, k) => (o == null ? o : o[k]), row);
-    if (v !== undefined && v !== null && v !== "") return v;
-  }
-  return null;
-};
-
-/**
- * A posted-at value from either backend, as an ISO string or null.
+/*
+ * first(), toIso() and handleOf() moved to the module with their comments. The one change in the
+ * move: handleOf takes the allowed set as an argument instead of closing over SENTINELS, so the
+ * comment worker can pass Josh's creator list to the same guard. The eight are passed in here, so
+ * this script behaves exactly as it did.
  *
- * The console sends a string. Apify sends `{ timestamp, date, postedAgoShort, postedAgoText }`.
- * Returning null rather than guessing matters: `posted_at` orders every window and every "oldest
- * post" claim, and a wrong date is worse than a missing one because nothing downstream questions it.
+ * It also stopped using `handle in SENTINELS`, which was true for "constructor" and "toString".
  */
-const toIso = (v) => {
-  if (v == null) return null;
-  if (typeof v === "string") return Number.isNaN(Date.parse(v)) ? null : new Date(v).toISOString();
-  if (typeof v === "number") return new Date(v).toISOString();
-  if (typeof v === "object") return toIso(v.date ?? v.timestamp ?? v.iso ?? null);
-  return null;
-};
-
-const handleOf = (row) => {
-  const direct = first(
-    row,
-    "author_handle",
-    "authorHandle",
-    "username",
-    // Apify's shape. The console flattens the author onto the row; harvestapi nests it, so these
-    // were never reached and every row would have fallen through to the URL match below.
-    "author.publicIdentifier",
-    "author.username",
-  );
-  if (direct && direct in SENTINELS) return direct;
-
-  /*
-   * AUTHOR URLS ONLY. `inputUrl` IS NOT ONE.
-   *
-   * It was in this list, and it is the profile we ASKED for — the subject page, not whoever wrote
-   * the post. The comment twenty lines below warns about precisely this ("reading the second as the
-   * author would file six strangers' posts under Matt's name") and the fallback did it anyway: any
-   * row without an author field was attributed to the page it came from.
-   *
-   * Nothing had been filed wrongly, because the console flattens `author_handle` onto every row and
-   * the fallback never ran. It would have run on the first Apify harvest, where the author is
-   * nested — so a path that had never executed was one run away from doing the one thing this
-   * script exists to prevent.
-   */
-  const url = String(
-    first(row, "authorUrl", "author.url", "author.linkedinUrl", "authorProfileUrl", "profileUrl") ??
-      "",
-  );
-  const slug = url.match(/linkedin\.com\/in\/([^/?#]+)/)?.[1];
-  return slug && slug in SENTINELS ? slug : null;
-};
-
-const unmapped = new Set();
-let foreign = 0;
-const rows = [];
-
-for (const row of result.rows) {
-  const handle = handleOf(row);
-
-  /*
-   * Drop anyone who is not one of the eight. Not paranoia about the argument list — it is what the
-   * data actually contains. Measured 9 October: a harvest of Matt Barker's profile returned 14 rows
-   * of which 8 were his. A profile page carries other people's posts, and the row says so in two
-   * fields: `author_handle` wrote it, `subject_handle` is whose page it came from. Reading the
-   * second as the author would file six strangers' posts under Matt's name.
-   */
-  if (!handle) {
-    foreign++;
-    continue;
-  }
-
-  const text = String(first(row, "text", "content", "postText", "description") ?? "").trim();
-  if (!text) {
-    unmapped.add("text");
-    continue;
-  }
-  /*
-   * Apify returns postedAt as an OBJECT, not a date:
-   *   { timestamp: 1791806316736, date: "2026-10-12T11:58:36.736Z", postedAgoShort: "1w", ... }
-   *
-   * Found on the first run this path ever made, 20 October. Interpolated into the activity_id
-   * fallback it becomes the literal string "[object Object]", which is stable across every post and
-   * would have collapsed a whole profile onto one primary key; written to posted_at it is a
-   * timestamptz the database refuses. The console returns a plain ISO string, so nothing here ever
-   * saw the other shape.
-   */
-  const postedAt = toIso(first(row, "posted_at", "postedAt", "date", "publishedAt", "postedAtISO"));
-  if (!postedAt) unmapped.add("posted_at");
-
-  rows.push({
-    activity_id: String(
-      first(row, "activity_id", "activityId", "postId", "urn", "id") ??
-        `${handle}:${postedAt ?? ""}:${text.slice(0, 40)}`,
-    ),
-    author_handle: handle,
-    author_name: first(row, "author_name", "authorName", "author.name", "fullName") ?? SENTINELS[handle],
-    url: first(row, "url", "postUrl", "link"),
-    posted_at: postedAt,
-    text,
-    headline: first(row, "headline"),
-    /*
-     * Apify nests these: `engagement: { likes, comments, shares, reactions: [...] }`. None of the
-     * four flat names below it match, and `first()` returns null for a name it cannot find rather
-     * than complaining — so the 20 October load wrote null over the reaction and comment counts of
-     * all 1,900 rows, and the upsert made that permanent. One row of 1,900 survived.
-     *
-     * It mattered immediately: proposal 17 argues from "147 reactions and 156 comments" on a
-     * specific post, and the numbers it cites had been erased hours before Josh could check them.
-     *
-     * The nested names go FIRST, because they are the ones this backend actually sends. The flat
-     * ones stay for the console, which does send them.
-     */
-    reaction_count: first(
-      row,
-      "engagement.likes",
-      "engagement.reactionCount",
-      "reaction_count",
-      "reactionsCount",
-      "likesCount",
-      "numLikes",
-    ),
-    comment_count: first(
-      row,
-      "engagement.comments",
-      "engagement.commentCount",
-      "comment_count",
-      "commentsCount",
-      "numComments",
-    ),
-    is_repost: Boolean(first(row, "is_repost", "isRepost", "reshared")),
-  });
-}
+const allowed = Object.fromEntries(handles.map((h) => [h, SENTINELS[h]]));
+const { rows, foreign, unmapped: unmappedList } = normaliseRows(result.rows, allowed);
+const unmapped = new Set(unmappedList);
 
 /* ── Report ───────────────────────────────────────────────────────────────── */
 

@@ -268,7 +268,7 @@ export const inspectTools = [
     },
 
     async handler(_args, { db }) {
-      const [mined, halfMined, captured, unjudged, waiting, openProposals, oneStep] =
+      const [mined, halfMined, captured, unjudged, waiting, openProposals, commentOptions, oneStep] =
         await Promise.all([
         rows(db, "moments?select=id&status=eq.mined&killed=is.false"),
         rows(db, "moments?select=id,title&status=eq.half_mined&killed=is.false&order=id.asc"),
@@ -279,6 +279,9 @@ export const inspectTools = [
         // exactly the wrong thing for a tool whose whole job is "what should I do now".
         rows(db, "posts?select=id,moments!inner(killed)&status=eq.draft&moments.killed=is.false"),
         rows(db, "library_proposals?select=id&status=eq.open"),
+        // Comment options he has not decided on. Read here rather than counted from a notice,
+        // because a notice he already marked read would make them invisible while they wait.
+        rows(db, "comment_options?select=id&status=eq.offered"),
         oneStepMode(db),
       ]);
 
@@ -334,6 +337,22 @@ export const inspectTools = [
         });
       }
 
+      /*
+       * BELOW the proposals, deliberately. Nothing downstream depends on a comment: it does not
+       * publish, it does not unblock a draft, and an unread one costs nothing but his attention.
+       * Ranking it above the approval that authorises publishing would make this feature the thing
+       * that pushed the pipeline aside, which is how an addition stops being an addition.
+       */
+      if (commentOptions.length > 0) {
+        actions.push({
+          do: `${commentOptions.length} comment option(s) waiting on posts from his creators`,
+          where: "Claude Code — list_comment_options, then record_comment_used either way",
+          why: "Unchecked drafts: no gate, no claim ledger and no shingle guard reads a comment. " +
+            "Nothing publishes them — he pastes what he wants. Recording which he used is the " +
+            "only signal this has about whether they are worth writing.",
+        });
+      }
+
       if (captured.length > 0 && !oneStep) {
         actions.push({
           do: `${captured.length} input(s) captured but never mined`,
@@ -371,6 +390,7 @@ export const inspectTools = [
           just_arrived: captured.length,
           drafts_waiting_on_josh: waiting.length,
           open_proposals: openProposals.length,
+          comment_options_waiting: commentOptions.length,
           drafts_total: unjudged.length,
         },
       };
@@ -787,13 +807,16 @@ export const inspectTools = [
       // would have told anyone the day it stopped. Two other copies had already drifted.
       const empty = sections.filter((s) => !isSupplied(s.body)).map((s) => s.key);
 
-      const [mined, halfMined, captured, needGate, openProposals, published] = await Promise.all([
+      const [mined, halfMined, captured, needGate, openProposals, published, commentOptions, watching] =
+        await Promise.all([
         one("moments?select=id&status=eq.mined&killed=is.false&limit=200"),
         one("moments?select=id&status=eq.half_mined&killed=is.false&limit=200"),
         one("moments?select=id&status=eq.captured&killed=is.false&limit=200"),
         one("drafts?select=id&framework=not.eq.acceptance-fixture&limit=200"),
         one("library_proposals?select=id&status=eq.open&limit=100"),
         one("posts?select=id&status=eq.published&body=not.like.FIXTURE*&limit=100"),
+        one("comment_options?select=id&status=eq.offered&limit=100"),
+        one("creators?select=handle&active=is.true&limit=100"),
       ]);
 
       /*
@@ -817,6 +840,18 @@ export const inspectTools = [
         waiting.push(`${halfMined} candidate(s) need Josh interviewed before they can be drafted`);
       }
       if (openProposals > 0) waiting.push(`${openProposals} library change(s) need his decision`);
+      /*
+       * Said even though the poll also leaves a notice, because the two answer different questions.
+       * The notice is "this happened while you were away" and is gone the moment it is marked read;
+       * this is "this is still sitting there", which stays true until he decides. The retelling
+       * index was empty for weeks for exactly this reason — nothing read the state, only the event.
+       */
+      if (commentOptions > 0) {
+        waiting.push(
+          `${commentOptions} comment option(s) drafted on posts from the ${watching} creator(s) ` +
+            `he watches — unchecked, and nothing publishes them`,
+        );
+      }
       if (empty.length > 0) waiting.push(`${empty.length} library section(s) still empty: ${empty.join(", ")}`);
 
       const problems = unread.filter((n) => n.severity !== "info").length;

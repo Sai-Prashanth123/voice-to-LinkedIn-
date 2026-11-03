@@ -594,10 +594,22 @@ test("the Apify run sends the input key the actor actually has", async () => {
    * The path had never executed because APIFY_TOKEN was never bought, which is how a never-run
    * branch stays wrong indefinitely.
    */
-  const src = await readFile("scripts/scrape-sentinels.mjs");
+  /*
+   * Reads the MODULE, not the script. The fetch moved to `scripts/lib/harvest.mjs` on 3 November so
+   * that `worker-engage` could poll Josh's creators through the same code — see that file's header.
+   * This assertion follows the logic rather than the filename, because pointing it at the script
+   * would leave it passing against a file that no longer contains the thing it guards.
+   */
+  const src = await readFile("scripts/lib/harvest.mjs");
 
   assert.match(src, /targetUrls:/, "the Apify run no longer sends targetUrls");
-  assert.doesNotMatch(src, /profileUrls:/, "it still sends profileUrls, which the actor ignores");
+  // `profileUrls` is now the NAME OF THE ARGUMENT this module takes, so the old blanket check would
+  // fire on it. What must never come back is sending it to Apify as an input key.
+  assert.doesNotMatch(
+    src.slice(src.indexOf("body: JSON.stringify({"), src.indexOf("scrapeComments: false")),
+    /profileUrls:/,
+    "it still sends profileUrls as an actor input, which the actor ignores",
+  );
 
   // Set explicitly rather than left to default: a repost is somebody else's writing, and reactions
   // and comments are somebody else's words that cost money to fetch.
@@ -614,8 +626,18 @@ test("a post is attributed to its author, never to the page it was found on", as
    * Nothing had been misfiled, because the console flattens author_handle onto every row and the
    * fallback never ran. It would have run on the first Apify harvest, where the author is nested.
    */
-  const src = await readFile("scripts/scrape-sentinels.mjs");
-  const block = src.slice(src.indexOf("const handleOf"), src.indexOf("const unmapped"));
+  /*
+   * `handleOf` moved to `scripts/lib/harvest.mjs` with the rest of the fetch, and it is the one
+   * function in that move worth being nervous about: the comment poll passes Josh's creator list to
+   * it twice a day, so it now runs far more often than the scrape ever did.
+   *
+   * `mcp-server/harvest.test.mjs` exercises it against real row shapes, which is the stronger test.
+   * This one stays because it asserts the shape of the MISTAKE — a source check fails again if
+   * `inputUrl` is ever put back in that fallback list, whatever the behaviour looks like from
+   * outside.
+   */
+  const src = await readFile("scripts/lib/harvest.mjs");
+  const block = src.slice(src.indexOf("export const handleOf"), src.indexOf("export function normaliseRows"));
 
   assert.doesNotMatch(
     block,
@@ -623,7 +645,17 @@ test("a post is attributed to its author, never to the page it was found on", as
     "the author can still be resolved from the page the post was found on",
   );
   assert.match(block, /author\.publicIdentifier/, "Apify's nested author shape is not read");
-  assert.match(block, /in SENTINELS/, "a row from outside the eight is no longer dropped");
+
+  /*
+   * The allow-list check. This was `handle in SENTINELS` against a hardcoded eight; it is now
+   * `hasOwnProperty` against whichever list the caller passed, because the sentinel script and the
+   * creator poll need the same guard over different sets.
+   *
+   * `in` is what must not come back: it is true for "constructor" and "toString", so a creator or
+   * a writer with either handle would have been accepted by a list that does not contain them.
+   */
+  assert.match(block, /hasOwnProperty\.call\(allowed/, "a row from outside the list is no longer dropped");
+  assert.doesNotMatch(block, / in allowed\b/, "the prototype chain is consulted again");
 });
 
 /**

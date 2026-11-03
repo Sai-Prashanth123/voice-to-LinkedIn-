@@ -60,6 +60,7 @@ import { applyDraft } from "../_shared/handlers/draft.ts";
 import { checkRetelling, dedupText, loadThresholds } from "../_shared/dedup.ts";
 import * as decisions from "./decisions.ts";
 import * as maintenance from "./maintenance.ts";
+import * as creators from "./creators.ts";
 import type { Body } from "./decisions.ts";
 import { finishGate } from "../_shared/handlers/gate.ts";
 import { GATE_CHECKS } from "../_shared/prompts.ts";
@@ -184,6 +185,14 @@ Deno.serve(async (req) => {
      * clone that could not start went unnoticed for weeks.
      */
     client_start: maintenance.clientStart,
+
+    /*
+     * The creator list and what he did with a comment option. His list only: nothing in this
+     * system adds a creator, and worker-engage reads this table without ever writing to it.
+     */
+    watch_creator: creators.watchCreator,
+    stop_watching_creator: creators.stopWatchingCreator,
+    comment_used: creators.recordCommentUsed,
 
     // The three the pipeline could not do from a session at all. See maintenance.ts.
     run_worker: maintenance.runWorker,

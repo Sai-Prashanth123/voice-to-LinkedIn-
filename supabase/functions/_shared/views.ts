@@ -20,7 +20,7 @@
  * the transcript is only the evidence behind that rule.
  */
 
-export type LibraryViewName = "drafting" | "gating" | "interview" | "visual";
+export type LibraryViewName = "drafting" | "gating" | "interview" | "visual" | "commenting";
 
 /** What the drafter needs to write. */
 export const DRAFTING_SECTIONS = [
@@ -103,11 +103,42 @@ export const VISUAL_SECTIONS = [
   "gate_rules",
 ] as const;
 
+/**
+ * What a comment needs, added 3 November with the creator poll.
+ *
+ * A comment is a reply, not a post, and the differences from the drafting view are all deliberate:
+ *
+ * - No `hooks`. The skill is explicit — "No hook rules here. A comment is a reply, not a post — it
+ *   does not open a loop, it answers something." A hook rule here would produce comments that open
+ *   loops under other people's posts, which is the behaviour his market is sick of.
+ * - No `formatting`. Those rules are about the shape of a post above the fold. A two-to-five
+ *   sentence reply has no fold.
+ * - No `pillars` or `frameworks`. He is answering someone else's subject, not choosing his own.
+ * - No `reference_posts` or `voice_transcript`, for the same reason the gate is denied them: a
+ *   writer that has just read another writer's posts starts measuring against their voice. It
+ *   matters more here, not less, because the comment sits directly under someone else's writing and
+ *   "take the shape, never the words" applies to the person he is replying to as well.
+ *
+ * `gate_rules` IS here, and it is the important one. The never-name-a-client rule lives in that
+ * section, and nothing judges a comment — no gate, no claim ledger, no shingle guard. The skill
+ * says a comment is MORE exposed than a post, "because it sits under someone else's post, often in
+ * the same niche being discussed". This is the only route by which that rule reaches the thing
+ * writing them.
+ */
+export const COMMENTING_SECTIONS = [
+  "core_rules",
+  "audience",
+  "voice_guide",
+  "banned_phrases",
+  "gate_rules",
+] as const;
+
 export const VIEWS: Record<LibraryViewName, readonly string[]> = {
   drafting: DRAFTING_SECTIONS,
   gating: GATING_SECTIONS,
   interview: INTERVIEW_SECTIONS,
   visual: VISUAL_SECTIONS,
+  commenting: COMMENTING_SECTIONS,
 };
 
 /**

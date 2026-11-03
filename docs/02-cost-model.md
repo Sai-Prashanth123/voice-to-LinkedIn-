@@ -38,11 +38,43 @@ Anthropic pricing per million tokens: Opus 5 $5 in / $25 out, Sonnet 5 $3 / $15,
 | Transcription (~200 minutes) | Deepgram | $2 |
 | Embeddings for dedup | Hugging Face `bge-m3` | $0 on the free tier |
 | Visuals (only when you send an image) | Opus 5 | $1 |
-| **Model and service subtotal** | | **~$28** |
+| Comment options (see below) | Sonnet 5 | $2 |
+| **Model and service subtotal** | | **~$30** |
 | Supabase Pro | | $25 |
+| Scraping for the creator poll | the console (ours) | $0 |
 | Vercel, Telegram, LinkedIn, GitHub | | $0 |
 | Groq, Hugging Face (added mid-build, see 15.3) | free tiers | $0 |
-| **Total** | | **~$53** |
+| **Total** | | **~$55** |
+
+### The two lines added on 3 November, and the one risk in them
+
+This table had **no scraping line at all** until the creator poll, because until then nothing in the
+system fetched LinkedIn: `scripts/scrape-sentinels.mjs` runs on a laptop when somebody runs it. A
+job on a schedule is a different kind of cost, so both halves are written down.
+
+**The models: about $2.** Twice a weekday, three posts a run, three options each — so roughly 260
+calls a month on Sonnet against a post and a short reply. The cap is a settings row
+(`comment_posts_per_run`), and this number moves with it linearly: doubling the cap doubles the line.
+
+**The scraping: $0 as configured, and this is the part to watch.** The poll runs on the console,
+which is Thought Pilot's own infrastructure and already paid for. Two things follow:
+
+- **It cannot narrow by date.** The console accepts a `since` and silently returns zero rows
+  (probed 3 November), so every run is a full fetch of every profile on his list. Cost per run is
+  flat in the number of creators, not in how much they posted. The schedule is weekdays-only for
+  this reason — a third fewer runs for no loss, since his market posts little at the weekend.
+- **The fallback is Apify, and Apify is metered.** The console flapped on 3 November — three jobs
+  returned 11 rows, 11 rows, then zero while reporting success — so the fallback is not decoration
+  and it will fire. A run cost **$3.85** for eight profiles in October. At 40 runs a month that
+  would be more than this entire budget, so a prolonged console outage is a **cost incident, not
+  just an availability one**. The token on file is a free plan, which bounds the damage by stopping
+  rather than by billing, and `creator_poll_backend_failed` is logged at `warn` every time it hands
+  over. If that event appears twice a day for a week, the console is down and the poll needs pausing
+  rather than silently retrying — `stop_watching_creator` on everyone, or clear his list.
+
+Clause 14.3 applies to the console line the same way it applies to the sentinel scrape: it points at
+infrastructure we run, so a handover means moving this to his own Apify token and budgeting for it
+properly. It is the same decision, now with a second thing depending on it.
 
 ## What is actually being spent today, which is not this (15.9)
 

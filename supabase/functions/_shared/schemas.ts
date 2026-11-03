@@ -274,3 +274,47 @@ export const ChatTriageSchema = z.object({
         "Warm, plain, two to four short sentences, ending with the one thing to do next.",
     ),
 });
+
+/* ── Comments on other people's posts ──────────────────────────────────────── */
+
+/**
+ * What the model returns for one of a creator's posts.
+ *
+ * `options` may be EMPTY, and that is the whole reason `nothing_to_add` exists beside it. The skill
+ * is explicit that "if the post has nothing he can genuinely add to, say that instead of writing
+ * something" — so a worker that treated an empty list as a failure would be pressing the model to
+ * invent an angle, which is the one outcome this feature must not have. An empty list with a reason
+ * is a successful run.
+ */
+export const CommentOptionsSchema = z.object({
+  options: z
+    .array(
+      z.object({
+        body: z
+          .string()
+          .describe(
+            "The comment exactly as Josh would paste it. Two to five sentences. No greeting, no " +
+              "sign-off, no hashtags, and never his name.",
+          ),
+        why: z
+          .string()
+          .describe(
+            "One line on why this one is his to leave rather than anyone's — the number he has, " +
+              "the case the post missed, the thing he has run. Not a summary of the comment.",
+          ),
+        angle: z
+          .enum(["his_number", "disagreement", "uncovered_case", "question"])
+          .describe(
+            "Which of the four kinds this is. Two options sharing an angle are one option, so " +
+              "these should differ across the set.",
+          ),
+      }),
+    )
+    .describe("Up to the number asked for. Empty when nothing clears the one test."),
+  nothing_to_add: z
+    .string()
+    .describe(
+      "Why no option was worth leaving, when options is empty. One line, plain. Empty when there " +
+        "are options.",
+    ),
+});

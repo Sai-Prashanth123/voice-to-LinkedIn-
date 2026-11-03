@@ -72,7 +72,9 @@ Postgres.
 | "never open with a question" | `add_library_rule`, immediately, in his words |
 | "show me Matt Barker" | `get_reference_posts`, `analyse_reference_writer` |
 | "the hook isn't strong enough" | the **josh-hook** skill — not a rewrite from instinct |
-| "draft me some comments" | the **josh-comment** skill. He pastes the posts; nothing scrapes |
+| "draft me some comments" | the **josh-comment** skill. He pastes the posts, or the poll found them |
+| "watch these people" / "stop those" | `watch_creator` / `stop_watching_creator` — **only** ever names he gave you |
+| "what have you got for me to comment on" | `list_comment_options`, then `record_comment_used` either way |
 | "make an image for this" | `get_visual_brief`, then the skill that fits — see **Pictures** |
 | anything he was sent — an email, a screenshot | the **josh-artefact** skill, which anonymises first |
 
@@ -95,9 +97,21 @@ Thirteen, in `.claude/skills/`. Use them rather than writing from instinct.
 - **barker-audit** — only when he asks why a draft feels flat structurally. It reports the
   measured shape against the draft's and stops; it is not a tenth check and it never rewrites.
 - **josh-comment** — comments on other people's posts, added 2 November after he asked for them on
-  30 October. Drafts only: it never posts, never scrapes and never picks whose posts to reply to.
-  Nothing checks a comment — no gate, no ledger, no shingle guard — so the writer is the only guard
+  30 October. Drafts only: it never posts and it never picks whose posts to reply to. Nothing checks
+  a comment — no gate, no ledger, no shingle guard — so in a session the writer is the only guard
   there is.
+
+  Since 3 November a post can also arrive on its own: he names creators with `watch_creator`, and
+  `worker-engage` polls them at 07:00 and 15:00 on weekdays, drafting options against anything new
+  and leaving one notice. **The standard lives in `get_comment_brief`**, not in the skill, because
+  the skill and the worker both write comments and two copies of a standard is two standards. Where
+  the worker wrote it there was no human guard, so it records what three deterministic checks caught
+  in `flags` — a name nobody cleared, a run lifted from the post, a length outside the band. A
+  floor, not a gate: nothing is blocked and an empty `flags` is not a safety certificate.
+
+  **`creators` is HIS list.** Nothing in the system adds to it, and an empty table is the off state
+  for the whole feature. `record_comment_used` is the only signal it has about whether any of this
+  is worth writing.
 
 **The pictures,** added 29 October:
 

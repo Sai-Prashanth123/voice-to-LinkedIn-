@@ -39,6 +39,13 @@ function stub({ oneStep }) {
       if (path.startsWith("/drafts") || path.includes("drafts?")) return [{ id: 63 }];
       if (path.includes("posts?")) return [{ id: 16 }];
       if (path.includes("library_proposals")) return [{ id: 9 }];
+      /*
+       * One comment option waiting, so the one_step assertions below are testing a next_action
+       * that has this in it rather than one where the feature happens to be quiet. The poll is not
+       * part of the idea bank and is not suppressed by the mode — a comment needs no interview and
+       * no moment — which is itself worth having asserted.
+       */
+      if (path.includes("comment_options")) return [{ id: 4 }];
       throw new Error(`unexpected read: ${path}`);
     },
     async select(table, opts) {
@@ -79,6 +86,10 @@ test("the held ideas are still counted, so nothing looks deleted", async () => {
     just_arrived: 1,
     drafts_waiting_on_josh: 1,
     open_proposals: 1,
+    // Not suppressed by one_step mode, and that is deliberate: the mode turns off the interview and
+    // the idea bank, and a comment needs neither. He asked for the comments on 30 October while
+    // the mode was already on.
+    comment_options_waiting: 1,
     drafts_total: 1,
   });
 

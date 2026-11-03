@@ -63,6 +63,16 @@ const RUNNABLE: Record<string, string> = {
   learn: "worker-learn",
   ops: "worker-ops",
   triage: "worker-triage",
+  /*
+   * The creator poll. Safe on demand and useful there: it fetches posts, writes comment options and
+   * leaves a notice, and none of that reaches anyone outside this system. He will want it the moment
+   * he adds someone to the list rather than at the next 07:00, and without this the only honest
+   * answer to "can you check now" is no.
+   *
+   * It is also the only way to exercise it at all — the schedule fires twice a day on a weekday and
+   * a worker nobody can run is a worker nobody has watched work.
+   */
+  engage: "worker-engage",
 };
 
 export async function runWorker(db: SupabaseClient, body: Body): Promise<Response> {

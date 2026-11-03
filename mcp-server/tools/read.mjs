@@ -22,7 +22,8 @@ import { score, overall, summarise } from "../../supabase/functions/_shared/acce
 import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
 // One rule for clearance expiry, shared with the Deno side. See clearanceSurvivesReopen.
 import { needsAClearanceDecision } from "../../supabase/functions/_shared/names.ts";
-import { isSupplied } from "../../supabase/functions/_shared/views.ts";
+import { isSupplied, renderLibrary } from "../../supabase/functions/_shared/views.ts";
+import { COMMENT_SYSTEM } from "../../supabase/functions/_shared/prompts.ts";
 
 /*
  * TWO FIELDS ADDED HERE BECAUSE NOTHING HAD EVER SELECTED THEM.
@@ -386,6 +387,216 @@ export const readTools = [
         summary: summarise(results),
         finish_line: row(finish),
         tests: results.map(row),
+      };
+    },
+  },
+/* ── His creator list, and the comments waiting on it ───────────────────── */
+
+  {
+    name: "list_creators",
+    config: {
+      title: "Who is being watched for comment options",
+      description:
+        "The creators Josh has asked to be watched, with when each was last polled and when they " +
+        "last posted. Use it when he asks who is on the list, whether a name is already on it, or " +
+        "why no comment options have arrived.\n\n" +
+        "READ last_polled_at BEFORE BLAMING A QUIET LIST. A poll that has stopped and a week " +
+        "where nobody posted look identical from the options alone, and this is the only thing " +
+        "that tells them apart. An empty list is not a fault: it is the off state, and the whole " +
+        "feature does nothing until he names someone.",
+      inputSchema: {
+        include_inactive: z
+          .boolean()
+          .optional()
+          .describe("Include creators he has stopped watching. Off by default; nothing is deleted."),
+      },
+    },
+    async handler(args, { db }) {
+      const query = {
+        select: "handle,display_name,profile_url,active,added_at,last_polled_at,last_seen_posted_at",
+        order: "handle.asc",
+      };
+      if (!args.include_inactive) query.active = "eq.true";
+      const creators = await db.select("creators", query);
+
+      const stalest = creators
+        .filter((c) => c.active)
+        .map((c) => c.last_polled_at)
+        .sort();
+      const lastPoll = stalest[stalest.length - 1] ?? null;
+      const hoursSince = lastPoll
+        ? Math.round((Date.now() - new Date(lastPoll).getTime()) / 3600000)
+        : null;
+
+      const waiting = await db.select("comment_options", {
+        select: "id",
+        status: "eq.offered",
+        limit: 200,
+      });
+
+      return {
+        watching: creators.filter((c) => c.active).length,
+        creators: creators.map((c) => ({
+          handle: c.handle,
+          name: c.display_name ?? c.handle,
+          profile: c.profile_url,
+          active: c.active,
+          last_polled_at: c.last_polled_at,
+          last_seen_posted_at: c.last_seen_posted_at,
+          never_polled: !c.last_polled_at,
+        })),
+        options_waiting: waiting.length,
+        last_poll: lastPoll,
+        means: creators.length === 0
+          ? "Nobody is being watched, so nothing is fetched and nothing is spent. That is the " +
+            "off state, not a fault — the first creator he names switches the feature on."
+          : lastPoll === null
+          ? "NOTHING HAS BEEN POLLED YET. The schedule runs at 07:00 and 15:00 on weekdays; " +
+            "run_worker with engage checks now."
+          : hoursSince > 48
+          ? "THE LAST POLL WAS " + hoursSince + " HOURS AGO, which is longer than the schedule " +
+            "allows for. Something is wrong with the job rather than quiet on his list — check " +
+            "health, then run_worker with engage."
+          : "Polled " + hoursSince + " hour(s) ago.",
+      };
+    },
+  },
+
+  {
+    name: "list_comment_options",
+    config: {
+      title: "Comment options waiting for him",
+      description:
+        "Drafted comments on posts by the creators he watches, newest first, grouped by post and " +
+        "carrying the post itself and its URL so he can read what is being replied to. Use it " +
+        "when he asks what is waiting, or after system_status reports comments ready.\n\n" +
+        "THESE ARE UNCHECKED. No gate, no claim ledger and no shingle guard reads a comment — " +
+        "those all read drafts. Any `flags` on an option are what three cheap deterministic " +
+        "checks caught, and an empty flag list is NOT a safety certificate: the thing that " +
+        "actually identifies a client is a figure plus a niche plus a date, and no string search " +
+        "finds that. Read any number in a comment before he uses it.\n\n" +
+        "He pastes the one he wants into LinkedIn himself; nothing here posts. Call " +
+        "record_comment_used afterwards for the one he left AND the ones he passed over, or there " +
+        "is no signal at all about which comments are worth writing.",
+      inputSchema: {
+        limit: z.number().int().min(1).max(50).optional()
+          .describe("How many options to return. Default 12."),
+        include_decided: z.boolean().optional()
+          .describe("Include options he has already used or passed over. Off by default."),
+      },
+    },
+    async handler(args, { db }) {
+      const limit = args.limit ?? 12;
+      const query = {
+        select: "id,activity_id,body,why,flags,status,created_at",
+        order: "created_at.desc",
+        limit,
+      };
+      if (!args.include_decided) query.status = "eq.offered";
+      const options = await db.select("comment_options", query);
+
+      if (options.length === 0) {
+        const watched = await db.select("creators", { select: "handle", active: "eq.true", limit: 1 });
+        return {
+          options: [],
+          means: watched.length === 0
+            ? "Nothing is waiting because nobody is being watched. watch_creator starts it."
+            : "Nothing is waiting. Either nobody on his list has posted since the last run, or " +
+              "nothing they posted was worth a comment — both are normal. list_creators shows " +
+              "when each was last polled.",
+        };
+      }
+
+      // The posts these reply to, in one read rather than one per option.
+      const ids = [...new Set(options.map((o) => o.activity_id))];
+      const posts = await db.select("creator_posts", {
+        select: "activity_id,handle,author_name,url,posted_at,text",
+        activity_id: "in.(" + ids.map((i) => '"' + i + '"').join(",") + ")",
+        limit: ids.length,
+      });
+      const byId = new Map(posts.map((p) => [p.activity_id, p]));
+
+      const grouped = ids.map((id) => {
+        const post = byId.get(id);
+        const mine = options.filter((o) => o.activity_id === id);
+        return {
+          post: post
+            ? {
+              author: post.author_name ?? post.handle,
+              handle: post.handle,
+              posted_at: post.posted_at,
+              url: post.url,
+              text: post.text,
+            }
+            : { author: "unknown", note: "The post this replies to is no longer readable." },
+          options: mine.map((o) => ({
+            option_id: o.id,
+            comment: o.body,
+            why_his: o.why,
+            flags: o.flags ?? [],
+            status: o.status,
+          })),
+        };
+      });
+
+      const flagged = options.filter((o) => Array.isArray(o.flags) && o.flags.length > 0).length;
+
+      return {
+        waiting: options.length,
+        posts: grouped.length,
+        flagged,
+        groups: grouped,
+        means: "Unchecked drafts. " +
+          (flagged > 0
+            ? flagged + " of " + options.length + " carry a flag — read it and decide; nothing " +
+              "is blocked. "
+            : "None carry a flag, which is not the same as being safe to post. ") +
+          "Read him the comment and the one line on why it is his, then record_comment_used for " +
+          "whichever way he goes.",
+      };
+    },
+  },
+{
+    name: "get_comment_brief",
+    config: {
+      title: "Get the standard for writing a comment",
+      description:
+        "The instructions for drafting a comment in Josh's voice, assembled from his live library. " +
+        "This is the SAME brief the creator poll's worker is given, which is the point of fetching " +
+        "it rather than writing from instinct: the josh-comment skill and worker-engage would " +
+        "otherwise hold two standards and nothing would say which one a given comment followed. " +
+        "Call it before drafting a comment, whether he pasted the post or the poll found it.",
+      inputSchema: {},
+    },
+    async handler(_args, { db }) {
+      const sections = await db.select("library_sections", {
+        select: "key,title,body,sort_order",
+        order: "sort_order.asc",
+      });
+      const { sections: visible, prompt } = renderLibrary(sections, "commenting");
+
+      return {
+        system: COMMENT_SYSTEM(prompt),
+        sections_included: Object.keys(visible),
+        /*
+         * Said out loud because the absences are deliberate and a reader who does not know that
+         * will go looking for them. The hook rules in particular: a comment that opens a loop
+         * under someone else's post is the behaviour his market is sick of.
+         */
+        deliberately_absent: {
+          hooks: "A comment is a reply, not a post. It does not open a loop, it answers something.",
+          formatting: "Those rules shape a post above the fold. A two-to-five sentence reply has no fold.",
+          pillars_and_frameworks: "He is answering someone else's subject, not choosing his own.",
+          reference_posts:
+            "A writer who has just read another writer's posts starts measuring against their " +
+            "voice. It matters more here than in the gate, because the comment sits directly " +
+            "under someone else's writing.",
+        },
+        voice_guide_supplied: Boolean(visible.voice_guide),
+        nothing_checks_this:
+          "No gate, no claim ledger and no shingle guard reads a comment — they all read drafts. " +
+          "If you are writing this in a session you are the only check there is. Any number you " +
+          "cannot source is one to write around, because he pastes this straight into LinkedIn.",
       };
     },
   },

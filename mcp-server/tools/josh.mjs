@@ -439,9 +439,10 @@ export const joshTools = [
         "Publishing is deliberately NOT on the list: a post goes out on the date he set, never " +
         "because something asked for it now.",
       inputSchema: {
-        worker: z.enum(["select", "learn", "ops", "triage"]).describe(
+        worker: z.enum(["select", "learn", "ops", "triage", "engage"]).describe(
           "select = choose what to write next · learn = look for library changes · " +
-            "ops = the health check · triage = read waiting candidates",
+            "ops = the health check · triage = read waiting candidates · " +
+            "engage = check his creators for new posts and draft comment options now",
         ),
       },
     },
@@ -475,6 +476,74 @@ export const joshTools = [
       inputSchema: {},
     },
     handler: (args, { url, key }) => post(url, key, { kind: "export_bank", ...args }),
+  },
+
+  /* ── His creator list, and what he did with a comment ───────────────────── */
+
+  {
+    name: "watch_creator",
+    config: {
+      title: "Watch someone for comment options",
+      description:
+        "Adds a creator to the list the twice-daily poll reads, so their new posts arrive with " +
+        "comment options already drafted. Use it when he names someone he wants to be seen " +
+        "replying to: \"watch Matt Barker\", \"add these five\", or when he pastes a profile URL. " +
+        "Call it once per person.\n\n" +
+        "WHOSE LIST THIS IS. His. Never add someone because they look relevant, because they came " +
+        "up in conversation, or because they are one of his reference writers — deciding whose " +
+        "posts are worth his time is a judgement about his market that he has and this does not. " +
+        "If he has not named them, do not add them.\n\n" +
+        "An empty list is the off state for the whole feature, so the first person he names is " +
+        "what switches it on. Takes a profile URL or just the handle out of it.",
+      inputSchema: {
+        creator: z
+          .string()
+          .min(2)
+          .describe("Their LinkedIn profile URL, or the handle from it — the bit after /in/."),
+        display_name: z
+          .string()
+          .optional()
+          .describe("What to call them when reading options out. Their real name, as he said it."),
+      },
+    },
+    handler: (args, { url, key }) => post(url, key, { kind: "watch_creator", ...args }),
+  },
+
+  {
+    name: "stop_watching_creator",
+    config: {
+      title: "Stop watching a creator",
+      description:
+        "Takes someone off the poll. Nothing is deleted — their stored posts and any comment " +
+        "options he has not used stay, and watch_creator puts them back. Use it when he says he " +
+        "is not interested in someone any more, or the options from them are not worth reading.",
+      inputSchema: {
+        creator: z.string().min(2).describe("Their handle or profile URL."),
+      },
+    },
+    handler: (args, { url, key }) => post(url, key, { kind: "stop_watching_creator", ...args }),
+  },
+
+  {
+    name: "record_comment_used",
+    config: {
+      title: "Record which comment he left",
+      description:
+        "Records that he used a comment option, or passed it over. Call it when he says which one " +
+        "he is going with, and for the ones he rejects — a discarded option is as useful a signal " +
+        "as a used one.\n\n" +
+        "THIS IS THE ONLY SIGNAL THIS FEATURE HAS. Until it is called there is no way to tell a " +
+        "comment he left from one he ignored, which is exactly how record_posted_by_hand went " +
+        "uncalled and left the retelling index empty while he posted every week. It does not post " +
+        "anything: he pastes the comment into LinkedIn himself.",
+      inputSchema: {
+        option_id: z.number().int().describe("The id from list_comment_options."),
+        status: z
+          .enum(["used", "discarded"])
+          .describe("used = he left it (or something close to it) · discarded = he passed over it"),
+      },
+    },
+    handler: (args, { url, key }) => post(url, key, { kind: "comment_used", ...args }),
   },
 
   {

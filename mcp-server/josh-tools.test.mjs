@@ -119,6 +119,10 @@ test("the tools a person would reach for by name all exist", () => {
     "record_posted_by_hand", // "I posted the dental one this morning"
     "record_hook_choice", // "the second one" — and the five he turned down
     "mark_notices_read",
+    // His creator list, and what he did with a comment. Added 3 November.
+    "watch_creator", // "watch Matt Barker" — HIS judgement, never ours
+    "stop_watching_creator", // "stop giving me those"
+    "record_comment_used", // "I left the second one" — and the ones he passed over
     // Running the machinery, rather than waiting for its schedule.
     "run_worker", // "why has nothing been chosen"
     "refresh_sentinels", // "have their habits changed"

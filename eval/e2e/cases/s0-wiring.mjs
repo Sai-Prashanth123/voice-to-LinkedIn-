@@ -28,11 +28,18 @@ const EXPECTED_FUNCTIONS = [
   // so S0-01 goes red until it actually ships — which is the whole point of this case. A function
   // that exists in the repository and not in the project is exactly the drift being checked for.
   "linkedin-oauth",
+  // The creator poll (0061). Same rule as linkedin-oauth above: listed the moment it was written,
+  // so this case fails until it is actually deployed. A worker in the repository and not in the
+  // project is the drift being checked for, and worker-sweep is what it looks like when nobody is.
+  "worker-engage",
 ];
 
 const EXPECTED_CRON = [
   "queue-tick", "triage-sweep", "select-tick", "publish-due",
   "metrics-7d", "ops-daily", "ops-monthly", "learn-weekly",
+  // 0061. Twice a day on a weekday: his market does not post much at the weekend and the poll
+  // cannot narrow by date, so every run is a full fetch of every profile on his list.
+  "creator-poll",
 ];
 
 /**
