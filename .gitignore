@@ -100,3 +100,10 @@ scripts/soak/
 # place those 1,682 lines would appear here. The per-account view beside it IS committed:
 # its 196 URLs are already in docs/to-josh/hook-swipe-file.md, so it adds no exposure.
 docs/verify/all-openings.md
+
+# Matt Barker's openings, built on demand by scripts/barker-hooks.mjs. Same reason as
+# docs/verify/all-openings.md above: this repository is PUBLIC and its history is permanent, and
+# this is 250 opening lines belonging to one of Josh's eight reference writers. He asked for more
+# Barker and should have it — by being sent the file, not by it being published. The script
+# regenerates it from reference_writer_posts in seconds, so nothing is lost by keeping it out.
+docs/verify/matt-barker-hooks.md
