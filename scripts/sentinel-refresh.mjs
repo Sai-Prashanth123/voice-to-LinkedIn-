@@ -88,12 +88,14 @@ if (!postsPath && !REPROPOSE) {
  * A profile scrape returns the subject's FEED, not only their own posts: reposts, and other people's
  * posts the subject engaged with. Grouping by author alone turns those into accounts of their own —
  * the 5 October scrape would have measured a DM-setter, a dog rescue page and a billboard
- * appreciation post, and reported each to Josh as "new account". Clause 8.3 names eight writers.
+ * appreciation post, and reported each to Josh as "new account". Only the writers Josh supplied
+ * are measured — clause 8.3 names no number, so the count is his and only he changes it.
  * Nobody else gets measured.
  */
 const SENTINELS = new Set([
   "demandjen1", "ryanscarlin", "outboundphd", "curtishowland",
   "adam-treboutat", "juliacarter98", "amangrowth", "mattjbarker1",
+  "tim-scheuer-91b005237",
 ]);
 
 function measure(posts) {

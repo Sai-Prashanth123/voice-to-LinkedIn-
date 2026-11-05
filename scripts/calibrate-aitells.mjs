@@ -46,6 +46,7 @@ const ONLY = (() => {
 const SENTINELS = new Set([
   "mattjbarker1", "demandjen1", "outboundphd", "juliacarter98",
   "ryanscarlin", "curtishowland", "amangrowth", "adam-treboutat",
+  "tim-scheuer-91b005237",
 ]);
 
 function credentials() {

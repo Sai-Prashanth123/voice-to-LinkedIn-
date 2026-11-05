@@ -42,7 +42,8 @@ import { measurePost } from "./lib/prose.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
 
-/** Clause 8.3 names eight writers. Nobody else gets stored, whatever the scrape returned. */
+/** The writers Josh supplied. Nobody else gets stored, whatever the scrape returned.
+ * Clause 8.3 names no number — the count is his, from his own supply document. */
 const SENTINELS = new Set([
   "demandjen1",
   "ryanscarlin",
@@ -52,6 +53,7 @@ const SENTINELS = new Set([
   "juliacarter98",
   "amangrowth",
   "mattjbarker1",
+  "tim-scheuer-91b005237",
 ]);
 
 const APPLY = process.argv.includes("--apply");

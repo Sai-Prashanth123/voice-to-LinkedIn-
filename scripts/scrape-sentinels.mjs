@@ -68,7 +68,18 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
 
-/** Clause 8.3 names eight. Hardcoded, not an argument, so a careless run cannot widen the set. */
+/**
+ * The writers Josh supplied. Hardcoded, not an argument, so a careless run cannot widen the set.
+ *
+ * NOT a count the spec fixes. Clause 8.3 names no number — it says only that Josh supplies
+ * reference posts whose storytelling structure he wants to borrow, structural reference only. The
+ * "eight" that this comment and five others in the repo attributed to the clause is from HIS supply
+ * document (`docs/from-josh/reference-library-inputs.txt`, "Eight accounts, per clause 8.3") — his
+ * answer to the clause, not the clause's requirement. Checked 5 November when he asked for a ninth.
+ *
+ * So widening this is his decision and only his: clause 12.10 still means nothing in the system
+ * adds a writer on its own.
+ */
 const SENTINELS = {
   demandjen1: "Jen Allen-Knuth",
   ryanscarlin: "Ryan Carlin",
@@ -78,6 +89,7 @@ const SENTINELS = {
   juliacarter98: "Julia Carter",
   amangrowth: "Aman Ghataura",
   mattjbarker1: "Matt Barker",
+  "tim-scheuer-91b005237": "Tim Scheuer",
 };
 
 /*

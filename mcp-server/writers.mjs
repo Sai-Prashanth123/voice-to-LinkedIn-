@@ -31,7 +31,12 @@
  * nowhere as data, so it could not be matched against. It is here once now.
  */
 
-/** The eight he chose, per clause 8.3. `surname` is what he actually says out loud. */
+/**
+ * The writers he chose. `surname` is what he actually says out loud.
+ *
+ * The count is HIS, not the clause's: 8.3 names no number, only that he supplies writers whose
+ * structure he wants to borrow. Tim Scheuer added 5 November at his request, making nine.
+ */
 export const REFERENCE_WRITERS = [
   { handle: "mattjbarker1", name: "Matt Barker", surname: "Barker" },
   { handle: "demandjen1", name: "Jen Allen-Knuth", surname: "Allen-Knuth" },
@@ -41,6 +46,7 @@ export const REFERENCE_WRITERS = [
   { handle: "curtishowland", name: "Curtis Howland", surname: "Howland" },
   { handle: "amangrowth", name: "Aman Ghataura", surname: "Ghataura" },
   { handle: "adam-treboutat", name: "Adam Treboutat", surname: "Treboutat" },
+  { handle: "tim-scheuer-91b005237", name: "Tim Scheuer", surname: "Scheuer" },
 ];
 
 /** "mattjbarker1 (Matt Barker), demandjen1 (Jen Allen-Knuth), …" — for tool descriptions. */

@@ -93,6 +93,7 @@ const DUMP = DUMP_FLAG === -1
 const SENTINELS = new Set([
   "mattjbarker1", "demandjen1", "outboundphd", "juliacarter98",
   "ryanscarlin", "curtishowland", "amangrowth", "adam-treboutat",
+  "tim-scheuer-91b005237",
 ]);
 
 /* ── Credentials, same shape as sentinel-refresh ──────────────────────────── */
@@ -140,7 +141,8 @@ async function allPosts() {
  * SOURCE B — the content-agent clients, read off disk.
  *
  * WHY A SECOND READER RATHER THAN A WIDER FILTER. The SENTINELS gate above is correct and stays:
- * clause 8.3 names eight, and `scrape-sentinels.mjs` says the same about its own copy — "hardcoded,
+ * the count is HIS, not the clause's (8.3 names no number), and `scrape-sentinels.mjs` says the
+ * same about its own copy — "hardcoded,
  * not an argument, so a careless run cannot widen the set". These are not Josh's writers and must
  * never be counted as them, so they arrive through their own door and carry their own label.
  *

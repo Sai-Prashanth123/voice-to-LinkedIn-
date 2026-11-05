@@ -1,24 +1,24 @@
 {
-  "measured_at": "2026-11-02T12:22:15.076Z",
+  "measured_at": "2026-11-05T11:33:13.953Z",
   "basis": {
-    "posts": 3261,
-    "writers": 51,
+    "posts": 2742,
+    "writers": 23,
     "means": "Only posts that kept their line breaks. The scraping console returns most posts as one unbroken line, and counting those would report the scraper as a habit of the writer.",
     "by_source": {
       "josh_eight": {
-        "posts": 1682,
-        "accounts": 8,
-        "with_reactions": 231
+        "posts": 1919,
+        "accounts": 9,
+        "with_reactions": 468
       },
       "content_agent": {
-        "posts": 840,
+        "posts": 823,
         "accounts": 14,
-        "with_reactions": 839
+        "with_reactions": 822
       },
       "console_store": {
-        "posts": 739,
-        "accounts": 41,
-        "with_reactions": 726
+        "posts": 0,
+        "accounts": 0,
+        "with_reactions": 0
       }
     },
     "whose_they_are": {
@@ -41,58 +41,58 @@
   "shapes": [
     {
       "shape": "statement",
-      "posts": 1752,
-      "share_pct": 53.7,
+      "posts": 1386,
+      "share_pct": 50.5,
       "line_one_words": {
         "median": 11,
-        "p90": 26
+        "p90": 28
       },
       "fold": {
         "lines_the_hook_uses": {
-          "one": 26.4,
-          "two": 40.7,
-          "three": 17.1,
-          "four_or_more": 15.8
+          "one": 26.3,
+          "two": 39.7,
+          "three": 15.5,
+          "four_or_more": 18.5
         },
-        "leaves_room_pct": 67.1,
-        "fills_or_overflows_pct": 32.9
+        "leaves_room_pct": 66,
+        "fills_or_overflows_pct": 34
       },
-      "hook_clears_the_fold_pct": 70,
-      "names_the_reader_pct": 17,
+      "hook_clears_the_fold_pct": 62.3,
+      "names_the_reader_pct": 17.2,
       "ends_on_a_colon_pct": 0,
       "first_figure_arrives": {
-        "line_one": 28.9,
-        "line_two": 14.6,
-        "later": 24.3,
-        "no_figure": 32.2
+        "line_one": 33.8,
+        "line_two": 19.4,
+        "later": 31,
+        "no_figure": 15.8
       },
       "investment_elements_in_line_one": {
-        "none": 32.7,
-        "one": 61.6,
-        "two_or_more": 5.7
+        "none": 26.9,
+        "one": 66.9,
+        "two_or_more": 6.2
       }
     },
     {
       "shape": "number_claim",
-      "posts": 749,
-      "share_pct": 23,
+      "posts": 737,
+      "share_pct": 26.9,
       "line_one_words": {
         "median": 15,
         "p90": 33
       },
       "fold": {
         "lines_the_hook_uses": {
-          "one": 23.1,
-          "two": 29.9,
-          "three": 16.2,
-          "four_or_more": 30.8
+          "one": 22.3,
+          "two": 30.8,
+          "three": 14.9,
+          "four_or_more": 32
         },
-        "leaves_room_pct": 53,
-        "fills_or_overflows_pct": 47
+        "leaves_room_pct": 53.1,
+        "fills_or_overflows_pct": 46.9
       },
-      "hook_clears_the_fold_pct": 70.4,
-      "names_the_reader_pct": 15.4,
-      "ends_on_a_colon_pct": 21.1,
+      "hook_clears_the_fold_pct": 69.2,
+      "names_the_reader_pct": 15.7,
+      "ends_on_a_colon_pct": 20.8,
       "first_figure_arrives": {
         "line_one": 100,
         "line_two": 0,
@@ -101,152 +101,152 @@
       },
       "investment_elements_in_line_one": {
         "none": 0,
-        "one": 92.1,
-        "two_or_more": 7.9
+        "one": 90.9,
+        "two_or_more": 9.1
       }
     },
     {
       "shape": "first_person",
-      "posts": 289,
-      "share_pct": 8.9,
+      "posts": 229,
+      "share_pct": 8.4,
       "line_one_words": {
         "median": 12,
-        "p90": 27
+        "p90": 29
       },
       "fold": {
         "lines_the_hook_uses": {
-          "one": 26,
-          "two": 34.3,
-          "three": 19.7,
-          "four_or_more": 20.1
+          "one": 26.6,
+          "two": 32.3,
+          "three": 17.5,
+          "four_or_more": 23.6
         },
-        "leaves_room_pct": 60.2,
-        "fills_or_overflows_pct": 39.8
+        "leaves_room_pct": 59,
+        "fills_or_overflows_pct": 41
       },
-      "hook_clears_the_fold_pct": 73.4,
-      "names_the_reader_pct": 10,
-      "ends_on_a_colon_pct": 8.3,
+      "hook_clears_the_fold_pct": 67.2,
+      "names_the_reader_pct": 10.5,
+      "ends_on_a_colon_pct": 10.9,
       "first_figure_arrives": {
-        "line_one": 5.5,
-        "line_two": 13.5,
-        "later": 42.9,
-        "no_figure": 38.1
+        "line_one": 6.6,
+        "line_two": 18.8,
+        "later": 57.6,
+        "no_figure": 17
       },
       "investment_elements_in_line_one": {
-        "none": 41.2,
-        "one": 56.7,
-        "two_or_more": 2.1
+        "none": 36.2,
+        "one": 61.6,
+        "two_or_more": 2.2
       }
     },
     {
       "shape": "colon_setup",
-      "posts": 233,
-      "share_pct": 7.1,
+      "posts": 200,
+      "share_pct": 7.3,
       "line_one_words": {
         "median": 9,
-        "p90": 23
+        "p90": 24
       },
       "fold": {
         "lines_the_hook_uses": {
-          "one": 32.2,
-          "two": 45.1,
-          "three": 11.6,
-          "four_or_more": 11.2
+          "one": 35,
+          "two": 40.5,
+          "three": 12,
+          "four_or_more": 12.5
         },
-        "leaves_room_pct": 77.3,
-        "fills_or_overflows_pct": 22.7
+        "leaves_room_pct": 75.5,
+        "fills_or_overflows_pct": 24.5
       },
-      "hook_clears_the_fold_pct": 40.8,
-      "names_the_reader_pct": 21.9,
+      "hook_clears_the_fold_pct": 31.5,
+      "names_the_reader_pct": 20.5,
       "ends_on_a_colon_pct": 100,
       "first_figure_arrives": {
-        "line_one": 43.8,
-        "line_two": 16.3,
-        "later": 26.2,
-        "no_figure": 13.7
+        "line_one": 43.5,
+        "line_two": 19,
+        "later": 30.5,
+        "no_figure": 7
       },
       "investment_elements_in_line_one": {
-        "none": 25.8,
-        "one": 70.8,
-        "two_or_more": 3.4
+        "none": 25.5,
+        "one": 71,
+        "two_or_more": 3.5
       }
     },
     {
       "shape": "consensus_claim",
-      "posts": 126,
-      "share_pct": 3.9,
+      "posts": 95,
+      "share_pct": 3.5,
       "line_one_words": {
         "median": 11,
-        "p90": 26
+        "p90": 29
       },
       "fold": {
         "lines_the_hook_uses": {
-          "one": 19,
-          "two": 50.8,
-          "three": 14.3,
-          "four_or_more": 15.9
+          "one": 20,
+          "two": 48.4,
+          "three": 11.6,
+          "four_or_more": 20
         },
-        "leaves_room_pct": 69.8,
-        "fills_or_overflows_pct": 30.2
+        "leaves_room_pct": 68.4,
+        "fills_or_overflows_pct": 31.6
       },
-      "hook_clears_the_fold_pct": 83.3,
-      "names_the_reader_pct": 13.5,
-      "ends_on_a_colon_pct": 7.9,
+      "hook_clears_the_fold_pct": 80,
+      "names_the_reader_pct": 13.7,
+      "ends_on_a_colon_pct": 9.5,
       "first_figure_arrives": {
-        "line_one": 14.3,
-        "line_two": 17.5,
-        "later": 31,
-        "no_figure": 37.3
+        "line_one": 18.9,
+        "line_two": 23.2,
+        "later": 41.1,
+        "no_figure": 16.8
       },
       "investment_elements_in_line_one": {
-        "none": 43.7,
-        "one": 44.4,
-        "two_or_more": 11.9
+        "none": 36.8,
+        "one": 48.4,
+        "two_or_more": 14.7
       }
     },
     {
       "shape": "time_anchored",
-      "posts": 112,
-      "share_pct": 3.4,
+      "posts": 95,
+      "share_pct": 3.5,
       "line_one_words": {
-        "median": 19,
+        "median": 20,
         "p90": 34
       },
       "fold": {
         "lines_the_hook_uses": {
-          "one": 4.5,
-          "two": 32.1,
-          "three": 21.4,
-          "four_or_more": 42
+          "one": 4.2,
+          "two": 34.7,
+          "three": 16.8,
+          "four_or_more": 44.2
         },
-        "leaves_room_pct": 36.6,
-        "fills_or_overflows_pct": 63.4
+        "leaves_room_pct": 38.9,
+        "fills_or_overflows_pct": 61.1
       },
-      "hook_clears_the_fold_pct": 71.4,
-      "names_the_reader_pct": 23.2,
-      "ends_on_a_colon_pct": 31.3,
+      "hook_clears_the_fold_pct": 72.6,
+      "names_the_reader_pct": 21.1,
+      "ends_on_a_colon_pct": 34.7,
       "first_figure_arrives": {
-        "line_one": 66.1,
-        "line_two": 8,
-        "later": 13.4,
-        "no_figure": 12.5
+        "line_one": 72.6,
+        "line_two": 9.5,
+        "later": 15.8,
+        "no_figure": 2.1
       },
       "investment_elements_in_line_one": {
-        "none": 8,
-        "one": 83.9,
-        "two_or_more": 8
+        "none": 5.3,
+        "one": 86.3,
+        "two_or_more": 8.4
       }
     }
   ],
   "all_writers": {
     "line_one_words": {
       "median": 12,
-      "p90": 29
+      "p90": 30
     },
-    "two_or_more_investment_elements_pct": 6,
+    "two_or_more_investment_elements_pct": 6.8,
     "investment_components_pct": {
-      "specificity": 70.9,
-      "stakes": 10.1,
+      "specificity": 76.5,
+      "stakes": 10.3,
       "emotion_withdrawn": "Cut on 2 November after validation. 22% recall against 20 hand-labelled openings — it found two of every nine that genuinely carry an emotion. The 2.9% it used to report was a fact about a word list, not about writers. scripts/validate-investment.mjs."
     },
     "investment_detector_accuracy": {
@@ -258,122 +258,106 @@
       "specificity": "not scored — a figure or a proper noun is a mechanical test, not a reading",
       "means": "Stakes finds about two thirds of the openings that carry them and is right about three in five of the ones it flags, missing implied risk and firing on 'cost' and 'dead' used in another sense. Use it as an indication and never as a count."
     },
-    "names_the_reader_pct": 16.4,
+    "names_the_reader_pct": 16.5,
     "statement_is_really": {
-      "of": 1752,
+      "of": 1386,
       "means": "Shares of the statement bucket, not of the whole corpus. Aiming at `statement` is aiming at none of the other six shapes; these say which move the line actually makes.",
       "kinds": [
         [
           "assertion",
-          78.7
+          78.4
         ],
         [
           "news",
-          8.2
+          8.7
         ],
         [
           "conditional",
-          3.5
-        ],
-        [
-          "quote",
-          2.9
+          3.3
         ],
         [
           "scene",
           2.7
         ],
         [
+          "quote",
+          2.7
+        ],
+        [
           "imperative",
-          2.3
+          2.5
         ],
         [
           "used_to",
-          1.8
+          1.7
         ]
       ]
     },
     "line_two": {
-      "posts_with_a_second_line": 2523,
-      "median_words": 9,
-      "resolves_with_a_figure_pct": 14.4,
+      "posts_with_a_second_line": 2742,
+      "median_words": 10,
+      "resolves_with_a_figure_pct": 13.9,
       "means": "A low share means these writers mostly do NOT answer line one in line two — which is the stacked-gap move his hooks section describes. It counts figures only, so a line that resolves in words is invisible to it."
     },
     "fold": {
       "lines_the_hook_uses": {
-        "one": 25,
-        "two": 38.1,
-        "three": 16.8,
-        "four_or_more": 20.2
+        "one": 24.9,
+        "two": 36.9,
+        "three": 15.2,
+        "four_or_more": 23
       },
-      "leaves_room_pct": 63,
-      "fills_or_overflows_pct": 37
+      "leaves_room_pct": 61.8,
+      "fills_or_overflows_pct": 38.2
     },
     "reactions_by_fold_use": {
-      "authors": 31,
+      "authors": 16,
       "means": "1.00 is that author's own median post.",
       "one": {
-        "posts": 289,
-        "relative_reactions": 1.1
+        "posts": 207,
+        "relative_reactions": 1.2
       },
       "two": {
-        "posts": 717,
+        "posts": 593,
         "relative_reactions": 1
       },
       "three": {
-        "posts": 328,
-        "relative_reactions": 1
+        "posts": 234,
+        "relative_reactions": 0.9
       },
       "four_or_more": {
-        "posts": 273,
+        "posts": 256,
         "relative_reactions": 0.9
       },
       "how_much_to_trust_it": "SUGGESTIVE, NOT A MEASUREMENT. The buckets rest on FOLD_CHARS_PER_LINE = 42 and FOLD_LINES = 3, both flagged PROVISIONAL in shape.ts and never fitted against a real phone. The spread is about 20% and the direction is worth acting on; the figure is not something to quote at Josh as a finding."
     },
-    "hook_clears_the_fold_pct": 68.8,
-    "first_figure_after_line_one_pct": 20.4,
-    "has_a_marked_turn_pct": 34.6
+    "hook_clears_the_fold_pct": 63.3,
+    "first_figure_after_line_one_pct": 24.7,
+    "has_a_marked_turn_pct": 46.1
   },
   "per_writer": {
     "adam-treboutat": {
-      "posts": 221,
+      "posts": 213,
       "line_one_words_median": 7,
       "commonest_shape": "statement",
-      "names_the_reader_pct": 8.6,
-      "two_or_more_investment_elements_pct": 5.4,
-      "has_a_marked_turn_pct": 32.6
-    },
-    "alex-harbanyof": {
-      "posts": 35,
-      "line_one_words_median": 13,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 11.4,
-      "two_or_more_investment_elements_pct": 0,
-      "has_a_marked_turn_pct": 0
+      "names_the_reader_pct": 8.5,
+      "two_or_more_investment_elements_pct": 5.2,
+      "has_a_marked_turn_pct": 33.8
     },
     "alex-vacca": {
-      "posts": 148,
-      "line_one_words_median": 12,
+      "posts": 101,
+      "line_one_words_median": 13,
       "commonest_shape": "statement",
-      "names_the_reader_pct": 17.6,
-      "two_or_more_investment_elements_pct": 8.1,
-      "has_a_marked_turn_pct": 37.8
+      "names_the_reader_pct": 17.8,
+      "two_or_more_investment_elements_pct": 8.9,
+      "has_a_marked_turn_pct": 55.4
     },
     "amangrowth": {
-      "posts": 245,
+      "posts": 224,
       "line_one_words_median": 8,
       "commonest_shape": "statement",
-      "names_the_reader_pct": 16.7,
-      "two_or_more_investment_elements_pct": 4.5,
-      "has_a_marked_turn_pct": 30.2
-    },
-    "amos-bar-joseph": {
-      "posts": 20,
-      "line_one_words_median": 12.5,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 25,
-      "two_or_more_investment_elements_pct": 15,
-      "has_a_marked_turn_pct": 0
+      "names_the_reader_pct": 16.1,
+      "two_or_more_investment_elements_pct": 4.9,
+      "has_a_marked_turn_pct": 33
     },
     "anthony-viviani": {
       "posts": 23,
@@ -383,22 +367,6 @@
       "two_or_more_investment_elements_pct": 13,
       "has_a_marked_turn_pct": 4.3
     },
-    "anthonypierri": {
-      "posts": 21,
-      "line_one_words_median": 8,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 23.8,
-      "two_or_more_investment_elements_pct": 4.8,
-      "has_a_marked_turn_pct": 0
-    },
-    "brendanhufford": {
-      "posts": 14,
-      "line_one_words_median": 11.5,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 28.6,
-      "two_or_more_investment_elements_pct": 0,
-      "has_a_marked_turn_pct": 0
-    },
     "cem-baris": {
       "posts": 40,
       "line_one_words_median": 12,
@@ -407,61 +375,21 @@
       "two_or_more_investment_elements_pct": 2.5,
       "has_a_marked_turn_pct": 20
     },
-    "cembaris": {
-      "posts": 18,
-      "line_one_words_median": 12,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 11.1,
-      "two_or_more_investment_elements_pct": 5.6,
-      "has_a_marked_turn_pct": 0
-    },
-    "chriswalker171": {
-      "posts": 10,
-      "line_one_words_median": 12,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 20,
-      "two_or_more_investment_elements_pct": 0,
-      "has_a_marked_turn_pct": 0
-    },
     "curtishowland": {
-      "posts": 224,
+      "posts": 204,
       "line_one_words_median": 7,
       "commonest_shape": "statement",
       "names_the_reader_pct": 4.9,
-      "two_or_more_investment_elements_pct": 3.1,
-      "has_a_marked_turn_pct": 29.5
-    },
-    "davegerhardt": {
-      "posts": 25,
-      "line_one_words_median": 13,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 40,
-      "two_or_more_investment_elements_pct": 4,
-      "has_a_marked_turn_pct": 4
+      "two_or_more_investment_elements_pct": 2.5,
+      "has_a_marked_turn_pct": 32.4
     },
     "demandjen1": {
-      "posts": 235,
-      "line_one_words_median": 18,
+      "posts": 212,
+      "line_one_words_median": 21,
       "commonest_shape": "statement",
-      "names_the_reader_pct": 26.8,
-      "two_or_more_investment_elements_pct": 8.5,
-      "has_a_marked_turn_pct": 57.4
-    },
-    "dujam-dunato": {
-      "posts": 8,
-      "line_one_words_median": 11,
-      "commonest_shape": "number_claim",
-      "names_the_reader_pct": 0,
-      "two_or_more_investment_elements_pct": 0,
-      "has_a_marked_turn_pct": 0
-    },
-    "elizaveta-zabrodskaya": {
-      "posts": 9,
-      "line_one_words_median": 11,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 11.1,
-      "two_or_more_investment_elements_pct": 0,
-      "has_a_marked_turn_pct": 0
+      "names_the_reader_pct": 26.9,
+      "two_or_more_investment_elements_pct": 9,
+      "has_a_marked_turn_pct": 63.2
     },
     "gil-allouche": {
       "posts": 55,
@@ -471,14 +399,6 @@
       "two_or_more_investment_elements_pct": 7.3,
       "has_a_marked_turn_pct": 29.1
     },
-    "gilallouche": {
-      "posts": 40,
-      "line_one_words_median": 13,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 17.5,
-      "two_or_more_investment_elements_pct": 2.5,
-      "has_a_marked_turn_pct": 0
-    },
     "henry-mann": {
       "posts": 25,
       "line_one_words_median": 13,
@@ -486,14 +406,6 @@
       "names_the_reader_pct": 12,
       "two_or_more_investment_elements_pct": 8,
       "has_a_marked_turn_pct": 24
-    },
-    "henryvmann": {
-      "posts": 9,
-      "line_one_words_median": 10,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 22.2,
-      "two_or_more_investment_elements_pct": 0,
-      "has_a_marked_turn_pct": 0
     },
     "ivan-falco": {
       "posts": 42,
@@ -503,117 +415,61 @@
       "two_or_more_investment_elements_pct": 4.8,
       "has_a_marked_turn_pct": 78.6
     },
-    "ivanfalco": {
-      "posts": 18,
-      "line_one_words_median": 8.5,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 11.1,
-      "two_or_more_investment_elements_pct": 0,
-      "has_a_marked_turn_pct": 11.1
-    },
     "juliacarter98": {
-      "posts": 253,
+      "posts": 233,
       "line_one_words_median": 16,
       "commonest_shape": "statement",
-      "names_the_reader_pct": 17.8,
-      "two_or_more_investment_elements_pct": 11.9,
-      "has_a_marked_turn_pct": 21.7
-    },
-    "justinwelsh": {
-      "posts": 10,
-      "line_one_words_median": 12.5,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 0,
-      "two_or_more_investment_elements_pct": 10,
-      "has_a_marked_turn_pct": 0
+      "names_the_reader_pct": 16.7,
+      "two_or_more_investment_elements_pct": 11.6,
+      "has_a_marked_turn_pct": 23.6
     },
     "kenny-damian": {
-      "posts": 45,
+      "posts": 35,
       "line_one_words_median": 12,
       "commonest_shape": "statement",
-      "names_the_reader_pct": 20,
-      "two_or_more_investment_elements_pct": 6.7,
-      "has_a_marked_turn_pct": 62.2
-    },
-    "kenny-damian-90aba221a": {
-      "posts": 18,
-      "line_one_words_median": 12,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 22.2,
-      "two_or_more_investment_elements_pct": 5.6,
-      "has_a_marked_turn_pct": 0
-    },
-    "kylelacy": {
-      "posts": 24,
-      "line_one_words_median": 10,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 37.5,
-      "two_or_more_investment_elements_pct": 4.2,
-      "has_a_marked_turn_pct": 0
-    },
-    "laraacostar": {
-      "posts": 8,
-      "line_one_words_median": 8.5,
-      "commonest_shape": "colon_setup",
-      "names_the_reader_pct": 12.5,
-      "two_or_more_investment_elements_pct": 0,
-      "has_a_marked_turn_pct": 0
-    },
-    "lindsey-mcfadden-mba": {
-      "posts": 3,
-      "line_one_words_median": 20,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 0,
-      "two_or_more_investment_elements_pct": 0,
-      "has_a_marked_turn_pct": 0
+      "names_the_reader_pct": 25.7,
+      "two_or_more_investment_elements_pct": 5.7,
+      "has_a_marked_turn_pct": 71.4
     },
     "mai-lan-khong": {
-      "posts": 79,
-      "line_one_words_median": 14,
+      "posts": 58,
+      "line_one_words_median": 15,
       "commonest_shape": "statement",
-      "names_the_reader_pct": 7.6,
-      "two_or_more_investment_elements_pct": 6.3,
-      "has_a_marked_turn_pct": 39.2
+      "names_the_reader_pct": 6.9,
+      "two_or_more_investment_elements_pct": 8.6,
+      "has_a_marked_turn_pct": 53.4
     },
     "mattjbarker1": {
-      "posts": 251,
-      "line_one_words_median": 19,
+      "posts": 231,
+      "line_one_words_median": 20,
       "commonest_shape": "number_claim",
-      "names_the_reader_pct": 16.7,
-      "two_or_more_investment_elements_pct": 11.2,
-      "has_a_marked_turn_pct": 70.1
+      "names_the_reader_pct": 15.2,
+      "two_or_more_investment_elements_pct": 11.7,
+      "has_a_marked_turn_pct": 75.8
     },
     "max-pecherskyi": {
-      "posts": 89,
+      "posts": 83,
       "line_one_words_median": 19,
       "commonest_shape": "statement",
-      "names_the_reader_pct": 10.1,
-      "two_or_more_investment_elements_pct": 6.7,
-      "has_a_marked_turn_pct": 28.1
-    },
-    "maxpecherskyi": {
-      "posts": 49,
-      "line_one_words_median": 16,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 10.2,
-      "two_or_more_investment_elements_pct": 4.1,
-      "has_a_marked_turn_pct": 0
+      "names_the_reader_pct": 10.8,
+      "two_or_more_investment_elements_pct": 7.2,
+      "has_a_marked_turn_pct": 30.1
     },
     "michel-lieben": {
-      "posts": 134,
+      "posts": 98,
       "line_one_words_median": 10,
       "commonest_shape": "statement",
-      "names_the_reader_pct": 21.6,
-      "two_or_more_investment_elements_pct": 2.2,
-      "has_a_marked_turn_pct": 28.4
+      "names_the_reader_pct": 22.4,
+      "two_or_more_investment_elements_pct": 2,
+      "has_a_marked_turn_pct": 38.8
     },
     "nate-andorsky": {
-      "posts": 86,
-      "line_one_words_median": 14,
+      "posts": 51,
+      "line_one_words_median": 16,
       "commonest_shape": "statement",
-      "names_the_reader_pct": 11.6,
-      "two_or_more_investment_elements_pct": 1.2,
-      "has_a_marked_turn_pct": 17.4
+      "names_the_reader_pct": 15.7,
+      "two_or_more_investment_elements_pct": 2,
+      "has_a_marked_turn_pct": 29.4
     },
     "nicolas-finet": {
       "posts": 37,
@@ -623,21 +479,13 @@
       "two_or_more_investment_elements_pct": 10.8,
       "has_a_marked_turn_pct": 48.6
     },
-    "nifinet": {
-      "posts": 13,
-      "line_one_words_median": 11,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 23.1,
-      "two_or_more_investment_elements_pct": 0,
-      "has_a_marked_turn_pct": 0
-    },
     "outboundphd": {
-      "posts": 243,
-      "line_one_words_median": 25,
+      "posts": 228,
+      "line_one_words_median": 26,
       "commonest_shape": "statement",
-      "names_the_reader_pct": 10.3,
-      "two_or_more_investment_elements_pct": 6.6,
-      "has_a_marked_turn_pct": 57.2
+      "names_the_reader_pct": 10.5,
+      "two_or_more_investment_elements_pct": 7,
+      "has_a_marked_turn_pct": 60.5
     },
     "pierre-herubel": {
       "posts": 132,
@@ -647,30 +495,6 @@
       "two_or_more_investment_elements_pct": 0.8,
       "has_a_marked_turn_pct": 53.8
     },
-    "retentionadam": {
-      "posts": 24,
-      "line_one_words_median": 11,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 20.8,
-      "two_or_more_investment_elements_pct": 8.3,
-      "has_a_marked_turn_pct": 4.2
-    },
-    "richardvanderblom": {
-      "posts": 7,
-      "line_one_words_median": 15,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 0,
-      "two_or_more_investment_elements_pct": 14.3,
-      "has_a_marked_turn_pct": 0
-    },
-    "rob-hoffman-ceo": {
-      "posts": 12,
-      "line_one_words_median": 15,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 8.3,
-      "two_or_more_investment_elements_pct": 8.3,
-      "has_a_marked_turn_pct": 0
-    },
     "robert-craigs": {
       "posts": 43,
       "line_one_words_median": 13,
@@ -679,80 +503,32 @@
       "two_or_more_investment_elements_pct": 0,
       "has_a_marked_turn_pct": 18.6
     },
-    "ruben-hassid": {
-      "posts": 11,
-      "line_one_words_median": 8,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 0,
-      "two_or_more_investment_elements_pct": 0,
-      "has_a_marked_turn_pct": 0
-    },
-    "ryanetully": {
-      "posts": 11,
-      "line_one_words_median": 10,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 9.1,
-      "two_or_more_investment_elements_pct": 0,
-      "has_a_marked_turn_pct": 0
-    },
     "ryanscarlin": {
-      "posts": 149,
+      "posts": 137,
       "line_one_words_median": 8,
       "commonest_shape": "statement",
-      "names_the_reader_pct": 19.5,
-      "two_or_more_investment_elements_pct": 3.4,
-      "has_a_marked_turn_pct": 34.9
+      "names_the_reader_pct": 18.2,
+      "two_or_more_investment_elements_pct": 2.9,
+      "has_a_marked_turn_pct": 38
     },
-    "samfjacobs": {
-      "posts": 10,
-      "line_one_words_median": 12.5,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 10,
-      "two_or_more_investment_elements_pct": 10,
-      "has_a_marked_turn_pct": 0
-    },
-    "thejcron": {
-      "posts": 5,
+    "tim-scheuer-91b005237": {
+      "posts": 237,
       "line_one_words_median": 11,
       "commonest_shape": "statement",
-      "names_the_reader_pct": 20,
-      "two_or_more_investment_elements_pct": 20,
-      "has_a_marked_turn_pct": 0
-    },
-    "tomasloucky": {
-      "posts": 9,
-      "line_one_words_median": 6,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 0,
-      "two_or_more_investment_elements_pct": 11.1,
-      "has_a_marked_turn_pct": 0
-    },
-    "tycholuijten": {
-      "posts": 14,
-      "line_one_words_median": 11,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 7.1,
-      "two_or_more_investment_elements_pct": 0,
-      "has_a_marked_turn_pct": 7.1
-    },
-    "viktorijan-mucunski": {
-      "posts": 7,
-      "line_one_words_median": 16,
-      "commonest_shape": "statement",
-      "names_the_reader_pct": 14.3,
-      "two_or_more_investment_elements_pct": 14.3,
-      "has_a_marked_turn_pct": 0
+      "names_the_reader_pct": 18.1,
+      "two_or_more_investment_elements_pct": 10.5,
+      "has_a_marked_turn_pct": 62.4
     }
   },
   "excluded_by_his_rules": {
-    "count": 234,
-    "of": 3495,
+    "count": 196,
+    "of": 2938,
     "why_a_filter": "His hooks section has two nevers and one of them is No bait. The widest-reaching opening in the content-agent store is a bait-and-switch — a marathon time, three promised business lessons, then \"No, I'm joking haha.\" Ranking by engagement and learning from the top would teach the drafter the one move his rules forbid outright.",
     "what_judged_it": "scan() from mcp-server/aitells.mjs, which encodes the constructions his library rules out, plus his rule against opening on a question. Not a second opinion about what slop is.",
     "by_reason": [
       [
         "opens on a question (his rule, hooks section)",
-        220
+        182
       ],
       [
         "2C-2: negative parallelism (not x but y)",

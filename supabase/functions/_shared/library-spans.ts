@@ -67,6 +67,7 @@ export const REFERENCE_WRITERS: { handle: string; name: string }[] = [
   { handle: "juliacarter98", name: "Julia Carter" },
   { handle: "amangrowth", name: "Aman Ghataura" },
   { handle: "mattjbarker1", name: "Matt Barker" },
+  { handle: "tim-scheuer-91b005237", name: "Tim Scheuer" },
 ];
 
 /* ── The markers ──────────────────────────────────────────────────────────── */
@@ -659,6 +660,21 @@ export function describeRefusals(found: Refusal[]): string {
  */
 export const SECTION_BUDGET = 5800;
 
+/*
+ * A NINTH WRITER DID NOT NEED THIS RAISED, AND THE 99-CHARACTER OVERRUN THAT SAID IT DID WAS A
+ * TRANSIENT STATE, NOT A SIZE.
+ *
+ * Recorded because it will happen again on the tenth. Adding a writer to REFERENCE_WRITERS before
+ * his posts are measured puts the span in a state where he has no row and instead gets the
+ * "<handle> returned nothing." warning block — which is LONGER than the table row it stands in for.
+ * The section measured 5,899 in that window and 5,673 once he was measured. Raising the budget
+ * against the first number would have bought permanent headroom to cover a condition that clears
+ * itself in one refresh.
+ *
+ * So the order matters: load and refresh, THEN read the size. Four lines of prose were made
+ * count-free in the same change, which is where the row's characters actually came from.
+ */
+
 /** The writer read that was removed from this section, and the size it may never regrow to. */
 export const REMOVED_WRITER_READ_CHARS = 8287;
 
@@ -688,7 +704,7 @@ export const REMOVED_WRITER_READ_CHARS = 8287;
 export function referencePostsBody(span: string): string {
   return `# Reference posts — structure only
 
-Eight accounts, per clause 8.3. **Structural reference only. Never a source of voice, never copied,
+The accounts he supplied, per clause 8.3. **Structural reference only. Never a source of voice, never copied,
 never quoted.**
 
 The span below is rewritten whole on every refresh. Nothing in it is written by hand and nothing
@@ -707,7 +723,7 @@ what these writers happen to do; it is not a figure to hit, and the middle of it
 
 His voice guide says everything the same length is exhausting, and that is the one preference here
 that is measurable. The *Variation* column is the median within-post spread of sentence length, and
-it separates these eight writers more sharply than anything else in the table.
+it separates these writers more sharply than anything else in the table.
 
 **A draft of his should land nearer 9–12 than at the foot of that column.** That range is his
 judgement about his own voice rather than a fact about the corpus: the measured figures move on
@@ -724,7 +740,7 @@ above is the instruction.
 than bullets, opening on a specific number, closing soft — the formatting section's lean-fat-lean,
 bullets only for a genuine list, already being executed by somebody.
 
-**Curtis Howland is the furthest**, and the table shows why: he is the heaviest lister of the eight.
+**Curtis Howland is the furthest**, and the table shows why: he is the heaviest lister here.
 The formatting section says bullets are a crutch when they replace sentences. Take his subject
 discipline if anything; do not take his shape.
 
@@ -736,7 +752,7 @@ comes from the voice guide and nowhere else.
 
 Matt Barker is not a peer reference: he is where these rules came from. His 3 September post states
 the lived-experience test, "lessons not advice", and the frame-then-reveal structure in almost the
-words Josh sent. That makes his cadence the likeliest of the eight to leak, and it means a draft
+words Josh sent. That makes his cadence the likeliest to leak, and it means a draft
 that agrees with him proves nothing about whether it sounds like Josh. Take his structure
 knowingly; be suspicious of a draft that starts to sound like him.`;
 }

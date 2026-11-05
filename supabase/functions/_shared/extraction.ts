@@ -227,6 +227,10 @@ const REFERENCE_WRITER_WORDS = new Set([
   "matt", "barker", "jen", "allen-knuth", "allen", "knuth", "eric", "nowoslawski",
   "julia", "carter", "ryan", "carlin", "curtis", "howland", "aman", "ghataura",
   "adam", "treboutat",
+  // The ninth, added 5 November at Josh's request. The comment above is the contract: this list
+  // follows REFERENCE_WRITERS or extraction-shape.test.ts fails — which is how it was found at all,
+  // because nothing else would have reported a reference writer's name being sent for clearance.
+  "tim", "scheuer",
   // "Sentinel accounts" is his own word for the eight as a group — writers.mjs's CORPUS_PHRASES,
   // where it is the only phrase he has ever actually used for them. Measured on moments 110 and
   // 111, where he is asking for the group's shape and the detector was reporting "Sentinel" as a

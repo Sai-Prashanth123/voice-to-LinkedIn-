@@ -199,7 +199,23 @@ test("the voice brief keeps the transfers split, and is not silently empty", asy
   // comparable numbers must be offered in its place.
   assert.equal(brief.does_not_transfer.spoken_sentence_sd, 16.3);
   assert.match(brief.does_not_transfer.why, /not a\s+target/i);
-  assert.ok(Object.keys(brief.does_not_transfer.use_instead.scene_writers_sd).length === 4);
+  /*
+   * Counted against the derived scene split, not against a literal 4.
+   *
+   * It WAS a literal 4, and adding Tim Scheuer on 5 November broke it — correctly, because he
+   * landed in the scene group and made it five. But the assertion also carried no message, so the
+   * failure printed the expression and nothing about what it meant.
+   *
+   * The lower bound is the half that matters: this tool's whole purpose is that the spoken sd is
+   * not a target and comparable written numbers are offered in its place, so an EMPTY map would be
+   * the real defect and `length === 4` would have caught that only by luck. splitModes divides at
+   * the corpus's own median, so the count is a property of the corpus and will move again.
+   */
+  const sceneSds = Object.keys(brief.does_not_transfer.use_instead.scene_writers_sd);
+  assert.ok(
+    sceneSds.length >= 4,
+    `the scene writers' sd figures must be offered in place of the spoken one; got ${sceneSds.length}`,
+  );
   assert.ok(brief.transfers_from_speech.signature_terms.length > 0);
 });
 

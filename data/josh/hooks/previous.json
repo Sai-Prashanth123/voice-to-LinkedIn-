@@ -1,5 +1,5 @@
 {
-  "measured_at": "2026-11-02T12:19:56.700Z",
+  "measured_at": "2026-11-02T12:22:15.076Z",
   "basis": {
     "posts": 3261,
     "writers": 51,
@@ -292,6 +292,12 @@
           1.8
         ]
       ]
+    },
+    "line_two": {
+      "posts_with_a_second_line": 2523,
+      "median_words": 9,
+      "resolves_with_a_figure_pct": 14.4,
+      "means": "A low share means these writers mostly do NOT answer line one in line two — which is the stacked-gap move his hooks section describes. It counts figures only, so a line that resolves in words is invisible to it."
     },
     "fold": {
       "lines_the_hook_uses": {

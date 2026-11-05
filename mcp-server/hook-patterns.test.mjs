@@ -19,7 +19,7 @@ test("the artefact carries both corpora, and says which is which", () => {
   const by = hooks.basis.by_source;
   assert.ok(by.josh_eight.posts > 1000, "the eight he chose are the bulk of it");
   assert.ok(by.content_agent.posts > 500, "and the second corpus is really there");
-  assert.equal(by.josh_eight.accounts, 8, "his roster is still eight");
+  assert.equal(by.josh_eight.accounts, 9, "his roster is the nine he has supplied");
 
   // The distinction that stops the standard changing without him.
   assert.match(hooks.basis.whose_they_are.josh_eight, /THIS IS THE STANDARD/);
@@ -27,17 +27,37 @@ test("the artefact carries both corpora, and says which is which", () => {
   assert.ok(hooks.basis.source_b_caveat, "source B says what it is not good for");
 });
 
-test("almost every content-agent post carries engagement, and his own corpus does not", () => {
-  // This asymmetry is the reason the second corpus is worth having, and the reason a ranking
-  // built on his eight alone would be a ranking of Matt Barker.
+test("almost every content-agent post carries engagement, and his own corpus still cannot be ranked", () => {
+  /*
+   * This asymmetry is the reason the second corpus is worth having.
+   *
+   * THE THRESHOLD MOVED ON 5 NOVEMBER, AND WHAT MOVED IT IS WORTH READING.
+   *
+   * It was "< 0.2 — seven of eight writers have no reaction data at all". Adding Tim Scheuer broke
+   * that, because his scrape arrived with a reaction count on all 248 posts where most of the
+   * others have none: his corpus went from 220/1,671 to 468/1,919, which is 0.244.
+   *
+   * The claim the test exists to make is unchanged and still true — three quarters of his corpus
+   * carries no engagement figure, so a ranking over it cannot be an engagement ranking. But the
+   * bound is now stated as the thing that actually matters, because a bare ratio hid the hazard:
+   * the coverage is CONCENTRATED. Barker is 51 of 51 and Tim 6 of 6 in the artefact's window,
+   * against 1 of 128, 0 of 203, 0 of 198 and so on for the rest. So a ranking built on his own
+   * corpus would not be a thin ranking of nine writers; it would be a ranking of two, wearing the
+   * nine's name. That was true of Barker alone before and is easier to miss now there are two.
+   */
   const by = hooks.basis.by_source;
   assert.ok(
     by.content_agent.with_reactions / by.content_agent.posts > 0.95,
     "the second corpus can be ranked",
   );
+  const covered = by.josh_eight.with_reactions / by.josh_eight.posts;
   assert.ok(
-    by.josh_eight.with_reactions / by.josh_eight.posts < 0.2,
-    "his own cannot — seven of eight writers have no reaction data at all",
+    covered < 0.5,
+    `most of his corpus must still lack engagement data for the asymmetry to hold; got ${covered.toFixed(3)}`,
+  );
+  assert.ok(
+    covered > 0,
+    "and some of it carries reactions — a zero here means the loader stopped storing them",
   );
 });
 

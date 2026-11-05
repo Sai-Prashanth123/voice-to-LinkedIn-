@@ -264,8 +264,12 @@ test("both refreshers splice through the one function", () => {
 
 test("the scene/cut split is derived, and reproduces the recorded roster", () => {
   /*
-   * `measure.mjs` and `voice.mjs` each hardcode this roster and each comment that it is "a judgement
-   * recorded in the reference_posts library section". By 28 October that document named Ryan Carlin
+   * `measure.mjs` and `voice.mjs` BOTH DERIVE this roster now — measure.mjs:93 and voice.mjs:76 each
+   * call splitModes — so neither needs editing when the split moves. The sentence below said they
+   * hardcode it, which was true when this test was written and stopped being true before Tim Scheuer
+   * was added on 5 November. Kept as the record of why the assertion is a literal list at all: both
+   * tools used to call this roster "a judgement recorded in the reference_posts library section",
+   * and by 28 October that document named Ryan Carlin
    * at 6 / 28 / 19 where he measures 8 / 23 / 21, counted three cut writers when there were four,
    * and had then been overwritten entirely — so the passage they cite did not exist.
    *
@@ -275,11 +279,18 @@ test("the scene/cut split is derived, and reproduces the recorded roster", () =>
   const modes = splitModes(latest.report);
   assert.equal(modes.cut.length + modes.scene.length, latest.report.length);
 
+  /*
+   * 5 November: adding Tim Scheuer moved this, which is the whole reason the assertion is a literal
+   * list. He landed in SCENE and reclassified nobody — the split divides at the corpus's own median
+   * above-fold figure, so a ninth writer CAN move an existing one across it, and this is what would
+   * have reported it. Scene is five now, cut is still four.
+   */
+
   const handles = (rows: { handle: string }[]) => rows.map((r) => r.handle).sort();
   assert.deepEqual(
     handles(modes.scene),
-    ["demandjen1", "juliacarter98", "mattjbarker1", "outboundphd"],
-    "the derived scene roster no longer matches the one measure.mjs and voice.mjs hardcode",
+    ["demandjen1", "juliacarter98", "mattjbarker1", "outboundphd", "tim-scheuer-91b005237"],
+    "the derived scene roster moved; check nothing cites the old one in prose",
   );
   assert.deepEqual(
     handles(modes.cut),
