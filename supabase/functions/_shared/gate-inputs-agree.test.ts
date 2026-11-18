@@ -34,7 +34,9 @@ import {
 /** Everything a caller could pass, each value distinctive enough to find in the output. */
 const ALL = {
   body: "A post.",
-  entry: { his_words: "x".repeat(1234) },
+  // The marker carries no digits on purpose: one test below asserts that no check except
+  // claims_trace is handed the character count, and a number in here would trip it.
+  entry: { the_moment: "SOURCE-MARKER a pricing call in Melbourne.", his_words: "x".repeat(1234) },
   audience: "SDR leaders",
   clearedNames: ["Ben"],
   shape: ["SHAPE-MARKER: 9 paragraphs"],
@@ -141,10 +143,42 @@ test("how much he supplied reaches claims_trace and nothing else", () => {
   assert.ok(claims.includes("1234"), "the count is in the prompt the judge reads");
   assert.match(claims, /NO threshold/i, "and it is told not to invent a line");
 
-  // A thin brief makes an invented quote no more acceptable, so no other check can use this.
-  for (const key of ["anyone_else", "identifiable", "banned_phrases", "shape"]) {
+  /*
+   * A thin brief makes an invented quote no more acceptable, so no other check can use this.
+   *
+   * DERIVED, not written out. This was a hand-typed list of four, so a check added later was not
+   * covered by it — and on 18 November a tenth arrived and this guard had nothing to say about it.
+   * A guard that only knows the checks that existed when it was written reports success over the
+   * one you have just added, which is the defect this whole file exists to catch.
+   */
+  for (const { key } of GATE_CHECKS.filter((c) => c.key !== "claims_trace")) {
     assert.ok(!render(key).includes("1234"), `${key} must not be handed the count`);
   }
+});
+
+test("the check that reads the post as a sequence gets the material and nothing else", () => {
+  /*
+   * `holds_together`, added 18 November. "Drift off its one point" cannot be answered without
+   * knowing what the point was, so it is granted the source — which makes it the fourth check that
+   * can see his private notes, and that is a boundary worth asserting rather than assuming.
+   *
+   * It must NOT have the shape measurement or the first line: it judges the order of the sentences,
+   * and handing it either would invite it to fail a post for something another check owns, which is
+   * the exact confusion of 2 November between the hook and shape checks.
+   */
+  const sees = gateInputsFor("holds_together");
+  assert.equal(sees.source, true, "it cannot judge drift without knowing the one point");
+  assert.ok(!sees.shape, "it is not a shape check");
+  assert.ok(!sees.firstLine, "it is not a hook check");
+
+  const rendered = render("holds_together");
+  assert.ok(
+    rendered.includes("SOURCE-MARKER"),
+    "it is granted the material and the prompt does not carry it — a declared input nothing " +
+      "renders is the defect this file is named after",
+  );
+  assert.ok(!rendered.includes("SHAPE-MARKER"), "it was handed the shape measurement");
+  assert.ok(!rendered.includes("FIRSTLINE-MARKER"), "it was handed the first line");
 });
 
 test("the rubric that names an input is only shipped with the input wired", () => {
