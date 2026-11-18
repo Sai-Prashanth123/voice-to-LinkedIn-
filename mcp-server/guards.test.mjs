@@ -782,3 +782,77 @@ test("the two surfaces are distinguishable, and a script that exits awaits the r
     "announce must come after connect — the transport owns stdout from there",
   );
 });
+
+test("the two reasons a draft is off the review page are counted separately", () => {
+  /*
+   * `withheld` compared the page against EVERY draft row while `limit` defaulted to 25, so the
+   * paging shortfall was reported as ideas that were killed or parked.
+   *
+   * MEASURED 18 November 2026, right after 18 duplicate ideas were parked: 57 draft rows, 21 of
+   * them genuinely on killed or parked ideas, and list_calendar announced "32 draft(s) sit on
+   * ideas that were killed or parked, so they need no decision and are not listed."
+   *
+   * Eleven of those thirty-two were waiting on him. A withheld count that over-reports is worse
+   * than no count at all, because it reads as reassurance: he is told the missing drafts need
+   * nothing from him, and eleven of them need a decision.
+   */
+  const src = readFileSync(new URL("./tools/inspect.mjs", import.meta.url), "utf8");
+
+  // The withheld figure must be measured with the SAME moment filter the page uses, not against
+  // an unfiltered count of every draft row.
+  assert.match(
+    src,
+    /moments\.killed=is\.false&moments\.status=neq\.parked&limit=100/,
+    "the withheld count is not measured against the same filter the page applies",
+  );
+  assert.match(
+    src,
+    /withheld = Math\.max\(0, all\.length - eligible\.length\)/,
+    "withheld is still the page size subtracted from every draft row",
+  );
+  assert.ok(
+    !/withheld = Math\.max\(0, all\.length - data\.length\)/.test(src),
+    "withheld still counts paging as killed-or-parked, which told him eleven waiting drafts " +
+      "needed no decision",
+  );
+
+  // And the paging shortfall is reported as its own fact, in the opposite terms.
+  assert.match(
+    src,
+    /moreOnTheNextPage = Math\.max\(0, eligible\.length - data\.length\)/,
+    "the paging shortfall is not counted",
+  );
+  assert.match(src, /more_waiting_on_him/, "the paging shortfall is counted but never reported");
+  assert.match(
+    src,
+    /must not be read out as though/,
+    "nothing tells the reader these are the opposite of withheld",
+  );
+});
+
+test("the three counts of what is waiting on him apply the same filter", () => {
+  /*
+   * list_calendar skipped drafts on parked ideas; next_action filtered `killed` only; next_work had
+   * no moment join at all. So parking a superseded idea took its draft out of the list he reads and
+   * left it in the number that sends him there — "Review 49 post(s)" pointing at a list of 36.
+   *
+   * Three tools answer "what is waiting on you" and they must not disagree.
+   */
+  const inspect = readFileSync(new URL("./tools/inspect.mjs", import.meta.url), "utf8");
+  const work = readFileSync(new URL("./tools/work.mjs", import.meta.url), "utf8");
+
+  // next_action
+  assert.match(
+    inspect,
+    /posts\?select=id,moments!inner\(killed,status\)&status=eq\.draft[\s\S]{0,80}moments\.status=neq\.parked/,
+    "next_action counts drafts on parked ideas as waiting on him",
+  );
+  // next_work, one-step branch
+  assert.match(work, /"moments\.killed": "is\.false"/, "next_work does not exclude killed ideas");
+  assert.match(work, /"moments\.status": "neq\.parked"/, "next_work counts parked ideas");
+  assert.match(
+    work,
+    /select: "id,moments!inner\(killed,status\)"/,
+    "next_work has no moment join, so its filters cannot apply",
+  );
+});

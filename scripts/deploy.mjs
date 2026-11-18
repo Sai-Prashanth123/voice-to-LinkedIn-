@@ -33,7 +33,20 @@ import { fileURLToPath } from "node:url";
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
 const INFO = `${REPO}/mcp-server/build-info.mjs`;
 
-const DEFAULT_FUNCTIONS = ["cc-submit", "mcp", "worker-dispatch"];
+/*
+ * The three a session touches, plus worker-engage from 18 November.
+ *
+ * worker-engage was in no default list and in no document — `grep -rn "worker-engage" docs/`
+ * returned nothing at all — so the only way it ever shipped was somebody naming it by hand. It
+ * runs twice a day on weekdays against Josh's creator list, which means it is the one worker that
+ * can go stale for a fortnight without anybody noticing: an empty creator list makes it return
+ * early and log `creator_poll_idle`, which looks exactly like a healthy run.
+ *
+ * Not the full set of twelve on purpose. A default that deploys everything turns every small fix
+ * into a twelve-function deploy, and `supabase functions deploy` is the slow part. The others are
+ * named explicitly, and `system_status` reports the commit so a stale one can be found.
+ */
+const DEFAULT_FUNCTIONS = ["cc-submit", "mcp", "worker-dispatch", "worker-engage"];
 const functions = process.argv.slice(2).filter((a) => !a.startsWith("-"));
 const targets = functions.length > 0 ? functions : DEFAULT_FUNCTIONS;
 

@@ -433,13 +433,13 @@ async function anthropicStructured<S extends z.ZodType>(
   try {
     // deno-lint-ignore no-explicit-any
     const res: any = await (anthropicClient().messages as any).parse(request);
-    await record(acc.db, opts, model, res, started, null);
+    await record(acc.db, opts, model, "anthropic", res, started, null);
     if (res.parsed_output == null) {
       throw new Error(`structured output did not parse (stop_reason: ${res.stop_reason})`);
     }
     return res.parsed_output as z.infer<S>;
   } catch (err) {
-    await record(acc.db, opts, model, null, started, String(err));
+    await record(acc.db, opts, model, "anthropic", null, started, String(err));
     throw err;
   }
 }
@@ -464,14 +464,14 @@ async function anthropicText(opts: CallOptions, acc: Accounting): Promise<string
   try {
     // deno-lint-ignore no-explicit-any
     const res: any = await (anthropicClient().messages as any).create(request);
-    await record(acc.db, opts, model, res, started, null);
+    await record(acc.db, opts, model, "anthropic", res, started, null);
     if (res.stop_reason === "refusal") {
       throw new Error(`model declined: ${res.stop_details?.category ?? "unknown"}`);
     }
     // deno-lint-ignore no-explicit-any
     return res.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim();
   } catch (err) {
-    await record(acc.db, opts, model, null, started, String(err));
+    await record(acc.db, opts, model, "anthropic", null, started, String(err));
     throw err;
   }
 }
@@ -808,13 +808,13 @@ async function compatStructured<S extends z.ZodType>(
     });
 
     const data = await res.json();
-    await record(acc.db, opts, model, normaliseUsage(data), started, null);
+    await record(acc.db, opts, model, p.name, normaliseUsage(data), started, null);
 
     const text = data?.choices?.[0]?.message?.content;
     if (!text) throw new Error(`${p.name} returned no content`);
     return schema.parse(JSON.parse(text)) as z.infer<S>;
   } catch (err) {
-    await record(acc.db, opts, model, null, started, String(err));
+    await record(acc.db, opts, model, p.name, null, started, String(err));
     throw err;
   }
 }
@@ -857,10 +857,10 @@ async function compatText(p: CompatProvider, opts: CallOptions, acc: Accounting)
     });
 
     const data = await res.json();
-    await record(acc.db, opts, model, normaliseUsage(data), started, null);
+    await record(acc.db, opts, model, p.name, normaliseUsage(data), started, null);
     return (data?.choices?.[0]?.message?.content ?? "").trim();
   } catch (err) {
-    await record(acc.db, opts, model, null, started, String(err));
+    await record(acc.db, opts, model, p.name, null, started, String(err));
     throw err;
   }
 }
@@ -882,6 +882,32 @@ async function record(
   db: SupabaseClient | undefined,
   opts: CallOptions,
   model: string,
+  /*
+   * WHO ACTUALLY ANSWERED — a parameter since 18 November 2026, and the ledger was wrong until it
+   * was one.
+   *
+   * This used to be `provider()`, which reads the LLM_PROVIDER secret: process configuration, not
+   * the service that served the call. `withFallback` has always known the truth and passed it down
+   * as `p`, and all four compat call sites then dropped it on the floor.
+   *
+   * MEASURED on the live project: rows carrying `provider: "gemini"` against models
+   * "openai/gpt-oss-120b" and "openai/gpt-oss-20b", which only Groq serves. What happened is
+   * plain — Gemini returned a TRANSIENT, the fallback chain handed off to Groq, Groq answered, and
+   * the row was stamped with the configured provider.
+   *
+   * Clause 15.3 requires the provider ledger to be honest, and the header on `withFallback` claims
+   * it already is: "record() inside each call writes the provider that actually answered — so a
+   * month where Groq covered an outage shows Groq." That sentence was false for as long as it had
+   * been written down, which is the worst form this repository's recurring defect takes: not a
+   * value nothing reads, but a value that reads back a confident wrong answer.
+   *
+   * Passed in, never inferred. `providers.ts` forbids guessing the provider from the model name,
+   * and it is right to: "openai/gpt-oss-120b" would be read as OpenAI by any such rule.
+   *
+   * Typed as ProviderName rather than string on purpose. `noteProvider` takes a string, so a
+   * misspelling would have become a new provider in the ledger Josh reads, silently and for ever.
+   */
+  answeredBy: ProviderName,
   // deno-lint-ignore no-explicit-any
   res: any,
   started: number,
@@ -896,8 +922,9 @@ async function record(
       purpose: opts.purpose,
       model,
       // 15.9 — which service was BILLED, as against which model was asked for. The two stopped
-      // matching the moment Groq began serving a model called "openai/gpt-oss-120b".
-      provider: provider(),
+      // matching the moment Groq began serving a model called "openai/gpt-oss-120b", and this read
+      // `provider()` — the configured one — until 18 November. See `answeredBy` above.
+      provider: answeredBy,
       moment_id: opts.momentId ?? null,
       draft_id: opts.draftId ?? null,
       prompt_version: opts.promptVersion ?? null,
@@ -915,7 +942,9 @@ async function record(
 
   // 15.3 — Josh is told at the time about a service he was not told about before. Same swallow-all
   // rule as above: this is bookkeeping attached to real work and must not be able to break it.
-  await noteProvider(db, provider(), purposeOf(opts.purpose));
+  // Same correction: this told Josh about the CONFIGURED service, so a month Groq covered an
+  // outage was announced to him as Gemini. It is the ledger clause 15.3 is actually about.
+  await noteProvider(db, answeredBy, purposeOf(opts.purpose));
 }
 
 /** Map an internal purpose onto the plain words Josh gets told (15.3). */

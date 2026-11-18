@@ -37,6 +37,11 @@ import { oneStepMode, modeName } from "../mode.mjs";
 // The one declaration of the extraction, in a leaf module so this file and write.mjs can both have
 // it without either importing the other. See extraction-shape.mjs for why that matters here.
 import { EXTRACTION, FIELD_COUNT } from "./extraction-shape.mjs";
+// The one list of statuses that count as written up. continue_post has to know, because
+// get_extraction_brief refuses one without `redo` — and a continuation is nearly always of a
+// moment that has already been written up once. Imported rather than retyped: brief.mjs's own
+// comment says if one copy of this rule changes the other has to, so there is only one copy.
+import { WRITTEN_UP } from "../../supabase/functions/_shared/extraction.ts";
 // Plain functions, not tools, and brief.mjs does not import this file — so no cycle. See
 // carriedBrief for why a nested brief must not keep its own size marker.
 import { carriedBrief, seal } from "./brief.mjs";
@@ -174,10 +179,106 @@ export const oneStepTools = [
          * he wrote in about.
          */
         ...(args.writer_handle && { writer_handle: args.writer_handle }),
+        /*
+         * CARRIED FORWARD, OR THE WHOLE THING IS POINTLESS. cc-submit computes `continue_instead`
+         * when his words share 25+ consecutive words with an earlier idea. Dropping it here is
+         * exactly the defect this repository keeps finding: a value nothing reads. The capture-time
+         * check was right 24 times out of 24 in the fortnight to 18 November and not one of those
+         * answers reached a session, because nothing passed it on and there was nowhere to go.
+         */
+        ...(captured.continue_instead && { continue_instead: captured.continue_instead }),
         then: args.writer_handle
           ? `write_post with moment_id, the extracted fields, and writer_handle: ` +
             `"${args.writer_handle}" — pass it on or the shape is lost.`
           : "write_post with moment_id and the extracted fields.",
+      };
+    },
+  },
+
+  {
+    name: "continue_post",
+    config: {
+      title: "Add what he just said to the idea already being written",
+      description:
+        "Use this, NOT start_post, whenever he adds to or redirects something already in " +
+        "progress: \"actually, make it about X\", \"scrap that, the point is Y\", \"also mention " +
+        "Z\". It puts his new words on the same idea as more material, so one post stays one " +
+        "idea. Pass HIS words verbatim, exactly as start_post wants them — every claim in the " +
+        "finished post is checked span by span against this text, so tidying here becomes a " +
+        "fabrication two steps later. " +
+        "Then call write_post with `redo: true` and the fields filled from EVERYTHING he has " +
+        "said about it, the earlier words included. " +
+        "Calling start_post instead makes a second idea out of one, and nothing in the bank can " +
+        "ever be deleted (6.3): 36 of his messages became 36 ideas holding about 10 real posts " +
+        "between 4 and 18 November, and all 26 surplus ones are permanent. " +
+        "It refuses a killed, parked or published idea and says which — a parked one needs " +
+        "reopen_idea first, because parking was somebody's decision and this must not undo it.",
+      inputSchema: {
+        moment_id: z.number().int().describe(
+          "The idea he is adding to — from start_post, or from `continue_instead.moment_id` in " +
+          "its reply, or from list_moments if he named it",
+        ),
+        text: z.string().min(1).describe("What he just said, verbatim and untidied"),
+      },
+    },
+
+    async handler(args, context) {
+      // The same environment fallback start_post needs: over stdio there is no key in the context,
+      // and this tool is useless in a clone without it. See the note in start_post's handler.
+      const { url } = context;
+      const key = context.key ?? process.env.CONTENT_MCP_KEY;
+      if (!key) throw new Error("CONTENT_MCP_KEY is not set, so nothing can be submitted.");
+
+      const res = await fetch(`${url}/functions/v1/cc-submit`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "capture", moment_id: args.moment_id, text: args.text }),
+      });
+      const appended = await res.json().catch(() => ({}));
+      if (!res.ok || appended?.error) {
+        throw new Error(appended?.error ?? `could not add to that idea: ${res.status}`);
+      }
+
+      /*
+       * `redo` HERE TOO, OR THIS TOOL THROWS ON ITS OWN MAIN PATH.
+       *
+       * get_extraction_brief refuses a moment whose status is in WRITTEN_UP unless redo is passed
+       * — and a continuation is nearly always of a moment that has already been drafted, because
+       * "actually, make it about X" arrives after he has read something. Without this, the one
+       * route built to end the duplicate-idea defect would have failed in exactly the situation it
+       * exists for, and the only way back would have been start_post: the defect, restored.
+       *
+       * Caught by reading the refusal in brief.mjs rather than by running it, which is luck. The
+       * test below runs it.
+       */
+      const alreadyWrittenUp = WRITTEN_UP.includes(appended.status);
+      const brief = await viaTool(
+        "get_extraction_brief",
+        { moment_id: args.moment_id, ...(alreadyWrittenUp && { redo: true }) },
+        context,
+      );
+
+      return {
+        moment_id: args.moment_id,
+        name: appended.name,
+        status: appended.status,
+        inputs_now: appended.inputs_now,
+        appended: true,
+        extraction_brief: brief,
+        how: [
+          "Re-read the material in the brief. It now holds everything he has said about this, " +
+            "oldest first, and the post is written from all of it rather than from the newest " +
+            "message alone.",
+          `Fill all ${FIELD_COUNT} fields again, every text span copied exactly out of his own ` +
+            "words. A field that was right before and is still right is filled in again, not " +
+            "left out: this replaces the material, it does not patch it.",
+        ],
+        then: appended.status === "captured"
+          ? "write_post with moment_id and the extracted fields."
+          : "write_post with moment_id, the extracted fields, and redo: true — it has already " +
+            "been written up once, so without redo it is refused.",
+        tell_him: appended.tell_him ??
+          "Say in one line that it went onto the same idea rather than starting a new one.",
       };
     },
   },
@@ -213,6 +314,23 @@ export const oneStepTools = [
          * disagree again by editing one of them — there is only one of them.
          */
         extracted: EXTRACTION,
+        /*
+         * RE-EXTRACTING AN IDEA HE HAS ADDED TO — exposed 18 November, having existed all along.
+         *
+         * submit_extraction has accepted `redo` since it was written, and refuses an already
+         * written-up moment with HTTP 409 and the words "Pass redo: true" when it is absent. This
+         * tool never passed it and never offered it, so from the one-step path — the mode Josh is
+         * in — a moment could be written up exactly once, for ever.
+         *
+         * That is the other half of why one idea became seven. After `continue_post` there was
+         * material to re-read and no way to re-read it, so "actually, make it about X" came back
+         * out as a new idea. Measured 4-18 November: 36 inputs, 36 moments, about 10 real ideas.
+         */
+        redo: z.boolean().optional().describe(
+          "True when this idea has already been written up and he has since added to it with " +
+          "continue_post — it re-reads the material instead of refusing. Fill the fields from " +
+          "EVERYTHING he has said about it, the earlier words included, not only the new ones.",
+        ),
         writer_handle: z.string().optional().describe(
           "Pass it on from start_post, or set it here if he named a reference writer whose shape " +
           "he wants this post built in. e.g. mattjbarker1",
@@ -223,7 +341,11 @@ export const oneStepTools = [
     async handler(args, context) {
       const filed = await viaTool(
         "submit_extraction",
-        { moment_id: args.moment_id, extracted: args.extracted },
+        {
+          moment_id: args.moment_id,
+          extracted: args.extracted,
+          ...(args.redo && { redo: true }),
+        },
         context,
       );
 

@@ -274,10 +274,26 @@ export const inspectTools = [
         rows(db, "moments?select=id,title&status=eq.half_mined&killed=is.false&order=id.asc"),
         rows(db, "moments?select=id,title&status=eq.captured&killed=is.false&order=id.asc"),
         rows(db, "drafts?select=id&order=id.desc&limit=100"),
-        // moments!inner(killed) — a post on a killed moment is a verification fixture. Counting
-        // them told the operator two posts were waiting on Josh when both were fakes, which is
-        // exactly the wrong thing for a tool whose whole job is "what should I do now".
-        rows(db, "posts?select=id,moments!inner(killed)&status=eq.draft&moments.killed=is.false"),
+        /*
+         * moments!inner(killed,status) — a post on a killed moment is a verification fixture.
+         * Counting them told the operator two posts were waiting on Josh when both were fakes,
+         * which is exactly the wrong thing for a tool whose whole job is "what should I do now".
+         *
+         * `status=neq.parked` joined it on 18 November, and it is the same defect one step on.
+         * The /review query in this file has always skipped drafts sitting on parked ideas, and
+         * says so in `withheld_means`. This count never did. So parking a superseded idea took
+         * its draft out of the list he reads and left it in the number that sends him there —
+         * "Review 49 post(s)" pointing at a list of 36.
+         *
+         * Found before it bit: 18 duplicate moments were parked that day, which would have made
+         * this count 13 too high. The three places that count what is waiting on him must agree,
+         * or the most useful sentence in the system is the least trustworthy one.
+         */
+        rows(
+          db,
+          "posts?select=id,moments!inner(killed,status)&status=eq.draft" +
+            "&moments.killed=is.false&moments.status=neq.parked",
+        ),
         rows(db, "library_proposals?select=id&status=eq.open"),
         // Comment options he has not decided on. Read here rather than counted from a notice,
         // because a notice he already marked read would make them invisible while they wait.
@@ -675,9 +691,31 @@ export const inspectTools = [
        * waiting" from "something was filtered out of your view".
        */
       let withheld = 0;
+      let moreOnTheNextPage = 0;
       if (reviewing) {
+        /*
+         * TWO REASONS A DRAFT IS NOT ON THIS PAGE, AND THEY ARE NOT THE SAME REASON.
+         *
+         * This compared `data.length` against every draft row and blamed the whole difference on
+         * killed and parked ideas. But `limit` defaults to 25, so on 18 November — 57 draft rows,
+         * 21 of them on killed or parked ideas — it reported "32 draft(s) sit on ideas that were
+         * killed or parked, so they need no decision and are not listed."
+         *
+         * Eleven of those thirty-two were waiting on him. They were off the end of page one, and
+         * the sentence told him they needed no decision. A withheld count that over-reports is
+         * worse than none: it is a number that reads as reassurance.
+         *
+         * So the two are counted separately. `withheld` is the genuine "needs no decision" set,
+         * measured with the SAME moment filter the page uses, and the remainder is paging.
+         */
         const all = await rows(db, "posts?select=id&status=eq.draft&limit=100");
-        withheld = Math.max(0, all.length - data.length);
+        const eligible = await rows(
+          db,
+          "posts?select=id,moments!inner(killed,status)&status=eq.draft" +
+            "&moments.killed=is.false&moments.status=neq.parked&limit=100",
+        );
+        withheld = Math.max(0, all.length - eligible.length);
+        moreOnTheNextPage = Math.max(0, eligible.length - data.length);
         for (const p of data) delete p.moments;
 
         /*
@@ -734,6 +772,23 @@ export const inspectTools = [
             withheld_from_review: withheld,
             withheld_means: `${withheld} draft(s) sit on ideas that were killed or parked, so ` +
               `they need no decision and are not listed. list_drafts still shows them.`,
+          }
+          : {}),
+        /*
+         * SEPARATE FROM `withheld`, BECAUSE IT IS THE OPPOSITE KIND OF FACT.
+         *
+         * These DO need his decision and are simply not on this page. Folded into `withheld` —
+         * which is how it read until 18 November — they were announced to him as needing no
+         * decision: 57 drafts, 21 genuinely withheld, and eleven waiting on him described as
+         * killed or parked.
+         */
+        ...(moreOnTheNextPage > 0
+          ? {
+            more_waiting_on_him: moreOnTheNextPage,
+            more_means: `${moreOnTheNextPage} more draft(s) DO need his decision and are not on ` +
+              `this page — the list shows ${data.length} at a time. Call again with a higher ` +
+              `limit to see them. These are not withheld and must not be read out as though ` +
+              `they were.`,
           }
           : {}),
         // If this is ever non-empty something has gone very wrong, and it should be the first

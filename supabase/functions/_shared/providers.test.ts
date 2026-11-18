@@ -82,3 +82,77 @@ test("more than one reads as a list rather than as one run-on sentence", () => {
   assert.equal(text.split("\n").filter((l) => l.trim().startsWith("groq") ||
     l.trim().startsWith("huggingface")).length, 2);
 });
+
+/*
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * THE LEDGER SAYS WHO ANSWERED, NOT WHO WAS CONFIGURED — 18 November 2026.
+ *
+ * Everything above holds the DECLARED list against the document. This holds the recorded list
+ * against reality, which is the other half of 15.3 and was wrong the whole time.
+ *
+ * `record()` stamped every row with `provider()` — the LLM_PROVIDER secret, i.e. process
+ * configuration. The fallback chain had already handed the call to somebody else. Measured on the
+ * live project: rows reading `provider: "gemini"` against models "openai/gpt-oss-120b" and
+ * "openai/gpt-oss-20b", which only Groq serves.
+ *
+ * Worse than a value nothing reads: a value that reads back a confident wrong answer. The header
+ * on `withFallback` asserted the opposite of what the code did, in writing, for weeks.
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ */
+
+const LLM = Deno.readTextFileSync("supabase/functions/_shared/llm.ts");
+
+test("the recorded provider is the one that answered, not the one configured", () => {
+  const fn = LLM.slice(LLM.indexOf("async function record("), LLM.indexOf("function purposeOf("));
+  assert.ok(fn.length > 400, "record() is not where this test expects it");
+
+  assert.match(fn, /provider: answeredBy,/, "the row is not stamped with the answering provider");
+  assert.ok(
+    !/provider:\s*provider\(\)/.test(fn),
+    "record() still stamps the CONFIGURED provider, so a Groq fallback is billed to Gemini",
+  );
+  // 15.3 is about what Josh is TOLD, and noteProvider is the half he reads.
+  assert.match(fn, /noteProvider\(db, answeredBy,/, "Josh is still told the configured provider");
+  assert.ok(
+    !/noteProvider\(db, provider\(\)/.test(fn),
+    "the provider announcement still names the configured service",
+  );
+});
+
+test("every call site names who answered, and none of them can guess", () => {
+  const sites = LLM.match(/await record\(acc\.db, opts, model, [^,]+,/g) ?? [];
+  assert.equal(sites.length, 8, `expected 8 record() call sites, found ${sites.length}`);
+
+  for (const site of sites) {
+    // Either the provider object's own name, or the literal for the direct Anthropic client.
+    assert.match(
+      site,
+      /model, (p\.name|"anthropic"),/,
+      `a record() call passes something other than the answering provider: ${site}`,
+    );
+  }
+
+  // And the parameter is typed, so a misspelling cannot become a new provider in the ledger —
+  // noteProvider takes a bare string and would have accepted one for ever.
+  assert.match(LLM, /answeredBy: ProviderName,/, "the answering provider is not a typed name");
+});
+
+test("the provider is never inferred from the model name", () => {
+  // "openai/gpt-oss-120b" is served by Groq. Any rule that reads the model string would call it
+  // OpenAI, which is a service this system has never been keyed for. providers.ts forbids it and
+  // the fix must not have quietly introduced it.
+  const fn = LLM.slice(LLM.indexOf("async function record("), LLM.indexOf("function purposeOf("));
+  assert.ok(
+    !/model\.(startsWith|includes|split|match)/.test(fn),
+    "record() inspects the model name to decide the provider, which providers.ts forbids",
+  );
+});
+
+test("withFallback's claim about the ledger is now true", () => {
+  // The comment promised "a month where Groq covered an outage shows Groq". It is quoted here so
+  // that if the behaviour is ever reverted, the sentence and the test fail together rather than
+  // the sentence surviving alone — which is how it went wrong the first time.
+  // The sentence wraps across comment lines, so the gap tolerates a newline and a ` * `.
+  assert.match(LLM, /a month where Groq\s*\*?\s*covered an outage shows Groq/);
+  assert.match(LLM, /return await call\(provider\)/, "withFallback no longer passes the provider");
+});

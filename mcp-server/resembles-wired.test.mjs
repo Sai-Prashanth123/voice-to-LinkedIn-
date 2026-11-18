@@ -119,3 +119,140 @@ test("it is logged, so a finding survives the session it was made in", () => {
   // A failed check logs at warn, a finding at info. Collapsing them hides the failures.
   assert.match(CC_SUBMIT, /alreadySaid\.error \? "warn" : "info"/);
 });
+
+/*
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * THE DOOR THE ADVISORY NEVER HAD — added 18 November 2026.
+ *
+ * Everything above proves the finding reaches a session. It does, and it was RIGHT: over 4-18
+ * November `capture_resembles_earlier` fired 24 times and named the correct earlier idea every
+ * time — moment 149 matched 148 on a 190-word shared passage, 147 matched 146 on 195 words.
+ *
+ * And 36 of his messages still became 36 ideas holding about 10 real posts, because being told
+ * "this is 190 words of moment 148" was useless: there was no way to add to moment 148. The
+ * advisory was wired to a session that had nowhere to go.
+ *
+ * So this half asserts the ROUTE, which is the other way this defect class presents — a check
+ * whose answer no action can use. `continue_post` and `write_post`'s `redo` are that route.
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ */
+
+test("a strong match offers the alternative, on both reply branches", () => {
+  // Same lesson as `resembles: alreadySaid` above: a field on one branch works perfectly in
+  // whichever mode the author was in, and Josh is in one_step.
+  const occurrences = CC_SUBMIT.match(/continue_instead: continueInstead/g) ?? [];
+  assert.equal(
+    occurrences.length,
+    2,
+    `expected continue_instead on both reply branches of capture(), found ${occurrences.length}`,
+  );
+});
+
+test("start_post passes the alternative on instead of swallowing it", () => {
+  // cc-submit computing it and the tool dropping it is the `opening_words` defect exactly: stored
+  // on 1,839 rows, read by nothing, for the entire life of the field.
+  assert.match(
+    ONESTEP,
+    /captured\.continue_instead\s*&&\s*\{\s*continue_instead:\s*captured\.continue_instead\s*\}/,
+    "start_post does not carry continue_instead into its reply, so no session will ever see it",
+  );
+});
+
+test("the threshold is a named constant, not a number buried in a filter", () => {
+  assert.match(CC_SUBMIT, /STRONG_MATCH_WORDS\s*=\s*\d+/, "the threshold has no name");
+  assert.match(
+    CC_SUBMIT,
+    /longest_words >= STRONG_MATCH_WORDS/,
+    "the named threshold is not the one actually applied",
+  );
+});
+
+test("continue_post exists, and names what calling start_post instead would cost", () => {
+  assert.match(ONESTEP, /name: "continue_post"/, "the tool is not registered");
+  // The description is the only thing standing between a session and the old behaviour, because
+  // start_post still works and is still the right call for genuinely new material.
+  assert.match(
+    ONESTEP,
+    /NOT start_post/,
+    "continue_post does not tell the model when to prefer it over start_post",
+  );
+  assert.match(
+    ONESTEP,
+    /6\.3/,
+    "continue_post does not say the surplus ideas are permanent, which is why this matters",
+  );
+  // His exact words are the trigger, so the description must name the shape of them.
+  assert.match(ONESTEP, /actually, make it about/i, "it does not name what he actually says");
+});
+
+test("continue_post asks for his words untidied, like every other door", () => {
+  // Material is checked span by span against this text, so a tidied paste becomes a fabrication
+  // two steps later. start_post says this; a second door that did not would be a hole.
+  const tool = ONESTEP.slice(ONESTEP.indexOf('name: "continue_post"'));
+  const upToNext = tool.slice(0, tool.indexOf("name: \"write_post\"") + 1 || undefined);
+  assert.match(upToNext, /verbatim/i, "continue_post does not ask for his words verbatim");
+  assert.match(upToNext, /span by span|fabrication/i, "it does not say why tidying is unsafe");
+});
+
+test("write_post can re-extract, which is the half that makes continuing usable", () => {
+  // submit_extraction has always accepted `redo` and refuses an already-written moment without
+  // it. write_post never passed it, so from one_step a moment could be written up exactly once,
+  // for ever — and "actually, make it about X" had to come back out as a new idea.
+  assert.match(ONESTEP, /redo: z\.boolean\(\)\.optional\(\)/, "write_post has no redo parameter");
+  assert.match(
+    ONESTEP,
+    /\.\.\.\(args\.redo && \{ redo: true \}\)/,
+    "write_post declares redo but does not pass it to submit_extraction — a parameter nothing reads",
+  );
+});
+
+test("cc-submit delegates the append rather than inlining it, so a test can run it", () => {
+  /*
+   * These three assertions used to slice `appendToMoment` out of cc-submit and read it. The
+   * function then moved to `_shared/handlers/material.ts` and they carried on passing against the
+   * wrong file for one commit — which is the failure mode of a source assertion, and the reason
+   * the behaviour is now covered by EXECUTION in `material.test.ts` instead.
+   *
+   * cc-submit calls Deno.serve at the top level, exports nothing, and can be imported by no test.
+   * A write route that lives in it is a write route nothing can run.
+   */
+  assert.match(
+    CC_SUBMIT,
+    /import \{ appendMaterial \} from "\.\.\/_shared\/handlers\/material\.ts"/,
+    "the append route is not imported from a file a test can reach",
+  );
+  assert.match(
+    CC_SUBMIT,
+    /const appended = await appendMaterial\(db, Number\(body\.moment_id\), text\);/,
+    "capture() does not delegate to appendMaterial",
+  );
+
+  const MATERIAL = read("../supabase/functions/_shared/handlers/material.ts");
+
+  // The one invariant worth repeating here, because it is the whole point: the route that exists
+  // to stop a second idea being created must not create one.
+  assert.ok(
+    !/from\("moments"\)\s*\.insert\(/.test(MATERIAL),
+    "the append route creates a moment, which is the defect it exists to fix",
+  );
+  // And the branch is taken before capture()'s own moments INSERT, so a caller that means to
+  // continue cannot create one by arriving a few lines too late.
+  const capture = CC_SUBMIT.slice(CC_SUBMIT.indexOf("async function capture("));
+  assert.ok(
+    capture.indexOf("appendMaterial") < capture.indexOf('from("moments").insert'),
+    "the append branch comes after the INSERT, so continuing an idea still creates one",
+  );
+});
+
+test("the threshold states what it was measured against, not just its value", () => {
+  // A number with no recorded basis is a number the next person nudges. This one sits in a gap in
+  // the observed data — 4 matches at 9-15 words, 45 at 31-710, nothing between 16 and 30 — and the
+  // comment has to carry that, or the gap is rediscovered or ignored.
+  const block = CC_SUBMIT.slice(
+    CC_SUBMIT.indexOf("STRONG_MATCH_WORDS") - 1600,
+    CC_SUBMIT.indexOf("STRONG_MATCH_WORDS") + 200,
+  );
+  assert.match(block, /CALIBRATED/, "the threshold does not say it was measured");
+  assert.match(block, /between 16 and 30/, "the gap it sits in is not recorded");
+  assert.match(block, /re-measured/, "nothing says what to do if the gap closes");
+});

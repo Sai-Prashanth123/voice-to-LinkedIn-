@@ -31,12 +31,46 @@ import {
 } from "../../../supabase/functions/_shared/prompts.ts";
 import { verifyDraft } from "../../../supabase/functions/_shared/claims.ts";
 
-/** The library, assembled for one view exactly as the workers assemble it. */
+/*
+ * The library, assembled for one view exactly as the workers assemble it.
+ *
+ * `view` is the view's NAME — "gating", "drafting", "interview" — because that is what
+ * `renderLibrary` takes, and it looks the name up in `VIEWS` itself (views.ts:204). Every call
+ * site here passed the view's VALUE (`VIEWS.drafting`, the array) until 18 November, so the
+ * lookup was `VIEWS[[...]]`, which is `undefined`, and `new Set(undefined)` is empty.
+ *
+ * MEASURED, not reasoned about: the same rows rendered with the name give a 164-character prompt
+ * and 3 sections; rendered with the value they give 0 and 0. So all three journeys built their
+ * prompts against an EMPTY LIBRARY and still passed. `VIEWS.gate` was worse again — there is no
+ * such key (it is `gating`), so the gate journey was doubly empty.
+ *
+ * This is the defect this repository keeps finding — a check with nothing to check reports
+ * success — sitting inside the harness written to catch it. `anyone_else` was being judged with
+ * no `core_rules` in front of it, which is the one rule the check exists to enforce.
+ */
 async function libraryFor(live, view) {
+  // The name is checked against VIEWS here so a wrong one fails loudly. "gate" for "gating" cost
+  // this harness every library it ever rendered, and nothing failed, because renderLibrary's own
+  // answer to an unknown view is an empty allowlist rather than an error.
+  if (!Object.hasOwn(VIEWS, view)) {
+    throw new Error(
+      `"${view}" is not a library view. Pass a NAME, one of: ${Object.keys(VIEWS).join(", ")}. ` +
+        `Passing VIEWS.${view} (the array) renders an empty library and every check still passes.`,
+    );
+  }
   const rows = await live.rest(
     "library_sections?select=key,title,body,sort_order&order=sort_order.asc",
   );
-  return renderLibrary(rows, view).prompt;
+  const { prompt } = renderLibrary(rows, view);
+  // A view that renders to nothing means the sections are missing or the key list moved. Either
+  // way the journey below would judge against no standard at all, so it stops here instead.
+  if (prompt.trim().length === 0) {
+    throw new Error(
+      `the "${view}" view rendered an empty library from ${rows.length} section row(s), so ` +
+        `nothing downstream would be judged against a standard`,
+    );
+  }
+  return prompt;
 }
 
 /**
@@ -91,7 +125,7 @@ export const cases = [
     tier: "model",
     name: "the interviewer asks one plain question, not a compound abstract one",
     async run(ctx) {
-      const library = await libraryFor(ctx.live, VIEWS.interview);
+      const library = await libraryFor(ctx.live, "interview");
 
       const value = await ask(ctx, {
         system: INTERVIEWER_SYSTEM(library),
@@ -144,7 +178,7 @@ export const cases = [
     tier: "model",
     name: "the drafter returns a ledger the deterministic verifier can actually read",
     async run(ctx) {
-      const library = await libraryFor(ctx.live, VIEWS.drafting);
+      const library = await libraryFor(ctx.live, "drafting");
 
       const value = await ask(ctx, {
         system: DRAFTER_SYSTEM(library),
@@ -224,7 +258,7 @@ export const cases = [
     tier: "model",
     name: "the gate refuses a post any competent stranger could have written",
     async run(ctx) {
-      const library = await libraryFor(ctx.live, VIEWS.gate);
+      const library = await libraryFor(ctx.live, "gating");
       const check = GATE_CHECKS.find((c) => c.key === "anyone_else");
 
       const value = await ask(ctx, {

@@ -56,6 +56,7 @@ import {
   verifyExtraction,
   WRITTEN_UP,
 } from "../_shared/extraction.ts";
+import { appendMaterial } from "../_shared/handlers/material.ts";
 import { applyDraft } from "../_shared/handlers/draft.ts";
 import { checkRetelling, dedupText, loadThresholds } from "../_shared/dedup.ts";
 import * as decisions from "./decisions.ts";
@@ -543,11 +544,25 @@ async function resemblesEarlier(
 /** 4.1 — a thought, from a surface that is not Telegram. Named from their words, not by asking. */
 async function capture(
   db: SupabaseClient,
-  body: { text?: string; name?: string; interview?: boolean },
+  body: { text?: string; name?: string; interview?: boolean; moment_id?: number },
 ) {
   const text = String(body.text ?? "").trim();
   if (!text) return json({ error: "text is required" }, 400);
   const name = String(body.name ?? "").trim();
+
+  /*
+   * MORE WORDS ON AN IDEA THAT ALREADY EXISTS — added 18 November. One door rather than two: the
+   * caller says which idea, or says nothing and gets a new one. Checked before the INSERT below,
+   * so a caller that means to continue can never create one by accident.
+   *
+   * The work is in `_shared/handlers/material.ts` because this file calls `Deno.serve` at the top
+   * level, exports nothing, and can be imported by no test. A new write route nothing executes is
+   * the defect this change exists to fix. See `material.test.ts`.
+   */
+  if (body.moment_id !== undefined && body.moment_id !== null) {
+    const appended = await appendMaterial(db, Number(body.moment_id), text);
+    return json(appended.body, appended.status);
+  }
 
   const { data: moment, error } = await db.from("moments").insert({
     source: "raw_capture",
@@ -606,12 +621,60 @@ async function capture(
    */
   const oneStep = body.interview === false || await oneStepMode(db);
 
+  /*
+   * THE DOOR THE ADVISORY NEVER HAD — added 18 November.
+   *
+   * `resemblesEarlier` was right 24 times out of 24 over the fortnight to 18 November and nothing
+   * came of it, because a session told "this is 190 words of moment 148" had nowhere to go: there
+   * was no way to add to moment 148. So it created moment 149.
+   *
+   * This is still ADVISORY and the comment above `resemblesEarlier` must keep being true. Nothing
+   * here refuses the capture, nothing parks it, and the idea just created stays exactly as it is.
+   * It names the alternative and lets him decide, which is the whole of clause 12.10's stance
+   * applied one level down.
+   *
+   * 25 WORDS, CALIBRATED AGAINST WHAT IT CHANGES RATHER THAN CHOSEN.
+   *
+   * Every resemblance recorded in November, read back: 49 matches across 25 captures. They fall
+   * into two populations with nothing in between — 4 matches at 9 to 15 words, and 45 matches at
+   * 31 to 710. There is not one observation between 16 and 30.
+   *
+   * So the threshold sits in an empty band and any value in it behaves identically; 25 is the
+   * middle of the gap rather than a number that happens to work. It fires on 23 of the 25
+   * captures and stays quiet on the two whose longest shared run is fifteen words, which is the
+   * length of an incidental turn of phrase rather than a repeated thought.
+   *
+   * If a later refresh closes that gap, this number stops being safe and has to be re-measured
+   * against the table rather than nudged.
+   */
+  const STRONG_MATCH_WORDS = 25;
+  const strongest = alreadySaid.found
+    .filter((f) => f.longest_words >= STRONG_MATCH_WORDS)
+    .sort((a, b) => b.longest_words - a.longest_words)[0];
+
+  const continueInstead = strongest
+    ? {
+      moment_id: strongest.moment_id,
+      name: strongest.title,
+      shared_words: strongest.longest_words,
+      why: `${strongest.longest_words} words of this are already in "${
+        strongest.title ?? strongest.moment_id
+      }". If he is adding to that rather than starting something new, continue_post with ` +
+        `moment_id ${strongest.moment_id} puts his words on it instead, and this new idea can be ` +
+        `parked.`,
+      tell_him: "Say which earlier idea it looks like, in passing, and let him decide. A second " +
+        "angle on the same material is normal and a retelling is not — that judgement is his.",
+      and_if_he_says_it_is_new: "Nothing to do. This idea is already filed; carry on with it.",
+    }
+    : null;
+
   if (oneStep) {
     await logEvent(db, "captured_via_mcp", "info", {
       moment_id: moment.id,
       ref: moment.ref,
       action: "no_question",
       mode: "one_step",
+      ...(strongest && { resembles_strongly: strongest.moment_id }),
     });
     return json({
       ok: true,
@@ -620,6 +683,7 @@ async function capture(
       mode: "one_step",
       action: "no_question",
       resembles: alreadySaid,
+      ...(continueInstead && { continue_instead: continueInstead }),
       /*
        * "Fill the ten fields" is what this said until 28 Oct 2026, and the shape has eighteen.
        *
@@ -650,6 +714,9 @@ async function capture(
     name: title,
     mode: "interviewed",
     resembles: alreadySaid,
+    // The same door on this path. An interviewed capture can duplicate an earlier one too, and the
+    // answer is the same: name it, and let him decide.
+    ...(continueInstead && { continue_instead: continueInstead }),
     ...step,
     next: step.action === "asked"
       ? "Ask him this question, then pass his answer to answer_interview."

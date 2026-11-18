@@ -82,9 +82,21 @@ export const workTools = [
          * decision" are different facts in this mode too — and the second is the one he would want
          * to hear. The drafts count is read; nothing in the idea bank is offered or touched.
          */
+        /*
+         * The joins were added on 18 November. This read had none at all, so it counted drafts on
+         * killed moments (the verification fixtures) and on parked ones (superseded duplicates)
+         * as things needing his decision — the same defect next_action carried, and worse, because
+         * next_action at least excluded the fixtures.
+         *
+         * Three tools report this number and they must agree. `limit: 100` stays and is a known
+         * ceiling: at 57 drafts it is not reached, and the day it is, this says 100 and means
+         * "at least 100".
+         */
         const awaitingHim = await db.select("posts", {
-          select: "id",
+          select: "id,moments!inner(killed,status)",
           status: "eq.draft",
+          "moments.killed": "is.false",
+          "moments.status": "neq.parked",
           limit: 100,
         });
 

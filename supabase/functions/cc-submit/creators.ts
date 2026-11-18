@@ -18,6 +18,8 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 import { json } from "../_shared/jobs.ts";
 import { logEvent } from "../_shared/db.ts";
+import { notice } from "../_shared/notices.ts";
+import { secret } from "../_shared/secrets.ts";
 import type { Body } from "./decisions.ts";
 
 const str = (v: unknown): string => String(v ?? "").trim();
@@ -112,6 +114,42 @@ export async function watchCreator(db: SupabaseClient, body: Body): Promise<Resp
 
   await logEvent(db, "creator_watched", "info", { handle, reactivated: wasDeactivated });
 
+  /*
+   * CAN ANYTHING ACTUALLY FETCH THEIR POSTS? ASKED HERE, BECAUSE HERE IS WHERE HE IS LISTENING.
+   *
+   * worker-engage needs XP_API_KEY or APIFY_TOKEN and throws when both are absent. But it returns
+   * early on an empty `creators` table — the off state — several lines BEFORE it looks for a
+   * credential. So for the fifteen days after the feature shipped it ran twice a day, logged
+   * `creator_poll_idle` eighteen times, and never once touched the code that needs a key.
+   *
+   * MEASURED 18 November 2026: neither name is in the vault. So the first creator Josh ever added
+   * would also have been the first test of the credentials, and he would have met it as a worker
+   * that failed hours later, in a `system_events` row nothing reads out to him.
+   *
+   * This is the moment to say so: he has just named somebody and is waiting to hear what happens
+   * next. It does NOT refuse — the list is his, the row is correct, and `watch_creator` recording
+   * his instruction is not the thing that is broken.
+   */
+  const canFetch = secret("XP_API_KEY") !== null || secret("APIFY_TOKEN") !== null;
+  if (!canFetch) {
+    await notice(
+      db,
+      "creator_poll_blocked",
+      `${handle} is on your watch list, but nothing can fetch their posts yet: neither ` +
+        `XP_API_KEY nor APIFY_TOKEN is in the vault, so the twice-daily run has no way in. ` +
+        `The list is kept and starts working the moment one is added.`,
+      // warn, not info: he has asked for a feature and it cannot run. An info notice reads as
+      // news, and this is a thing that needs doing.
+      { severity: "warn", actedOn: ["list_creators"] },
+    );
+    await logEvent(db, "creator_watched_without_credentials", "warn", {
+      handle,
+      means: "The creator is recorded and the poll cannot read anybody. Neither fetch credential " +
+        "is set, and the empty-list early return meant nothing had ever surfaced that.",
+      remedy: "select vault.create_secret('<value>', 'APIFY_TOKEN');",
+    });
+  }
+
   return json({
     ok: true,
     handle,
@@ -119,12 +157,37 @@ export async function watchCreator(db: SupabaseClient, body: Body): Promise<Resp
     profile_url: profileUrlFor(handle),
     watching: count ?? null,
     already_watching: alreadyWatching,
-    next: alreadyWatching
+    // Reported rather than inferred from silence: "it can fetch" and "nobody has checked" are
+    // different answers, and the second one is what fifteen days of idle runs actually meant.
+    can_fetch_posts: canFetch,
+    ...(!canFetch && {
+      cannot_fetch_yet: "Neither XP_API_KEY nor APIFY_TOKEN is in the vault, so nothing can read " +
+        "their posts. The watch list is saved and works as soon as one is set: " +
+        "select vault.create_secret('<value>', 'APIFY_TOKEN');",
+      tell_him: "Say he is on the list, and say plainly that no comments can come back until one " +
+        "of the two keys is added — do not let him find that out from an empty result in a week.",
+    }),
+    /*
+     * The credential sentence is APPENDED, not substituted.
+     *
+     * It replaced this whole chain in the first version of this change, and two existing tests
+     * caught it: "already watching" and "watching again" are facts he asked about, and losing
+     * them to a warning about something else is the wrong trade. Both are true at once, so both
+     * are said — and the promise about the next run is the one part that is dropped, because with
+     * no key it is the sentence that would be false.
+     */
+    next: (alreadyWatching
       ? `Already watching ${handle}; nothing changed.`
       : wasDeactivated
       ? `Watching ${handle} again. The posts already stored are still there.`
-      : `Watching ${handle}. The next run picks up anything they have posted — it runs at 07:00 ` +
-        `and 15:00 on weekdays, and you can run it now with run_worker if you would rather not wait.`,
+      : canFetch
+      ? `Watching ${handle}. The next run picks up anything they have posted — it runs at 07:00 ` +
+        `and 15:00 on weekdays, and you can run it now with run_worker if you would rather not wait.`
+      : `Watching ${handle}.`) +
+      (canFetch
+        ? ""
+        : ` Nothing can fetch their posts yet, so no comment options will appear until ` +
+          `XP_API_KEY or APIFY_TOKEN is in the vault.`),
   });
 }
 

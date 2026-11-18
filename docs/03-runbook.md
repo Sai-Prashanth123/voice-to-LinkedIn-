@@ -96,22 +96,36 @@ select vault.create_secret('<service_role_key>', 'service_role_key');
 # There is no allowlist to manage. The only way in is Claude, holding one of two credentials:
 # CONTENT_MCP_KEY for a local server, or an MCP token for the hosted connector.
 
-# 3. Edge function environment
-supabase secrets set \
-  ANTHROPIC_API_KEY=... \
-  OPENAI_API_KEY=... \
-  GEMINI_API_KEY=... \
-  HUGGINGFACE_API_KEY=... \
-  TRANSCRIPT_WEBHOOK_SECRET=... \
-  LINKEDIN_CLIENT_ID=... \
-  LINKEDIN_CLIENT_SECRET=... \
-  MCP_READ_TOKEN=... \
-  MCP_WRITE_TOKEN=...
+# 3. Credentials — Vault, the same way, with no second list to keep in step
+#
+# Corrected 18 November 2026. This section used to name nine keys for `supabase secrets set`,
+# which was wrong twice: it contradicted _shared/secrets.ts (Vault, not environment variables,
+# because an env var is invisible to the clause 6.2 export and to Josh in his own database), and
+# the nine names had drifted to nine SHORT of the real set. XP_API_KEY and APIFY_TOKEN were both
+# missing, which is how the creator poll shipped on 3 November with neither in the vault and
+# nothing noticing for fifteen days.
+#
+# THE LIST LIVES IN ONE PLACE: `SECRET_NAMES` in supabase/functions/_shared/secrets.ts.
+# Do not copy it here. A copy is what went stale.
+select vault.create_secret('<value>', '<NAME from SECRET_NAMES>');
+
+# What is set, without printing any value:
+select name from vault.secrets order by name;
+
+# `secret()` falls back to Deno.env, so an edge-function env var still works — but it is reachable
+# only that way, and `read_secrets()` and the export will both report it missing.
 
 # 4. Deploy
+# worker-engage was missing from this line until 18 November, and `grep -rn worker-engage docs/`
+# returned nothing at all. It polls Josh's creator list twice a day on weekdays, and an empty list
+# makes it return early and log `creator_poll_idle` — which looks exactly like a healthy run, so a
+# version of it that was never deployed would not have looked like anything.
 supabase functions deploy mcp cc-submit transcript-webhook worker-dispatch \
   worker-select worker-triage worker-publish worker-metrics \
-  worker-learn worker-ops linkedin-oauth
+  worker-learn worker-ops worker-engage linkedin-oauth
+
+# In this repo, use scripts/deploy.mjs instead: it stamps the commit first, so system_status can
+# say which code is answering rather than reporting build.source "unknown".
 
 # 5. Connect Claude
 # Nothing to register with a third party. See README.md — a local server reads mcp-server/.env,

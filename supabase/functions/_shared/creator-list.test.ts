@@ -271,3 +271,82 @@ Deno.test("used:false is read as discarded, because a model will send it", async
   await call(recordCommentUsed, db, { option_id: 1, used: false });
   assertEquals(db.tables.comment_options[0].status, "discarded");
 });
+
+/* ── Can anything actually fetch? ─────────────────────────────────────────────
+ *
+ * THE FIRST CREATOR HE ADDS MUST NOT BE THE FIRST TEST OF THE CREDENTIALS.
+ *
+ * worker-engage needs XP_API_KEY or APIFY_TOKEN and throws when both are missing. But it returns
+ * early on an empty creator list — the off state — several lines before it looks for either. So
+ * for the fifteen days after the feature shipped it ran twice a day, logged `creator_poll_idle`
+ * eighteen times, and never reached the code that needs a key.
+ *
+ * MEASURED 18 November 2026: neither name is in the vault. Without the check below, Josh's first
+ * `watch_creator` would have been answered "the next run picks up anything they have posted", and
+ * the truth — nothing can read anybody — would have surfaced hours later in a system_events row
+ * that nothing reads out to him.
+ *
+ * `engage.test.ts` covers the empty-list path. Nothing covered the absent-key path, which is why
+ * it stayed absent.
+ */
+
+const KEYS = ["XP_API_KEY", "APIFY_TOKEN"];
+const withoutKeys = () => {
+  for (const k of KEYS) Deno.env.delete(k);
+};
+
+Deno.test("with no fetch credential he is told at the moment he asks, not hours later", async () => {
+  withoutKeys();
+  const db = fakeDb();
+  const { body } = await call(watchCreator, db, { creator: "mattjbarker1" });
+
+  // The row is still written. The list is HIS and recording his instruction is not what is broken.
+  assertEquals(body.ok, true);
+  assertEquals(db.tables.creators.length, 1);
+
+  // And he is told, in the reply and in a notice that outlives the session.
+  assertEquals(body.can_fetch_posts, false);
+  assertStringIncludes(String(body.cannot_fetch_yet), "APIFY_TOKEN");
+  assertStringIncludes(String(body.next), "Nothing can fetch their posts yet");
+  assert(
+    !/the next run picks up/i.test(String(body.next)),
+    "it still promises the poll will pick them up, which is the sentence that was false",
+  );
+
+  const blocked = db.tables.notices?.filter((n: Record<string, unknown>) => n.kind === "creator_poll_blocked") ?? [];
+  assertEquals(blocked.length, 1, "nothing survives the session to tell him");
+  assertEquals(blocked[0].severity, "warn", "a feature that cannot run was filed as news");
+});
+
+Deno.test("either credential on its own is enough, and the promise comes back", async () => {
+  // engage.ts needs ONE of the two: the console is primary and flaps, Apify is the fallback.
+  for (const key of KEYS) {
+    withoutKeys();
+    Deno.env.set(key, "test-value-not-a-real-key");
+    const db = fakeDb();
+    const { body } = await call(watchCreator, db, { creator: "demandjen1" });
+
+    assertEquals(body.can_fetch_posts, true, `${key} alone was treated as insufficient`);
+    assertEquals(body.cannot_fetch_yet, undefined);
+    assertStringIncludes(String(body.next), "next run picks up");
+    assertEquals(
+      (db.tables.notices ?? []).filter((n: Record<string, unknown>) => n.kind === "creator_poll_blocked").length,
+      0,
+      `${key} is set and he was still warned`,
+    );
+    Deno.env.delete(key);
+  }
+});
+
+Deno.test("the absence is reported, never inferred from an empty result", async () => {
+  // "it can fetch" and "nobody has checked" are different answers. Fifteen days of idle runs
+  // meant the second and read like the first, which is this repository's recurring defect exactly.
+  withoutKeys();
+  const db = fakeDb();
+  const { body } = await call(watchCreator, db, { creator: "outboundphd" });
+  assert(
+    Object.hasOwn(body, "can_fetch_posts"),
+    "the reply does not state whether anything can fetch, so silence has to be interpreted",
+  );
+  withoutKeys();
+});
