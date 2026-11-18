@@ -35,6 +35,9 @@ import { z } from "zod";
 import { measurePost, per1k, sentences, tokens, turnAt } from "../../scripts/lib/prose.mjs";
 import { scan, HIGH_CONFIDENCE } from "../aitells.mjs";
 import { prefileVerdict } from "../prefile.mjs";
+// His own phrasing, compared before the draft is filed rather than after — see the handler.
+import { liftedFromHisWords, liftedReport } from "../self-echo.mjs";
+import { writingSources } from "../sources.mjs";
 import {
   FOLD_BLANK_COST,
   FOLD_CHARS_PER_LINE,
@@ -268,6 +271,13 @@ export const measureTools = [
         "and not a verdict: nothing here passes or fails a draft, and the gate still decides.",
       inputSchema: {
         body: z.string().min(1).describe("The post as it would be published"),
+        // Optional, and the tool is still pure without it. With it, the post is compared against
+        // what Josh actually typed on that moment — the one mechanical fault this tool could not
+        // see until 18 November, and the one he asked about.
+        moment_id: z.number().int().optional().describe(
+          "The moment this draft is written from. Pass it to have the post checked against his " +
+          "own words, so a lifted passage is caught here rather than after the draft is filed.",
+        ),
         writer_handle: z.string().optional().describe(
           `The reference writer this draft was written for, if one was named in the brief: ` +
             `${WRITER_CHOICES}. Their own measured figures are then reported beside the corpus ` +
@@ -276,9 +286,69 @@ export const measureTools = [
       },
     },
 
-    async handler(args) {
+    async handler(args, context) {
       const body = args.body;
       const m = measurePost(body);
+
+      /*
+         * HIS OWN PHRASING, CAUGHT BEFORE THE DRAFT IS FILED RATHER THAN AFTER.
+         *
+         * Josh, 18 November: "It copies my spoken words too closely... Keep the claim, rewrite the
+         * words." The check for it went into `create_draft` the same day — which is too late to be
+         * cheap. By then the draft is stored and fixing it means another version.
+         *
+         * This tool's own description is why it belongs here: "Run it BEFORE create_draft: it
+         * catches the mechanical faults that otherwise take a full gate run to discover." A lifted
+         * passage is exactly such a fault, and it was the one mechanical fault this tool could not
+         * see.
+         *
+         * `moment_id` is OPTIONAL and the tool stays pure without it. Everything else here is
+         * computed from the body alone with no I/O, which is what makes it free, and a caller who
+         * only has a body still gets every other measurement. Given the moment, it reads his words
+         * and compares. A failed read reports itself rather than passing quietly.
+         */
+      const lifted = await (async () => {
+        if (args.moment_id === undefined || args.moment_id === null) {
+          return {
+            checked: false,
+            why: "No moment_id was passed, so his own words were not compared against. Not a " +
+              "pass — nothing looked. Pass moment_id to have this checked.",
+          };
+        }
+        const db = context?.db;
+        if (!db) {
+          return {
+            checked: false,
+            why: "No database handle, so his own words could not be read. Not a pass.",
+          };
+        }
+        try {
+          const extra = await writingSources(db, args.moment_id);
+          const result = liftedFromHisWords(body, extra?.his_words);
+          if (!result.checked) {
+            return {
+              checked: false,
+              why: "He typed nothing on this moment, so there was nothing to compare against. " +
+                "Not a pass — nothing looked.",
+            };
+          }
+          const report = liftedReport(result);
+          const checked = `${result.source_words} word(s) of his own material`;
+          return report
+            ? { checked, found: report }
+            : {
+              checked,
+              found: [],
+              means: "No run of seven words or more in this post is his phrasing verbatim.",
+            };
+        } catch (err) {
+          return {
+            checked: false,
+            why: `Could not read his words (${String(err).slice(0, 120)}). Not a pass — the read ` +
+              `failed, so nothing was compared.`,
+          };
+        }
+      })();
 
       /*
        * THE TARGET WAS NAMED IN THE BRIEF AND THIS TOOL COULD NOT HEAR IT — fixed 28 October.
@@ -501,6 +571,10 @@ export const measureTools = [
       return {
         words: m.words,
         paragraphs: m.paragraphs,
+
+        // Keep the claim, rewrite the words. Reported on every call, pass or fail, so silence
+        // cannot be mistaken for a clean result.
+        his_own_words_lifted: lifted,
 
         /*
          * First, because it is the only thing here that stops a draft. Everything below is a

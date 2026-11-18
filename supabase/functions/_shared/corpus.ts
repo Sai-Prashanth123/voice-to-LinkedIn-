@@ -49,7 +49,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 import { logEvent } from "../_shared/db.ts";
 import { loadSecrets, secret } from "../_shared/secrets.ts";
-import { json } from "../_shared/jobs.ts";
+import { json, withBudget } from "../_shared/jobs.ts";
 import { fetchFromApify, fetchFromConsole, normaliseRows } from "../../../scripts/lib/harvest.mjs";
 import { measurePost } from "../../../scripts/lib/prose.mjs";
 
@@ -73,6 +73,9 @@ export const CORPUS_WRITERS: Record<string, string> = {
 };
 
 export const CORPUS_HANDLES = Object.keys(CORPUS_WRITERS);
+
+/** Same budget as the creator poll, and the same reason. See withBudget in jobs.ts. */
+const HARVEST_BUDGET_MS = 110_000;
 
 const PROFILE_URL = (handle: string) => `https://www.linkedin.com/in/${handle}/`;
 
@@ -324,7 +327,9 @@ export async function refreshDetached(db: SupabaseClient): Promise<Response> {
   const work = (async () => {
     try {
       await loadSecrets(db);
-      await refreshCorpus(db);
+      // Under a deadline this runtime can hold — see withBudget. Nine profiles is the slowest
+      // harvest here, so if anything hits this it will be this.
+      await withBudget(refreshCorpus(db), HARVEST_BUDGET_MS, "the corpus refresh");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await logEvent(db, "corpus_failed", "error", { error: message.slice(0, 500) })

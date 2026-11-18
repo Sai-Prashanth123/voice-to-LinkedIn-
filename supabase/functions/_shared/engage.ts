@@ -50,7 +50,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 import { admin, getSetting, logEvent } from "../_shared/db.ts";
 import { loadSecrets, secret } from "../_shared/secrets.ts";
-import { json } from "../_shared/jobs.ts";
+import { json, withBudget } from "../_shared/jobs.ts";
 import { notice } from "../_shared/notices.ts";
 import { callStructured, MODELS } from "../_shared/llm.ts";
 import { loadLibrary } from "../_shared/library.ts";
@@ -70,6 +70,15 @@ import {
   fetchFromConsole,
   normaliseRows,
 } from "../../../scripts/lib/harvest.mjs";
+
+/**
+ * How long a detached harvest may take before it reports giving up.
+ *
+ * Comfortably inside what the runtime will hold after the response has gone, and far short of the
+ * ten minutes the harvest module allows itself. A run that exceeds this says so; one that exceeds
+ * the runtime says nothing, which is the state observed on 18 November.
+ */
+const HARVEST_BUDGET_MS = 110_000;
 
 /** Sentence-count band from the skill: "Two to five sentences is the band that gets read". */
 const MIN_SENTENCES = 2;
@@ -165,7 +174,9 @@ export async function pollDetached(
   const work = (async () => {
     try {
       await loadSecrets(db);
-      await poll(db, write);
+      // Under a deadline this runtime can hold. The harvest allows itself ten minutes, which is
+      // longer than the isolate survives — see withBudget for the run that proved it.
+      await withBudget(poll(db, write), HARVEST_BUDGET_MS, "the creator poll");
     } catch (err) {
       // 13.2: failures surface rather than being swallowed, and this worker has no job row to
       // carry `last_error`. This event is the only place the failure can now appear.

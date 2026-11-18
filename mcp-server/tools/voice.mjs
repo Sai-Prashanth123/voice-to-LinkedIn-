@@ -833,11 +833,35 @@ export const referencePostTools = [
         means: "1.00 is that writer's own median post across everything stored for them. 2.00 is " +
           "twice their usual.",
         posts: ranked.slice(0, args.limit ?? 10),
+        /*
+         * THE REASON IS COMPUTED, NOT ASSERTED.
+         *
+         * The first version of this said "the newest stored post for most of these writers is
+         * 19 October", which was true when it was written and false forty minutes later, when the
+         * first corpus refresh brought the corpus up to 18 November. A date written into prose
+         * beside data that moves is the defect this whole session has been clearing out, and it
+         * reappeared here in the fix for it.
+         *
+         * It also blamed the wrong thing. A writer with counts on fewer than 15 posts is excluded
+         * by the median floor, not by the window, and telling someone to widen the window would
+         * never have helped them.
+         */
         ...(ranked.length === 0 && {
-          why_empty:
-            `Counts are stored, but none of these posts was published in the last ${days} days. ` +
-            `The newest stored post for most of these writers is 19 October — try a wider window, ` +
-            `or refresh the corpus.`,
+          why_empty: (() => {
+            const newest = rows
+              .map((r) => r.posted_at)
+              .filter(Boolean)
+              .sort()
+              .at(-1);
+            if (thin.length > 0 && byHandle.size === thin.length) {
+              return `Counts are stored, but every writer here has them on fewer than 15 posts, ` +
+                `which is not a median worth ranking against. Widening the window will not help; ` +
+                `the corpus needs more posts with counts on it. See not_ranked below.`;
+            }
+            return `Counts are stored, but nothing was published in the last ${days} days. The ` +
+              `newest stored post is ${newest ? String(newest).slice(0, 10) : "not recorded"} — ` +
+              `try a wider window.`;
+          })(),
         }),
         ...(thin.length > 0 && {
           not_ranked: thin,

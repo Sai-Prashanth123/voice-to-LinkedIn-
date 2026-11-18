@@ -140,6 +140,54 @@ export async function runWorker(opts: RunOptions, handler: Handler): Promise<Res
   return json({ worker: opts.name, claimed: results.length, deferred: deferred.length, results });
 }
 
+/**
+ * Run work under a deadline the RUNTIME can actually hold, so a hang fails with a reason.
+ *
+ * WHY, MEASURED ON 18 NOVEMBER
+ *
+ * The creator poll and the corpus refresh answer their caller immediately and continue under
+ * EdgeRuntime.waitUntil, because a LinkedIn harvest cannot finish inside the 30 seconds
+ * invoke_worker allows. That fixed a timeout which left no trace at all.
+ *
+ * It exposed the next layer. The harvest module gives a console job TEN MINUTES to come back,
+ * which is right for a CLI on a laptop and longer than the edge runtime will hold an isolate once
+ * the response has gone. Observed the same afternoon: a run filed creator_poll_started at 15:39:07
+ * and never filed anything else. The function was torn down before its own deadline could fire, so
+ * it could not report that it had given up.
+ *
+ * A start with no finish is readable, which is why that event exists. But "we were killed" is not
+ * a diagnosis. Under a budget the runtime can keep, the worker gets to say "the backend did not
+ * answer in N seconds" — which names the fault and is something a reader can act on.
+ *
+ * The backend's own deadline is deliberately NOT changed. The same module is used by the scripts,
+ * where waiting ten minutes is correct and the laptop is not going anywhere.
+ */
+export async function withBudget<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: number | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `${what} did not finish within ${Math.round(ms / 1000)}s. The isolate is killed ` +
+                  `shortly after the response goes out, so anything slower than this cannot ` +
+                  `report its own outcome — this message is that report. Usually the scraping ` +
+                  `backend is queuing or being blocked.`,
+              ),
+            ),
+          ms,
+        ) as unknown as number;
+      }),
+    ]);
+  } finally {
+    // Leaving it armed would hold the isolate open for no reason.
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,

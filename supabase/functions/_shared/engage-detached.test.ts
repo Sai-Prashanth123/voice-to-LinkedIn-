@@ -143,3 +143,62 @@ Deno.test("a harvest that throws is recorded, after the caller has already been 
     "the event does not carry the reason, so it says a run failed without saying why",
   );
 });
+
+Deno.test("a harvest that hangs reports giving up, instead of being killed in silence", async () => {
+  /*
+   * THE LAYER UNDER THE TIMEOUT FIX, measured the same afternoon it shipped.
+   *
+   * Detaching the work fixed a pg_net timeout that left no trace. It then exposed the next
+   * boundary: the harvest module allows a console job TEN MINUTES, which is longer than the edge
+   * runtime holds an isolate once the response has gone. A real run filed creator_poll_started at
+   * 15:39:07 and never filed anything else — torn down before its own deadline could fire, so it
+   * could not report that it had given up.
+   *
+   * `withBudget` gives it a deadline the runtime can keep, so the failure is a sentence rather than
+   * an absence. This asserts the sentence exists and names the cause.
+   */
+  const { withBudget } = await import("./jobs.ts");
+
+  /*
+   * A promise slower than the budget, with its own handle so it can be cleared afterwards. The
+   * first version of this test used a promise that never settles at all, and Deno failed it with
+   * "Promise resolution is still pending but the event loop has already resolved" — a leak in the
+   * test, not in the code, and exactly the kind of dangling timer `withBudget` clears in its
+   * `finally`.
+   */
+  let slowTimer: number | undefined;
+  const tooSlow = new Promise<void>((resolve) => {
+    slowTimer = setTimeout(resolve, 30_000) as unknown as number;
+  });
+
+  let message = "";
+  try {
+    await withBudget(tooSlow, 30, "the creator poll");
+  } catch (err) {
+    message = err instanceof Error ? err.message : String(err);
+  } finally {
+    if (slowTimer !== undefined) clearTimeout(slowTimer);
+  }
+
+  assert(message.length > 0, "a hang produced no error, so nothing would be recorded");
+  assert(
+    /the creator poll/.test(message),
+    `the message does not say which work hung: ${message}`,
+  );
+  assert(
+    /did not finish within/.test(message),
+    `the message does not say it ran out of time: ${message}`,
+  );
+  assert(
+    /blocked|queuing/.test(message),
+    `the message gives no likely cause, so a reader has nothing to act on: ${message}`,
+  );
+});
+
+Deno.test("work that finishes in time is returned untouched and the timer is cleared", async () => {
+  // A budget that swallowed the result, or left a timer armed holding the isolate open, would be
+  // worse than no budget at all.
+  const { withBudget } = await import("./jobs.ts");
+  const value = await withBudget(Promise.resolve("harvested"), 5_000, "a quick harvest");
+  assertEquals(value, "harvested");
+});
