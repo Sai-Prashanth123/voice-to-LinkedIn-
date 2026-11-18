@@ -39,6 +39,7 @@ drafting instructions say *keep the claim, rewrite the words.*
 | 5 | Hooks | The bar is now *would a sales leader stop and tap see more*, with the open loop kept as the mechanism that earns it. Plus the Why/What/How triggers and before-but-after from your document. |
 | 5 | Banned phrases | The contradiction between your document and your own list, resolved. See below. |
 | — | Gate rules | Said the gate runs "eight checks" since 7 September. It has run nine since 14 October and ten since today, and this text is read by the model doing the judging. |
+| — | Visual brand | Contradicted itself in five places — serif against sans, all-caps against never-all-caps, two different palettes, a logo ban against the wordmark you asked for three times, and a square canvas against the 4:5 portrait you chose. Your brand had arrived as a line appended under the old starter text instead of replacing it. |
 
 **You caught two faults in proposal 15** — the list guidance pulling against point 3, and the Matt
 Barker closing claim. There was a third of the same kind: it also said the ask was "one of two
