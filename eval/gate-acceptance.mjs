@@ -63,7 +63,10 @@ export const GENERIC_DRAFTS = [
   },
   {
     id: "trend-commentary",
-    why: "commentary on a public trend; no access to anything private required",
+    why: "commentary on a public trend: no work of his reported and no position staked, " +
+      "so nothing in it could turn out wrong. This read \"no access to anything private " +
+      "required\" until 18 November, which was the pre-31-October rule and the wording Josh " +
+      "flagged in his feedback. It still fails, now for the reason the rubric actually gives",
     body:
       `Every B2B company is adding AI to their pitch right now.\n\n` +
       `Buyers have stopped hearing it. It has become the new "innovative".\n\n` +

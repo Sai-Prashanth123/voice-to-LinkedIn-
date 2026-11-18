@@ -36,6 +36,8 @@ import { similarity } from "../../supabase/functions/_shared/diff.ts";
 // 9.1 — the exact set of fields a drafter may see. Reused so a rewrite is shown neither more nor
 // less than the first attempt was.
 import { sourceEntry } from "../../supabase/functions/_shared/entry.ts";
+import { writingSources } from "../sources.mjs";
+import { hisNotesFor } from "../his-notes.mjs";
 // One rule for clearance expiry, shared with the Deno side. See clearanceSurvivesReopen.
 import { needsAClearanceDecision } from "../../supabase/functions/_shared/names.ts";
 import { isSupplied } from "../../supabase/functions/_shared/views.ts";
@@ -173,8 +175,8 @@ export const inspectTools = [
       }
       if (failed.length === 0) {
         throw new Error(
-          `Draft ${args.draft_id} passed every check that has been run (${verdicts.length} of 8). ` +
-          `There is nothing to fix.`,
+          `Draft ${args.draft_id} passed every check that has been run ` +
+          `(${verdicts.length} of ${GATE_CHECKS.length}). There is nothing to fix.`,
         );
       }
 
@@ -202,6 +204,10 @@ export const inspectTools = [
         )
         .map((n) => n.name);
 
+      // Never allowed to fail the brief: a rewrite with no notes is the rewrite we had yesterday,
+      // which is worse than this one but not broken. Same reasoning as the gate brief's read.
+      const hisNotes = await hisNotesFor(db, draft.moment_id).catch(() => []);
+
       const brief = {
         draft_id: draft.id,
         moment_id: draft.moment_id,
@@ -213,8 +219,34 @@ export const inspectTools = [
         // away a working angle and breaks something that was fine.
         keep_these: passed.map((p) => p.check_key),
 
-        material: sourceEntry(material),
+        /*
+         * HIS OWN WORDS, WHICH THIS BRIEF CARRIED NONE OF UNTIL 18 NOVEMBER.
+         *
+         * This read was `sourceEntry(material)` with no second argument. That argument is what
+         * carries `his_words` — the join of EVERY raw_inputs row for the moment — and `receipts`.
+         * So a rewrite brief held the ten model-summarised fields and not one word Josh typed,
+         * while `create_draft` went on verifying the rewrite against the full twelve-field entry
+         * (write.mjs, via the same sourceEntry with both arguments). The writer was judged against
+         * material it had never been shown, and the cheapest way to pass was to re-use whatever
+         * phrasing survived into `material` — which is the second half of the same complaint.
+         *
+         * Josh reported it on 18 November and named the cause himself: "My notes get lost between
+         * ideas... My guess is my earlier notes didn't reach the rewrite." He was right. The
+         * drafting brief has done this correctly since it was written (brief.mjs, `writingSources`
+         * then `sourceEntry`); only the rewrite path was missed.
+         */
+        material: sourceEntry(material, await writingSources(db, draft.moment_id)),
         must_not_name: uncleared,
+
+        /*
+         * What HE said about the post, kept apart from what the gate said.
+         *
+         * `fix_these` above is gate verdicts. His own pushback lives in the draft job's payload and
+         * nowhere else, so a rewrite brief that read only `gate_runs` could not see the instruction
+         * it was supposed to be answering — the fault of 27 October, arriving by a third route.
+         * These are INSTRUCTIONS and cumulative, not feedback to weigh up.
+         */
+        ...(hisNotes.length > 0 && { his_notes: hisNotes }),
         /*
          * A rewrite that loses the writer target reverts to the default framework, which is the
          * complaint Josh made on 26 October arriving one attempt later rather than being fixed.

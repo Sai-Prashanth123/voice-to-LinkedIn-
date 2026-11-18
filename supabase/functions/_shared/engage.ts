@@ -111,6 +111,83 @@ interface HarvestedPost {
 
 
 
+/**
+ * Answer the caller at once, then do the harvest.
+ *
+ * WHY, MEASURED
+ *
+ * `invoke_worker` (migration 0007) calls every worker through `net.http_post` with
+ * `timeout_milliseconds => 30000`. A console harvest cannot fit in that: it starts a job on the
+ * backend and polls it to completion, measured at 44 seconds for a single profile, against its own
+ * ten-minute deadline (`scripts/lib/harvest.mjs`, `scripts/scrape-sentinels.mjs`). So this worker
+ * was structurally unable to return inside the budget it is called with.
+ *
+ * It looked fine for fifteen days and 18 runs, because every one of those runs hit the off state
+ * below and returned in milliseconds. The timeout could only appear on the first run that had
+ * somebody to fetch. On 18 November Josh asked for the feature to be switched on, two creators
+ * were added, the poll was run, and `net._http_response` held exactly one failure among 458 calls
+ * that day:
+ *
+ *   id 157905  status_code NULL  "Timeout of 30000 ms reached. Total time: 30001.265000 ms"
+ *
+ * and nothing else anywhere. No `creator_posts`, no `comment_options`, no event, `last_polled_at`
+ * still null, and no line in the edge logs at all, because the function never sent a response.
+ *
+ * THE EVENT LOG IS NOW THE ONLY RECORD, SO EVERY PATH MUST LEAVE ONE. Once the caller stops
+ * waiting, the HTTP status says only that the run began. `poll` files `creator_poll_idle`,
+ * `creator_poll_ran` or `creator_poll_backend_failed`; the catch here files `creator_poll_failed`;
+ * and `creator_poll_started` goes in first so that a run torn down mid-flight leaves a start with
+ * no finish beside it, rather than no trace at all. A worker that reports success and does nothing
+ * is the defect this repository keeps paying for, and detaching the work is exactly how one gets
+ * written by accident.
+ *
+ * `write` is passed through so a test can drive the whole path without a model call.
+ */
+export async function pollDetached(
+  db: SupabaseClient,
+  write: OptionWriter = optionsFor,
+): Promise<Response> {
+  const work = (async () => {
+    try {
+      await loadSecrets(db);
+      await poll(db, write);
+    } catch (err) {
+      // 13.2: failures surface rather than being swallowed, and this worker has no job row to
+      // carry `last_error`. This event is the only place the failure can now appear.
+      const message = err instanceof Error ? err.message : String(err);
+      await logEvent(db, "creator_poll_failed", "error", { error: message.slice(0, 500) })
+        .catch(() => {});
+    }
+  })();
+
+  await logEvent(db, "creator_poll_started", "info", {
+    means: "The response goes out before the harvest finishes, because the harvest does not fit " +
+      "in the 30 second budget invoke_worker allows. A start with no finish beside it is a run " +
+      "that was torn down part-way.",
+  }).catch(() => {});
+
+  try {
+    // The same hold used by `nudge` in jobs.ts: it keeps the isolate alive past the response on
+    // Supabase's runtime, and is simply absent anywhere else.
+    // deno-lint-ignore no-explicit-any
+    const edge = (globalThis as any).EdgeRuntime;
+    if (edge?.waitUntil) edge.waitUntil(work);
+    else await work;
+  } catch {
+    // Not on Supabase's runtime, so finish the work here rather than dropping it.
+    await work;
+  }
+
+  return json({
+    ok: true,
+    started: true,
+    next: "The harvest runs on past this response. What happened is in the event log: " +
+      "creator_poll_ran with the counts, creator_poll_idle if nobody is being watched, " +
+      "creator_poll_backend_failed if the fetch could not answer, or creator_poll_failed. A " +
+      "creator_poll_started with none of those beside it means the run did not reach the end.",
+  });
+}
+
 export async function poll(db: SupabaseClient, write: OptionWriter = optionsFor): Promise<Response> {
   const { data: creators, error } = await db
     .from("creators")

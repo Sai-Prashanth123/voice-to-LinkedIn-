@@ -11,7 +11,7 @@
  * instruction rather than guessed at.
  */
 
-export const PROMPT_VERSION = "2026-10-28.2";
+export const PROMPT_VERSION = "2026-11-18.1";
 
 /* ────────────────────────────────────────────────────────────────────────── *
  * THE INTERVIEW (clause 5)
@@ -698,7 +698,25 @@ export const GATE_CHECKS: GateCheckSpec[] = [
       `survey, three public threads, a research paper, and a breakdown of detection methods Josh ` +
       `had asked for in writing. Each verdict was right that no scene was present and wrong that ` +
       `nothing of his was. Reacting to what the field publishes is a kind of post he wants to ` +
-      `write, and it had no route through a rubric whose only pass condition was a room.`,
+      `write, and it had no route through a rubric whose only pass condition was a room.\n\n` +
+      `A THIRD WAY TO PASS, ADDED 18 NOVEMBER: HIS POSITION, WITH SOMETHING AT STAKE IN IT.\n\n` +
+      `A take on what the field published this week passes when the post commits him to a ` +
+      `judgement he would defend — a call he would make, a consequence he names for his buyer at ` +
+      `their altitude, a line he would have to stand behind if it turned out wrong. That is his, ` +
+      `and a stranger reading the same news does not have it. Josh asked for this in writing on 18 ` +
+      `November: "a take on this week's news, in my field, for my buyers, is mine even when ` +
+      `nothing happened to me. A plain recap should still fail."\n\n` +
+      `WHAT THIS DOES NOT OPEN. A plain recap still fails — and so does a recap with an opinion ` +
+      `bolted on, which is the thing this carve-out is most likely to be misread as permitting. ` +
+      `The difference is commitment and consequence, not the presence of a first-person sentence. ` +
+      `"My read is that this matters" is an opinion with nothing at stake. "If this number lands ` +
+      `on your desk, here is the call I would make and what it costs you if I am wrong" is a ` +
+      `position. Ask what it would take for the post to be WRONG. If nothing could make it wrong, ` +
+      `he has not staked anything and it fails. A taxonomy anyone could compile still fails.\n\n` +
+      `The reason this wording was needed: on 17 November a post on Vercel cutting its SDR team ` +
+      `from 10 to 1 failed here, correctly under the old rubric — every fact came from SaaStr's ` +
+      `recap and Vercel's COO. He published it anyway and then told us the standard was wrong, ` +
+      `not the check. The standard is his; this is him changing it.`,
   },
   {
     key: "claims_trace",
@@ -755,9 +773,18 @@ export const GATE_CHECKS: GateCheckSpec[] = [
   {
     key: "hook_opens_loop",
     question:
-      `DOES THE OPENING LINE OPEN A LOOP RATHER THAN CLOSE ONE?\n\n` +
-      `Read only the first line. It PASSES if it creates a question the reader needs answered, and ` +
-      `makes them want the next line.\n\n` +
+      `WOULD A SALES LEADER STOP AND TAP "SEE MORE"?\n\n` +
+      `That is the bar, and the open loop is how a line earns it. Josh set it on 18 November: ` +
+      `"the bar is still 'does it open a loop' when it should be 'would a sales leader tap see ` +
+      `more'." His hook document says the same thing first: the hook has one job, to make them ` +
+      `tap. Not to impress them, not to summarise the post, not to sound smart.\n\n` +
+      `So judge the loop, as below, and then ask the question above. A line can open a ` +
+      `structurally perfect loop and still fail, when the thing it withholds would not buy four ` +
+      `seconds from a VP of Sales who is already behind on their number. Say which of the two it ` +
+      `failed on, because they need opposite fixes: a closed loop needs the reveal moved, and a ` +
+      `loop nobody would tap needs a reason to care.\n\n` +
+      `Read only the first line. It PASSES the loop half if it creates a question the reader needs ` +
+      `answered, and makes them want the next line.\n\n` +
       `It FAILS if it states the conclusion up front, summarises the post, announces the topic, or ` +
       `is a rhetorical question of the kind that gets scrolled past.\n\n` +
       `A FINDING NAMED BUT WITHHELD IS A LOOP, NOT A CONCLUSION. The question is whether anything ` +

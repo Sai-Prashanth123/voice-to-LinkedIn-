@@ -40,7 +40,8 @@ import { shapedWriterRows } from "../shape-rows.mjs";
 // cycle, and tools/index.mjs warns that a registry lookup needs the tool imported last.
 import { corpusShapeBlock, writerShapeBlock } from "./voice.mjs";
 import { REFERENCE_WRITERS, WRITER_CHOICES, writerAskFrom } from "../writers.mjs";
-import { joshNote, JOSH_NOTE_PREFIX } from "../../supabase/functions/_shared/notes.ts";
+import { JOSH_NOTE_PREFIX } from "../../supabase/functions/_shared/notes.ts";
+import { hisNotesFor } from "../his-notes.mjs";
 /*
  * ONE RULE FOR WHETHER A NAME IS CLEARED, AND THESE TWO BRIEFS WERE THE LAST READERS NOT USING IT.
  *
@@ -607,19 +608,7 @@ export const briefTools = [
        * and kept SEPARATE from the gate's reasons: one is an instruction and the other is a
        * verdict, and filing the first under "it failed on" mislabels what he said.
        */
-      const noteJobs = await db.select("jobs", {
-        select: "payload",
-        type: "eq.draft",
-        "payload->>moment_id": `eq.${id}`,
-        order: "id.desc",
-        limit: 12,
-      });
-      const hisNotes = [...new Set(
-        noteJobs
-          .flatMap((j) => (Array.isArray(j?.payload?.failures) ? j.payload.failures : []))
-          .map((f) => joshNote(f))
-          .filter(Boolean),
-      )];
+      const hisNotes = await hisNotesFor(db, id);
       if (waiting?.payload?.previous_body || jobFailures.length > 0) {
         /*
          * NO INVENTED VERDICT WHEN THERE WAS NO REJECTION.
@@ -1064,25 +1053,7 @@ export const briefTools = [
        * else. Never allowed to fail the gate — a judge with no notes is the judge we had
        * yesterday, which is worse than this one but not broken.
        */
-      const hisNotes = await (async () => {
-        try {
-          const rows = await db.select("jobs", {
-            select: "payload",
-            type: "eq.draft",
-            "payload->>moment_id": `eq.${draft.moment_id}`,
-            order: "id.desc",
-            limit: 12,
-          });
-          return [...new Set(
-            rows
-              .flatMap((j) => (Array.isArray(j?.payload?.failures) ? j.payload.failures : []))
-              .map((f) => joshNote(f))
-              .filter(Boolean),
-          )];
-        } catch {
-          return [];
-        }
-      })();
+      const hisNotes = await hisNotesFor(db, draft.moment_id).catch(() => []);
 
       // The same rule the edge function applies, from the same function.
       //
