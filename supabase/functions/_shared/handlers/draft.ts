@@ -272,6 +272,15 @@ export async function applyDraft(db: SupabaseClient, d: DraftToFile): Promise<Fi
     model: d.model,
     claims: d.claims,
     claims_verified: verification.ok,
+    /*
+     * What this draft supplied that rests on nothing he said (0062, at his request on 18 November).
+     *
+     * Taken from the VERIFICATION rather than from the submitted ledger, deliberately: the
+     * verification holds only the additions that were accepted, so a refused one cannot be stored
+     * and later read back to him as part of the post. Numbers, quotes, uncleared names and
+     * first-person accounts never reach here at all — claims.ts refuses them.
+     */
+    additions: verification.additions,
   }).select("id").single();
   if (error || !inserted) throw new Error(`could not store draft: ${error?.message}`);
 

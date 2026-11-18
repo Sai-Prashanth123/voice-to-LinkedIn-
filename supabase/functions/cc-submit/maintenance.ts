@@ -73,6 +73,18 @@ const RUNNABLE: Record<string, string> = {
    * a worker nobody can run is a worker nobody has watched work.
    */
   engage: "worker-engage",
+  /*
+   * The reference-writer corpus refresh, added 18 November with the worker itself.
+   *
+   * On demand for the same reason as the creator poll, and one more: the schedule is Monday and
+   * Thursday, and seven of the nine writers have carried no reaction count since 20 October. Being
+   * told "it will fill in by Thursday" is not an answer to "why can't I see what did well".
+   *
+   * Safe here. It fetches public posts, upserts them, and refuses to let a flat row overwrite a
+   * shaped one; nothing it writes reaches anyone outside this system and nothing it writes is a
+   * rule.
+   */
+  corpus: "worker-corpus",
 };
 
 export async function runWorker(db: SupabaseClient, body: Body): Promise<Response> {

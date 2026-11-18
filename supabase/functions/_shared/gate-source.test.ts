@@ -118,8 +118,18 @@ test("every check still receives the post itself", () => {
 
 const NOTE_ONLY = ["17 campuses", "Attack Surface Visibility", "North Carolina"];
 
-test("only the three checks that compare against the material are shown it", () => {
-  assert.deepEqual([...CHECK_SEES_SOURCE].sort(), ["anyone_else", "claims_trace", "identifiable"]);
+test("only the checks that compare against the material are shown it", () => {
+  /*
+   * Written out by hand on purpose, and the reason is the failure this caught on 18 November: a
+   * tenth check, holds_together, was added at Josh's request and given the material, because
+   * "drift off its one point" cannot be answered without knowing what the point was. This list was
+   * still three and the assertion failed, which is the whole job — widening the set of checks that
+   * can see his private notes is exactly the change that should not pass silently.
+   */
+  assert.deepEqual(
+    [...CHECK_SEES_SOURCE].sort(),
+    ["anyone_else", "claims_trace", "holds_together", "identifiable"],
+  );
 
   for (const spec of GATE_CHECKS) {
     const sees = gateInputsFor(spec.key);

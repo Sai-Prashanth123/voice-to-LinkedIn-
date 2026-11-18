@@ -124,7 +124,10 @@ test("the review list shows the verdict, and shows it before the post", () => {
   const src = readFileSync(new URL("./tools/inspect.mjs", import.meta.url), "utf8");
   assert.match(
     src,
-    /drafts\(gate_passed,gate_advisory,gate_reason\)/,
+    // Open at the end: on 18 November `additions` joined this select so the review list can read
+    // out what the writer supplied that he did not say. The three columns named here are what this
+    // test is about; pinning the whole string made an unrelated addition look like a regression.
+    /drafts\(gate_passed,gate_advisory,gate_reason[^)]*\)/,
     "list_calendar does not join the draft's verdict, so /review cannot show one",
   );
   assert.match(src, /gate:\s*\{/, "the verdict is not reshaped into a gate block");
@@ -213,7 +216,7 @@ test("the turn detector is spelled once, and a draft can reach it", () => {
   assert.doesNotMatch(measure, /turn\s*[<>]=?\s*0\.\d/, "a threshold has been put on the turn");
 });
 
-test("the gate is described as nine checks, because it is nine", () => {
+test("no surface tells a reader how many checks the gate has", () => {
   /*
    * A ninth was added on 14 October. Every surface that still said eight was telling a reader —
    * and a model — to stop at eight, which is how gate_passed stayed null for five days.

@@ -95,15 +95,33 @@ export type Extraction = z.infer<typeof ExtractionSchema>;
 
 export const ClaimSchema = z.object({
   claim: z.string().describe("The factual assertion the post makes."),
-  kind: z.enum(["quote", "number", "name", "event", "detail"]),
+  kind: z
+    .enum(["quote", "number", "name", "event", "detail", "added"])
+    .describe(
+      "'added' is for something you reasoned or supplied that he did not say — argument, an " +
+        "implication, a general example. It carries no span and is read back to him before he " +
+        "approves. It may NEVER be a number, a quotation, a client's name, or a claim about " +
+        "something he did, saw or was told.",
+    ),
   source_field: z
     .string()
-    .describe("Which field of the entry it rests on, e.g. 'their_actual_words'."),
+    .describe(
+      "Which field of the entry it rests on, e.g. 'their_actual_words'. For an addition, the " +
+        "literal 'added'.",
+    ),
   source_span: z
     .string()
     .describe(
       "The VERBATIM span from that field. Copied exactly, not paraphrased. This is checked " +
-        "mechanically against the source text and the draft is rejected if it does not appear.",
+        "mechanically against the source text and the draft is rejected if it does not appear. " +
+        "Empty for an addition, which rests on nothing.",
+    ),
+  why: z
+    .string()
+    .optional()
+    .describe(
+      "Required for kind 'added' and ignored otherwise: why this belongs, in one line. This is " +
+        "the sentence he reads when deciding whether to keep it.",
     ),
 });
 

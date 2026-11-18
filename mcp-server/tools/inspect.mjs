@@ -709,7 +709,7 @@ export const inspectTools = [
         q.set(
           "select",
           q.get("select") + ",moments!inner(killed,status)" +
-            ",drafts(gate_passed,gate_advisory,gate_reason)",
+            ",drafts(gate_passed,gate_advisory,gate_reason,additions)",
         );
         q.set("moments.killed", "is.false");
         q.set("moments.status", "neq.parked");
@@ -773,6 +773,21 @@ export const inspectTools = [
           }
           const flagged = Object.keys(why);
 
+          /*
+           * WHAT THE DRAFT ADDED, AHEAD OF THE BODY FOR THE SAME REASON THE VERDICTS ARE.
+           *
+           * Josh, 18 November: "Mark each addition in the ledger and read them back to me before
+           * I approve, so I'm checking them rather than being blocked by them." Reading them back
+           * is the half that makes the permission safe, and a key further down this object is a
+           * key that gets skipped — which is how the gate verdicts came to be missed in the first
+           * place. So it sits beside `gate`, before the post.
+           *
+           * Absent when there are none, because this block is an instruction to read something
+           * out and there is nothing to read. The count-with-a-reason belongs in create_draft,
+           * which is reporting on a check it just ran; this is a review surface.
+           */
+          const added = Array.isArray(d.additions) ? d.additions : [];
+
           data[i] = {
             gate: {
               passed: d.gate_passed,
@@ -783,11 +798,22 @@ export const inspectTools = [
                 ? "Not judged yet. Nothing has looked at this one."
                 : d.gate_passed
                 ? "Passed every check."
-                : `${flagged.length} of 9 check(s) flagged this, and it reached your calendar ` +
-                  `anyway because one-step mode makes the gate advisory. Read him these before ` +
-                  `the post, in the check's own words — they are usually the note he was about ` +
-                  `to give.`,
+                : `${flagged.length} of ${GATE_CHECKS.length} check(s) flagged this, and it ` +
+                  `reached your calendar anyway because one-step mode makes the gate advisory. ` +
+                  `Read him these before the post, in the check's own words — they are usually ` +
+                  `the note he was about to give.`,
             },
+            ...(added.length > 0 && {
+              added_by_the_writer: {
+                count: added.length,
+                read_these_out: added.map((a) => ({ added: a.claim, why: a.why })),
+                before_he_approves: "These rest on nothing he said — they are argument the writer " +
+                  "supplied, which he asked for on 18 November. Read him each one and its reason " +
+                  "before the post. If he strikes one, edit_post and say so.",
+                not_in_here: "No figure, quotation, client name or account of something he did: " +
+                  "those are refused when the draft is filed, so they never reach this list.",
+              },
+            }),
             ...p,
           };
         }

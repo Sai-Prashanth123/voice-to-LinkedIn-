@@ -119,10 +119,16 @@ select name from vault.secrets order by name;
 # worker-engage was missing from this line until 18 November, and `grep -rn worker-engage docs/`
 # returned nothing at all. It polls Josh's creator list twice a day on weekdays, and an empty list
 # makes it return early and log `creator_poll_idle` — which looks exactly like a healthy run, so a
-# version of it that was never deployed would not have looked like anything.
+# version of it that was never deployed would not have looked like anything. The same day, its
+# first run with somebody on the list timed out: a harvest does not fit in the 30 seconds
+# invoke_worker allows, so both it and worker-corpus now answer first and harvest afterwards.
+#
+# worker-corpus added 18 November: collects the nine reference writers on Monday and Thursday
+# mornings. Before it, seven of the nine had carried no reaction count since 20 October, because
+# collecting was two scripts somebody ran on a laptop.
 supabase functions deploy mcp cc-submit transcript-webhook worker-dispatch \
   worker-select worker-triage worker-publish worker-metrics \
-  worker-learn worker-ops worker-engage linkedin-oauth
+  worker-learn worker-ops worker-engage worker-corpus linkedin-oauth
 
 # In this repo, use scripts/deploy.mjs instead: it stamps the commit first, so system_status can
 # say which code is answering rather than reporting build.source "unknown".

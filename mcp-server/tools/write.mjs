@@ -62,6 +62,7 @@ import {
   measureShape,
 } from "../../supabase/functions/_shared/shape.ts";
 import { CLAIMABLE_FIELDS, sourceEntry } from "../../supabase/functions/_shared/entry.ts";
+import { ADDED_FIELD } from "../../supabase/functions/_shared/claims.ts";
 /*
  * ONE DECLARATION, SHARED WITH write_post.
  *
@@ -75,7 +76,12 @@ import { EXTRACTION, FIELD_COUNT } from "./extraction-shape.mjs";
 import { writingSources } from "../sources.mjs";
 import { HIGH_CONFIDENCE, scan } from "../aitells.mjs";
 import { PREFILE_CHECKS, prefileVerdict } from "../prefile.mjs";
-import { selfEcho, selfEchoReport } from "../self-echo.mjs";
+import {
+  liftedFromHisWords,
+  liftedReport,
+  selfEcho,
+  selfEchoReport,
+} from "../self-echo.mjs";
 // 9.3 — the recorded framework, normalised on the way in and checked against his own section.
 import { isNamedFramework, namedFrameworks, tidyFramework } from "../frameworks.mjs";
 
@@ -154,21 +160,42 @@ async function borrowedIndexFor(db, body) {
  * are still checked word for word, and adding them is what lets a claim rest on a sentence he
  * wrote rather than only on a model's summary of it. See entry.ts for why.
  */
+/*
+ * `added` and the two fields that go with it arrived on 18 November, when Josh asked to be able to
+ * approve what the drafter supplied rather than be blocked by it. The span fields relax to allow an
+ * empty string because an addition rests on nothing — the enum and the `min(1)` were what made an
+ * addition inexpressible, which is why two of his posts on 12 November never reached the review.
+ *
+ * Everything the relaxation could have opened is closed in claims.ts instead, where it is executed
+ * and tested rather than described: an addition carrying a figure, a quotation, an uncleared name,
+ * or a claim about something Josh did, saw or was told is refused, and nothing is stored.
+ */
 const CLAIM = z.object({
-  kind: z.enum(["quote", "number", "name", "event", "detail"])
-    .describe("What sort of claim this is"),
+  kind: z.enum(["quote", "number", "name", "event", "detail", "added"])
+    .describe(
+      "What sort of claim this is. Use 'added' for something you supplied that he did not say — " +
+      "argument, an implication, a general example. It needs no span and it is read back to him " +
+      "before he approves. It may NEVER be a number, a quotation, a client's name, or an account " +
+      "of something he did, saw or was told: those are refused and nothing is stored.",
+    ),
   claim: z.string().min(1)
     .describe("The assertion the draft makes, in the draft's own words"),
-  source_field: z.enum([...CLAIMABLE_FIELDS])
+  source_field: z.enum([...CLAIMABLE_FIELDS, ADDED_FIELD])
     .describe(
       "Which source the span below is copied from: one of the ten material fields, or his_words " +
-      "for what he actually typed, or receipts for what he has told us about himself.",
+      "for what he actually typed, or receipts for what he has told us about himself. For an " +
+      "addition, the literal \"added\".",
     ),
-  source_span: z.string().min(1)
+  source_span: z.string()
     .describe(
       "The VERBATIM span from that field. Copied exactly, never paraphrased — it is checked as a " +
       "substring of that field before the draft is stored, so a paraphrase is refused even when " +
-      "it is perfectly accurate.",
+      "it is perfectly accurate. Empty for an addition.",
+    ),
+  why: z.string().optional()
+    .describe(
+      "Required on an addition and ignored otherwise: one line on why it belongs. This is the " +
+      "sentence Josh reads when he decides whether to keep it, so write it for him.",
     ),
 });
 
@@ -580,6 +607,36 @@ export const writeTools = [
             found: 0,
           },
         /*
+         * THE SAME GUARD, POINTED AT HIS OWN WORDS, WHICH NOTHING HAD EVER DONE.
+         *
+         * Josh, 18 November: "It copies my spoken words too closely... Keep the claim, rewrite the
+         * words. My guess is the ledger wanting exact spans pulls my phrasing into the post." He
+         * had the cause right: his_words is a claimable field and a span is checked as a verbatim
+         * substring, so lifting the sentence he spoke is the cheapest way to make a claim verify.
+         *
+         * Reported on every draft, pass or fail, for the reason above it.
+         */
+        his_own_words_lifted: (() => {
+          const lifted = liftedFromHisWords(args.body, entry.his_words);
+          if (!lifted.checked) {
+            return {
+              checked: false,
+              why: "He typed nothing on this moment, so there was nothing to compare against. " +
+                "Not a pass — nothing looked.",
+            };
+          }
+          const report = liftedReport(lifted);
+          const checked = `${lifted.source_words} word(s) of his own material`;
+          return report
+            ? { checked, found: report }
+            : {
+              checked,
+              found: [],
+              means: "No run of seven words or more in this post is his own phrasing verbatim. " +
+                "The claims rest on his material without the post being a transcript of it.",
+            };
+        })(),
+        /*
          * Same discipline, for the same reason. Josh wrote on 26 October that he gives the same
          * notes every time; two of the things he was re-raising were checks that had run and found
          * nothing to say because they could not see the marker he uses. A check that reports it ran
@@ -635,6 +692,37 @@ export const writeTools = [
             why_it_is_here:
               "Read him the preview before he reads the post. The first line is the only one most " +
               "of his readers will ever see, and it is the only line the hook check judges.",
+          };
+        })(),
+        /*
+         * WHAT THIS DRAFT ADDED, FOR READING OUT LOUD.
+         *
+         * Josh, 18 November: "Mark each addition in the ledger and read them back to me before I
+         * approve, so I'm checking them rather than being blocked by them." This is the first half
+         * of that — the session sees it the moment the draft is filed. `list_calendar` is the
+         * second half, for a post he comes back to later.
+         *
+         * `found: []` with a reason rather than an omitted key, on the same grounds as `own_words`
+         * below: a post that added nothing and a post nobody checked are different answers and
+         * only one of them is good news.
+         */
+        additions: (() => {
+          const added = (args.claims ?? []).filter((c) => c.kind === "added");
+          if (added.length === 0) {
+            return {
+              count: 0,
+              means: "Nothing was added. Every claim in this post rests on a span of his own " +
+                "material, so there is nothing here for him to accept or strike.",
+            };
+          }
+          return {
+            count: added.length,
+            read_these_out: added.map((c) => ({ added: c.claim, why: c.why })),
+            before_he_approves: "Read him each of these and what it rests on, before the post. He " +
+              "asked to be checking them rather than blocked by them, which only works if he " +
+              "hears them. If he strikes one, edit_post and say so.",
+            not_in_here: "No figure, quotation, client name or account of something he did — " +
+              "those are refused outright and nothing is stored, so they cannot reach this list.",
           };
         })(),
         own_words: (() => {

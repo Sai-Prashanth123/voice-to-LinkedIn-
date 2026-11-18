@@ -241,10 +241,39 @@ THE CLAIM LEDGER
 
 Alongside the post you return a ledger: every factual claim you made, and the verbatim span of the
 entry it rests on. That span is checked mechanically against the source text, so it must appear
-there exactly — copy it, do not paraphrase it. If you cannot point at a span, do not make the claim.
+there exactly — copy it, do not paraphrase it.
 
 This is not a formality. A claim with no span is how a fabricated quote or an invented statistic
 reaches Josh, and he audits for exactly that.
+
+YOU MAY ADD TO WHAT HE GAVE YOU, IF YOU DECLARE IT
+
+Added 18 November, because he asked for it: "I want Claude to add detail, examples and argument I
+haven't given, and to fill a gap when I say it can. Mark each addition in the ledger and read them
+back to me before I approve, so I'm checking them rather than being blocked by them."
+
+So a thin moment is no longer a reason to refuse or to hand him a list of options to choose from.
+Write the post, and for anything that rests on nothing he said, add a ledger entry whose kind is
+"added", whose source_field is "added", with no span and a one-line "why". That why is the sentence
+he reads when he decides whether to keep it, so write it for him and not for the check.
+
+WHAT MAY BE ADDED: reasoning, argument, an implication of what he described, a general example, a
+scenario named as general. Things whose warrant is that they follow.
+
+WHAT MAY NOT, AND THESE ARE REFUSED MECHANICALLY RATHER THAN TRUSTED TO YOU:
+
+- a figure of any kind, including a written-out one — "three ways" is a quantity
+- a quotation
+- a name that is not cleared for this post
+- an account of something Josh did, saw, heard or was told
+
+The last one is the one to watch, because it is the easiest to write without noticing. "I ran the
+same test" and "a founder told me the same thing" are not additions, they are inventions with a
+label on, and a marked invention is worse than a missing detail: he would be checking it against
+his own memory rather than reviewing it. Make the point in the third person or leave it out.
+
+An addition that breaks one of those is refused and NOTHING IS STORED, so the post does not reach
+him at all. If the point needs a number, find the span or make the point without counting.
 
 HOW TO WRITE IT
 
@@ -325,6 +354,27 @@ export const DRAFT_USER = (opts: {
 }) => {
   const lines: string[] = [];
   lines.push("THE MOMENT (this is everything you are allowed to draw on):\n");
+  /*
+   * KEEP THE CLAIM, REWRITE THE WORDS — added 18 November.
+   *
+   * `hisNotes` and `tasteNotes` have each carried a version of this since they were written ("take
+   * what he is asking for and not the spoken cadence"), and the MATERIAL carried none, which is the
+   * one place it matters most. Josh: "It copies my spoken words too closely - I tend to just give a
+   * stream of conciousness for it to make sense of. Keep the claim, rewrite the words. My guess is
+   * the ledger wanting exact spans pulls my phrasing into the post."
+   *
+   * His guess is right and it is structural: `his_words` is claimable, a span is checked as a
+   * verbatim substring, so pasting the sentence he spoke is the cheapest way to make a claim
+   * verify. Saying so here is the only place a drafter reads before it happens.
+   */
+  lines.push(
+    `A SPAN IS EVIDENCE, NOT A SENTENCE TO PASTE. Much of what follows is dictated or typed in a ` +
+      `hurry — a stream of consciousness for you to make sense of, not a draft to transcribe. Take ` +
+      `the claim and write the line yourself. His spoken filler and his repetitions are not his ` +
+      `written voice; the shape of his thinking is what transfers. Two things are the exception ` +
+      `and should appear as he gave them: a quote somebody actually said, and a term that is his ` +
+      `own. Everything else, say in your words.\n`,
+  );
   for (const [field, value] of Object.entries(opts.entry)) {
     lines.push(`### ${field}\n${value}\n`);
   }
@@ -923,6 +973,40 @@ export const GATE_CHECKS: GateCheckSpec[] = [
       `DO NOT fail it for anything that is not shape. Whether the words are good, whether the claim ` +
       `is his, whether the hook opens a loop — eight other checks own those, and a reason that ` +
       `mentions them is a reason belonging to a different check.`,
+  },
+  {
+    key: "holds_together",
+    question:
+      `DOES THE POST CONTRADICT ITSELF, OR DRIFT OFF ITS ONE POINT?\n\n` +
+      `Added 18 November, because Josh asked for it after giving the same note three times to ` +
+      `drafts that had already passed every other check: "Flow. The reading-order question added ` +
+      `on 26 October hasn't stopped it. I gave this note three times after it shipped, once for ` +
+      `two lines that contradicted each other. Could it become a review check that catches ` +
+      `contradictions and a post drifting off its one point?"\n\n` +
+      `TWO FAULTS, AND YOU MUST SAY WHICH.\n\n` +
+      `1. A CONTRADICTION. Two lines that cannot both be true, or that pull opposite ways without ` +
+      `the post acknowledging it. Quote BOTH lines. A post may absolutely change its mind — "I ` +
+      `thought X, then I found Y" is the commonest shape in his library and it is not this. What ` +
+      `fails is an unmarked collision: advice to do a thing and then advice not to, a number ` +
+      `called small in one line and significant in another, a cause asserted and then a different ` +
+      `cause asserted for the same effect.\n\n` +
+      `2. DRIFT. The post sets out to make one point and ends up somewhere else, or carries a ` +
+      `second argument that would be a different post. Name the one point the opening commits to, ` +
+      `then name the line where it stops being about that. A post with one point and three ` +
+      `examples of it is not drift; a post with three points is.\n\n` +
+      `READ IT IN ORDER, ONCE, AS A READER WOULD. This check is the only one that judges the post ` +
+      `as a sequence rather than as a set of properties, which is why the other nine kept passing ` +
+      `the thing he was complaining about.\n\n` +
+      `WHAT IT IS NOT. Not a judgement of whether the point is good, whether the claim is his, ` +
+      `whether the hook works or whether the shape reads — those have their own checks, and a ` +
+      `reason that mentions them belongs to one of those. Not a demand for a tidy lesson either: ` +
+      `a scene that ends without resolving is a real outcome and passes here.\n\n` +
+      `BE CAREFUL IN ONE DIRECTION. Two lines in tension are not a contradiction when the tension ` +
+      `IS the point — a tradeoff named honestly, a cost stated beside a benefit. His library asks ` +
+      `for exactly that: "every post needs an edge — a limit, a tradeoff, a place he was wrong." ` +
+      `Failing a post for having an edge would turn a check he asked for into one that removes the ` +
+      `thing his own rules require. If you are about to fail it on tension, ask first whether the ` +
+      `post knows the tension is there. If it does, it holds together.`,
   },
 ];
 

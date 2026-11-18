@@ -117,21 +117,49 @@ test("the number the drafter aims at is the number the gate judges against", asy
    * Both sides come from writerShapeTargets over the same paged rows, so this asserts they agree
    * rather than merely resemble each other.
    */
-  const [block, gateBrief] = await Promise.all([
-    writerShapeBlock(db, "mattjbarker1"),
-    tools.find((t) => t.name === "get_gate_brief")
-      .handler({ draft_id: 90 }, { db, url: creds.url }),
-  ]);
+  /*
+   * COMPARED AT THE CODE PATHS, NOT THROUGH A LIVE DRAFT — and the reason is worth keeping.
+   *
+   * This used to fetch the whole gate brief for draft 90 and accept `checks_remaining === 0` as an
+   * alternative to finding the band. Draft 90 has a verdict for every check, so that escape was
+   * ALWAYS the branch that passed: the bands were never once compared, and the test reported
+   * success over an assertion it never reached. The signature defect of this repository, inside a
+   * test written to prevent it.
+   *
+   * It surfaced on 18 November when a tenth check was added. `checks_remaining` became 1, the
+   * escape stopped firing, and the assertion failed — not because the bands disagreed but because
+   * the brief for an already-judged check correctly refuses to render it at all
+   * (`check_key_not_offered`), so there was no band in it to find.
+   *
+   * So the comparison now runs where the test's own comment always said it should: "Both sides come
+   * from writerShapeTargets over the same paged rows." `shapeAgainst` is the function whose output
+   * reaches the shape judge, and `writerShapeBlock` is what the drafter is given. Same rows, both
+   * sides, and no dependence on which draft happens to have been judged.
+   */
+  const { shapeAgainst, measureShape } = await import(
+    "../supabase/functions/_shared/shape.ts"
+  );
+  const { shapedWriterRows } = await import("./shape-rows.mjs");
+
+  const block = await writerShapeBlock(db, "mattjbarker1");
 
   const fold = block.lines.find((l) => l.startsWith("ABOVE THE FOLD:"));
   const band = fold.match(/the eight run (\d+) to (\d+)/);
   assert.ok(band, `no corpus band in "${fold}"`);
 
-  // The gate brief renders the same band in prose for the judge.
-  const shapeText = JSON.stringify(gateBrief);
+  // The gate's side, from the same rows the drafter's side was built from. `shapedWriterRows` takes
+  // no handle on purpose: the band is the whole corpus's, which is why "the eight run 20 to 66"
+  // reads the same whichever writer the drafter was pointed at.
+  const rows = await shapedWriterRows(db);
+  const { writerShapeTargets } = await import("../supabase/functions/_shared/shape.ts");
+  const targets = writerShapeTargets(rows);
+  const judgeLines = shapeAgainst(measureShape("A draft.\n\nTwo paragraphs."), targets);
+
   assert.ok(
-    shapeText.includes(`${band[1]} to ${band[2]}`) || gateBrief.checks_remaining === 0,
-    "the drafter's band and the gate's band disagree",
+    judgeLines.join(" ").includes(`${band[1]} to ${band[2]}`),
+    `the drafter aims at ${band[1]} to ${band[2]} above the fold and the shape judge is handed ` +
+      `"${judgeLines.join(" ")}". A target the gate cannot see is advice, and advice is what Josh ` +
+      `has been overruling by hand.`,
   );
 });
 

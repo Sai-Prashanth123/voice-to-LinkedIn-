@@ -46,7 +46,23 @@ const INFO = `${REPO}/mcp-server/build-info.mjs`;
  * into a twelve-function deploy, and `supabase functions deploy` is the slow part. The others are
  * named explicitly, and `system_status` reports the commit so a stale one can be found.
  */
-const DEFAULT_FUNCTIONS = ["cc-submit", "mcp", "worker-dispatch", "worker-engage"];
+/*
+ * The functions a change usually touches. Pass names to deploy something else instead.
+ *
+ * `worker-engage` joined on 17 November, having been in no deploy list at all. `worker-corpus` and
+ * `worker-select` joined on 18 November: the first is new, and the second carries the notice Josh
+ * reads, which now counts the gate's checks rather than stating a number. A worker left off this
+ * list is a worker whose fix never reaches him — the push is only half of it.
+ */
+const DEFAULT_FUNCTIONS = [
+  "cc-submit",
+  "mcp",
+  "worker-dispatch",
+  "worker-engage",
+  "worker-corpus",
+  "worker-select",
+  "worker-ops",
+];
 const functions = process.argv.slice(2).filter((a) => !a.startsWith("-"));
 const targets = functions.length > 0 ? functions : DEFAULT_FUNCTIONS;
 

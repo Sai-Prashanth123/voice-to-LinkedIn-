@@ -32,12 +32,15 @@ import { makeDraft, makeMoment, minedMoment, q } from "../fixtures.mjs";
  * refused every insert.
  *
  * So when a check is added, this list is edited by hand, on purpose. `shape` was added on
- * 14 October and this is that edit.
+ * 14 October and `holds_together` on 18 November; both are that edit.
  */
 const CHECKS = [
   "anyone_else", "claims_trace", "hook_opens_loop", "aimed_at_someone",
   "voice_guide", "names_cleared", "identifiable", "banned_phrases",
   "shape",
+  // Added 18 November at Josh's request: contradictions, and a post drifting off its one point.
+  // Needed migration 0063 for the same reason shape needed 0049.
+  "holds_together",
 ];
 
 export const cases = [

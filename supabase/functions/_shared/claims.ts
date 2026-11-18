@@ -24,7 +24,33 @@ import { borrowedRuns } from "./shingles.ts";
 // Which fields record speech. A quote may only rest on one of them — see the note there.
 import { QUOTE_SOURCE_FIELDS } from "./entry.ts";
 
-export type ClaimKind = "quote" | "number" | "name" | "event" | "detail";
+/**
+ * `added` was put here on 18 November, when Josh asked for it in writing.
+ *
+ * "I want Claude to add detail, examples and argument I haven't given, and to fill a gap when I
+ * say it can. Mark each addition in the ledger and read them back to me before I approve, so I'm
+ * checking them rather than being blocked by them. Keep a hard line on numbers, quotes and client
+ * names if you think it's needed."
+ *
+ * Before this there was no way to SAY that something was added. `source_span` was required and
+ * `source_field` was a closed enum over the entry, so a drafter with a point to make that his
+ * material did not contain had two options: leave it out, or attach it to the nearest span and
+ * hope. On 12 November that showed up twice — a pros-and-cons post he was asked to supply the pros
+ * and cons for, and a second where he said "you can add this" and was handed a list of options to
+ * pick from. Neither reached the review he was waiting for.
+ *
+ * WHAT AN ADDITION MAY BE: reasoning, argument, an implication, a general example, a named-as-
+ * general scenario. Things whose warrant is that they follow, not that he said them.
+ *
+ * WHAT IT MAY NEVER BE, and these are checked rather than trusted: a number, a quoted line, a
+ * client's name, or a new first-person claim about something Josh did, saw or was told. The last of
+ * those is the one he did not ask for and is kept anyway — his own hook document teaches rage hooks
+ * and says outright "do you actually have to do these things? No, we're being sarcastic", and a
+ * fabricated anecdote in his voice is the thing R2 exists to stop. A marked fabrication is still a
+ * fabrication: he would be checking whether his own memory was wrong, which is not a review anyone
+ * can do.
+ */
+export type ClaimKind = "quote" | "number" | "name" | "event" | "detail" | "added";
 
 export interface Claim {
   /** What the draft asserts. */
@@ -34,7 +60,19 @@ export interface Claim {
   source_field: string;
   /** The verbatim span from that field. Must appear in it. */
   source_span: string;
+  /**
+   * For `kind: "added"` only: why this belongs, in the drafter's own words. Required for an
+   * addition and ignored otherwise.
+   *
+   * It is required because it is the thing Josh reads. An addition with no reason attached gives
+   * him a sentence to approve and nothing to judge it by, which is the opposite of what he asked
+   * for — he wants to be checking them, not told they exist.
+   */
+  why?: string;
 }
+
+/** The literal `source_field` an addition carries. It rests on nothing in the entry, by definition. */
+export const ADDED_FIELD = "added";
 
 /** The subset of the idea bank entry a draft is allowed to draw on. */
 export type SourceEntry = Record<string, string | null | undefined>;
@@ -57,6 +95,19 @@ export interface VerificationResult {
   unsourcedQuotes: string[];
   unclearedNames: string[];
   /**
+   * What the drafter added that rests on nothing he said, each with its reason — the accepted ones
+   * only, so a caller cannot read a refused addition back to him as though it were in the post.
+   *
+   * THIS EXISTS TO BE READ OUT. Josh, 18 November: "Mark each addition in the ledger and read them
+   * back to me before I approve, so I'm checking them rather than being blocked by them." A value
+   * nothing reads is this repository's signature defect, so anything surfacing a draft to him is
+   * expected to carry this, and `list_calendar` puts it ahead of the body for that reason.
+   *
+   * An empty array means the post rests entirely on his own material. That is a different fact
+   * from "nothing was checked", and worth saying rather than omitting.
+   */
+  additions: Claim[];
+  /**
    * Runs of words in this draft that appear verbatim in a reference writer's post (8.3).
    * Taken from the draft, so a refusal names only what the caller already submitted.
    */
@@ -67,6 +118,12 @@ export interface VerificationResult {
 
 /** A span shorter than this cannot meaningfully evidence anything. */
 const MIN_SPAN_LENGTH = 4;
+
+/**
+ * A "why" shorter than this is not a reason, it is a shrug. Set low on purpose: the point is to
+ * stop "yes", "obvious" and an empty string, not to demand an essay for a one-line implication.
+ */
+const MIN_WHY_LENGTH = 12;
 
 /**
  * Normalise for comparison without being so lenient that a paraphrase passes as a quote.
@@ -228,7 +285,92 @@ export function extractQuotedStrings(text: string): string[] {
   return [...new Set(out)];
 }
 
+/**
+ * First-person assertions of fact, for the one line an addition may not cross.
+ *
+ * NOT a general scan of the draft body. A draft of his is first person throughout — 346 of the
+ * 2,082 reference posts open with "I" — so a pattern like this let loose on the body would fire on
+ * every post and mean nothing. It is applied ONLY to the text of a claim the drafter has declared
+ * as added, where the question is narrow and answerable: does this addition assert that Josh did,
+ * saw, heard or was told something?
+ *
+ * Deliberately not exhaustive, and it does not need to be. The model rubric judges the draft as a
+ * whole; this is the mechanical floor under it, and a floor that catches the common forms is worth
+ * more than a clever one nobody can read.
+ */
+const FIRST_PERSON_FACT =
+  /\b(?:I|we)\s+(?:just\s+|then\s+|once\s+|recently\s+)?(?:ran|run|tested|measured|checked|tried|built|sent|called|asked|told|saw|watched|noticed|found|spoke|spoken|talked|met|sat|heard|learned|learnt|audited|analysed|analyzed|reviewed|counted|scraped|pulled|compared|shipped|launched|hired|fired|lost|won|closed|charged|paid|billed)\b|\b(?:told|said to|asked|emailed|messaged|called)\s+(?:me|us)\b|\b(?:my|our)\s+(?:client|clients|customer|customers|team|rep|reps|call|calls|meeting|meetings|data|numbers|test|tests|audit)\b/i;
+
+/**
+ * An addition, which rests on nothing and so is judged on what it is rather than on a span.
+ *
+ * Four refusals, and each of them is a thing Josh asked to keep hard — plus the reason, which he
+ * asked to read.
+ */
+function verifyAddition(claim: Claim): ClaimVerdict {
+  const text = (claim.claim ?? "").trim();
+  const why = (claim.why ?? "").trim();
+
+  if (text.length === 0) {
+    return { claim, ok: false, reason: "an addition with no text is not something he can check" };
+  }
+  if (why.length < MIN_WHY_LENGTH) {
+    return {
+      claim,
+      ok: false,
+      reason:
+        `an addition needs a "why" saying what it rests on, because that is the thing he reads ` +
+        `before approving it. He asked to be checking these, not told they exist`,
+    };
+  }
+
+  if (claim.kind !== "added") {
+    // Defensive: only reachable if a caller routes a non-added claim here.
+    return { claim, ok: false, reason: `kind "${claim.kind}" is not an addition` };
+  }
+
+  const numbers = extractNumbers(text);
+  if (numbers.length > 0) {
+    return {
+      claim,
+      ok: false,
+      reason:
+        `an addition may not carry a figure, and this one cites ${numbers.join(", ")}. A number ` +
+        `has to trace to something he said — that line is his and it stays hard. State the point ` +
+        `without the quantity, or find the span`,
+    };
+  }
+
+  const quoted = extractQuotedStrings(text);
+  if (quoted.length > 0) {
+    return {
+      claim,
+      ok: false,
+      reason:
+        `an addition may not carry a quotation, and this one quotes ` +
+        `${quoted.map((q) => `"${q}"`).join(", ")}. A quote needs somebody who actually said it`,
+    };
+  }
+
+  if (FIRST_PERSON_FACT.test(text)) {
+    return {
+      claim,
+      ok: false,
+      reason:
+        `an addition may not assert something Josh did, saw or was told — this one reads as a ` +
+        `first-person account. Argument, reasoning and a general example are what may be added; ` +
+        `an episode of his life is not, even marked, because he would be checking it against his ` +
+        `own memory rather than reviewing it`,
+    };
+  }
+
+  return { claim, ok: true };
+}
+
 function verifyOne(claim: Claim, entry: SourceEntry): ClaimVerdict {
+  // An addition rests on nothing in the entry, so the span checks below cannot apply to it.
+  if (claim.kind === "added") return verifyAddition(claim);
+
   const span = (claim.source_span ?? "").trim();
 
   if (span.length === 0) {
@@ -390,12 +532,21 @@ export function verifyDraft(
     );
   }
 
+  /*
+   * Accepted additions only. A refused one is already in `failures` and nothing was stored, so
+   * carrying it here too would let a caller read him an addition that is not in the post.
+   */
+  const additions = verdicts
+    .filter((v) => v.ok && v.claim.kind === "added")
+    .map((v) => v.claim);
+
   return {
     ok: failures.length === 0,
     verdicts,
     unsourcedNumbers,
     unsourcedQuotes,
     unclearedNames,
+    additions,
     borrowedPhrases,
     failures,
   };

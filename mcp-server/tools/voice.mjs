@@ -574,19 +574,32 @@ export const referencePostTools = [
     config: {
       title: "Read the reference writers' actual posts",
       description:
-        "The real posts by the eight writers Josh chose for their storytelling structure — Matt " +
-        "Barker, Jen Allen-Knuth, Eric Nowoslawski, Julia Carter, Ryan Carlin, Curtis Howland, " +
-        "Aman Ghataura, Adam Treboutat. Use it whenever he wants to SEE how one of them writes: " +
+        "The real posts by the writers Josh chose for their storytelling structure. Use it " +
+        "whenever he wants to SEE how one of them writes: " +
         "\"show me Matt Barker's recent posts\", \"how does he open\", \"what did he post about " +
         "distillation\". Read them to him, quote them to him, discuss them. " +
         "What must never happen is their words reaching a draft of his: borrow the shape, never the " +
         "sentence. A post of Josh's that could have been Matt's fails the only test that matters.",
       inputSchema: {
+        // Built from the canonical list rather than written out. This was hand-typed and had been
+        // missing Tim Scheuer since Josh added him as the ninth on 5 November, so a session reading
+        // its own tool description would have told him that writer was not available.
         handle: z.string().optional().describe(
-          "One of: mattjbarker1, demandjen1, outboundphd, juliacarter98, ryanscarlin, " +
-            "curtishowland, amangrowth, adam-treboutat. Omit for the newest across all of them.",
+          `One of: ${WRITER_CHOICES}. Omit for the newest across all of them.`,
         ),
-        limit: z.number().int().min(1).max(50).optional().describe("Default 10"),
+        /*
+         * The cap was 50 with nothing to page past it — the second half of what Josh reported on
+         * 18 November: "get_reference_posts stops at 50 with no paging."
+         *
+         * 200 rather than unlimited, and the reason is one layer down: PostgREST truncates any
+         * response at 1,000 rows regardless of what is asked for, silently. A tool that accepted
+         * `limit: 5000` would return 1,000 and look like the whole corpus. `offset` is the honest
+         * way past that, and the reply says whether more remain.
+         */
+        limit: z.number().int().min(1).max(200).optional().describe("Default 10, up to 200"),
+        offset: z.number().int().min(0).optional().describe(
+          "Skip this many first. With limit, this is how to page through more than one screenful.",
+        ),
         since: z.string().optional().describe("ISO date, e.g. 2026-09-01"),
         search: z.string().optional().describe("Only posts containing this text"),
       },
@@ -600,6 +613,7 @@ export const referencePostTools = [
         order: "posted_at.desc",
         limit: String(args.limit ?? 10),
       };
+      if (args.offset) query.offset = String(args.offset);
       if (args.handle) query.handle = `eq.${args.handle}`;
       if (args.since) query.posted_at = `gte.${args.since}`;
       if (args.search) query.text = `ilike.*${args.search}*`;
@@ -676,6 +690,180 @@ export const referencePostTools = [
 
     async handler(args, { db }) {
       return await writerShapeFor(db, args.handle);
+    },
+  },
+
+  {
+    name: "what_did_well",
+    config: {
+      title: "What has done well for a reference writer lately",
+      description:
+        "Their recent posts ranked against THEIR OWN usual, not against each other. Josh asked for " +
+        "this on 18 November: \"add a way to ask what's done well for a writer lately, ranked " +
+        "against their own usual.\" Follower counts across these accounts differ by two orders of " +
+        "magnitude, so an un-normalised ranking just puts the biggest account's habits first — " +
+        "every figure here is a multiple of that writer's own median post.\n\n" +
+        "READ IT TO HIM; IT IS NOT A RULE AND MUST NOT BECOME ONE. Nothing in the gate sees a " +
+        "reaction count. Migration 0004 is explicit about why: a system optimising freely against " +
+        "LinkedIn engagement finds its way to engagement bait, because that is what the metric " +
+        "rewards. This ranks a swipe file for a human to read and goes no further.",
+      inputSchema: {
+        handle: z.string().optional().describe(
+          `One of: ${WRITER_CHOICES}. Omit for every writer that has counts stored.`,
+        ),
+        days: z.number().int().min(1).max(365).optional().describe(
+          "How far back counts as 'lately'. Default 30.",
+        ),
+        limit: z.number().int().min(1).max(50).optional().describe("How many to return. Default 10."),
+      },
+    },
+
+    async handler(args, { db }) {
+      const days = args.days ?? 30;
+      const since = new Date(Date.now() - days * 86_400_000).toISOString();
+
+      /*
+       * The baseline is the writer's WHOLE stored history, not the recent window.
+       *
+       * A median computed over the same posts being ranked would make roughly half of them
+       * "above average" by construction, whatever happened. The comparison Josh asked for is
+       * against their usual, and their usual is everything we hold.
+       */
+      const query = {
+        /*
+         * NO POST TEXT, and a guard caught the first version of this reaching for it.
+         *
+         * reference-split.test.ts asserts that exactly ONE select in this file asks for the
+         * writers text, and its reason is worth keeping: "If a second place starts selecting from
+         * this table... this is where it is noticed, because by then the symptom is a draft that
+         * sounds like somebody else and the cause is three weeks old." This tool wanted each
+         * posts first line beside its figure, which is pleasant and not worth a second door.
+         *
+         * The ranking says WHICH post. get_reference_posts is the one door that returns the words.
+         */
+        select: "handle,author_name,url,posted_at,words,has_line_breaks," +
+          "reaction_count,comment_count",
+        order: "posted_at.desc",
+        limit: "1000",
+        reaction_count: "not.is.null",
+      };
+      if (args.handle) query.handle = `eq.${args.handle}`;
+
+      const rows = await db.select("reference_writer_posts", query);
+
+      /*
+       * THE HONEST ANSWER FIRST, BECAUSE FOR MOST OF THEM IT IS THE ONLY ONE.
+       *
+       * This tool exists because the counts are missing. Measured 18 November: of 2,148 stored
+       * posts, reaction counts exist on mattjbarker1 (250), tim-scheuer-91b005237 (248) and ONE row
+       * of curtishowland. Six writers have none at all, and nothing newer than 19 October was
+       * stored for seven of them.
+       *
+       * So an empty result here is not "nothing did well". Saying which it is, and what would fix
+       * it, is the whole difference between this tool and a value nothing reads.
+       */
+      if (rows.length === 0) {
+        const who = args.handle ? `"${args.handle}"` : "any reference writer";
+        return {
+          writer: args.handle ?? null,
+          window_days: days,
+          posts: [],
+          why_empty:
+            `No stored post for ${who} carries a reaction count, so there is nothing to rank. ` +
+            `This is a gap in what was collected, NOT a finding that nothing performed. Counts can ` +
+            `only be refreshed by an Apify-backed run: the console strips line breaks, and a flat ` +
+            `row is refused over a post stored with its shape so it cannot bring a fresher count ` +
+            `with it.`,
+          what_would_fix_it:
+            `APIFY_TOKEN in the vault. corpus-refresh then collects all nine on Monday and ` +
+            `Thursday mornings and fills these in; run_worker with "corpus" does it now.`,
+        };
+      }
+
+      const byHandle = new Map();
+      for (const r of rows) {
+        if (!byHandle.has(r.handle)) byHandle.set(r.handle, []);
+        byHandle.get(r.handle).push(r);
+      }
+
+      const median = (ns) => {
+        const s = ns.filter((n) => typeof n === "number").sort((a, b) => a - b);
+        if (s.length === 0) return 0;
+        const mid = Math.floor(s.length / 2);
+        return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+      };
+
+      const ranked = [];
+      const thin = [];
+      for (const [handle, posts] of byHandle) {
+        /*
+         * Fewer than 15 posts is not a median worth dividing by. The same floor the hook-pattern
+         * build uses, and its reason: "a median of six posts is not one."
+         */
+        if (posts.length < 15) {
+          thin.push({ handle, posts_with_counts: posts.length });
+          continue;
+        }
+        const med = median(posts.map((p) => p.reaction_count));
+        if (med <= 0) {
+          thin.push({ handle, posts_with_counts: posts.length, why: "median is zero" });
+          continue;
+        }
+        for (const p of posts.filter((p) => (p.posted_at ?? "") >= since)) {
+          ranked.push({
+            handle,
+            author_name: p.author_name,
+            posted_at: p.posted_at,
+            url: p.url,
+            reactions: p.reaction_count,
+            comments: p.comment_count,
+            // The figure Josh asked for: 1.00 is that writer's own median post.
+            vs_their_own_median: Math.round((p.reaction_count / med) * 100) / 100,
+            their_median: med,
+            words: p.words,
+          });
+        }
+      }
+
+      ranked.sort((a, b) => b.vs_their_own_median - a.vs_their_own_median);
+
+      return {
+        writer: args.handle ?? null,
+        window_days: days,
+        means: "1.00 is that writer's own median post across everything stored for them. 2.00 is " +
+          "twice their usual.",
+        posts: ranked.slice(0, args.limit ?? 10),
+        ...(ranked.length === 0 && {
+          why_empty:
+            `Counts are stored, but none of these posts was published in the last ${days} days. ` +
+            `The newest stored post for most of these writers is 19 October — try a wider window, ` +
+            `or refresh the corpus.`,
+        }),
+        ...(thin.length > 0 && {
+          not_ranked: thin,
+          not_ranked_means: "Too few posts with counts to have a median worth comparing against. " +
+            "A median of six posts is not a median.",
+        }),
+        to_read_them: "This says WHICH posts, not what they say. get_reference_posts is the one " +
+          "door that returns their words — pass the handle and a since date from the dates above. " +
+          "Talk about how they are built; a run of their words in a draft of his fails 8.3 and the " +
+          "only test that matters.",
+        /*
+         * Found by running this on 18 November, which is why it is here rather than left for a
+         * session to discover live. Matt Barker's highest-performing stored post is 17.1 times his
+         * own median, and it is "Andddddd we have a baby girl". Second and third are 5.3 and 4.3.
+         *
+         * So the top of this list is reliably personal news, and it tells Josh nothing about how to
+         * build a B2B post. Proposal 25's evidence had already had to strip "announcements, job ads
+         * and personal posts" by hand before it could measure anything structural. A ranking that
+         * presents a birth announcement as the thing to learn from is worse than no ranking.
+         */
+        read_past_the_top_if_it_is_personal: "Engagement ranks personal news first and it is not a " +
+          "lesson. The strongest post in this corpus is a baby announcement at 17 times its " +
+          "author's median; a job move or a bereavement does the same. Skip those and look at the " +
+          "best post that is actually about the work — that is the one with something to take.",
+        not_a_rule: "Reported, never tuned against. No gate check sees a reaction count.",
+      };
     },
   },
 ];
@@ -1302,9 +1490,82 @@ export const sentinelTools = [
             "The share of posts whose first digit arrives after line one. That is the curiosity " +
             "gap as his hooks section defines it: investment first, then the cut.",
         },
-        openings_he_has_used: recent === null
-          ? { checked: false, why: "The read of his earlier drafts failed, so nothing was compared." }
-          : { checked: recent.length, lines: recent },
+        /*
+         * MODEL-WRITTEN OPENINGS, AND THE LABEL MATTERS.
+         *
+         * This reads the last 60 `drafts` rows, which are bodies the system wrote. It is a
+         * repetition guard — do not open a post the way the last six opened — and it was called
+         * "openings he has used", which reads as evidence of his taste. It is not. Renamed
+         * 18 November, when Josh pointed out the system holds none of his own openings: "Of the
+         * last 11 posts, I typed the surviving opening myself on 3, and on 3 more it came from my
+         * idea or my edit. Those are the best examples you've got."
+         */
+        openings_already_written_for_him: recent === null
+          ? { checked: false, why: "The read of earlier drafts failed, so nothing was compared." }
+          : {
+            checked: recent.length,
+            lines: recent,
+            means: "Openings the SYSTEM wrote, not his. Use them to avoid repeating one, never as " +
+              "evidence of what he likes.",
+          },
+
+        /*
+         * THE OPENINGS HE TYPED HIMSELF — the best examples there are, and nothing read them.
+         *
+         * Josh, 18 November: "Of the last 11 posts, I typed the surviving opening myself on 3, and
+         * on 3 more it came from my idea or my edit. Those are the best examples you've got."
+         *
+         * He was right that they existed and right that nothing used them. `outcomes` stores the
+         * body a draft was filed with and the body he approved, and `joshs_notes` already hands
+         * both back as `before_text` and `after_text` — the drafting brief has used them since
+         * 2 November to show what he changed. Nobody had ever taken the FIRST LINE of a pair and
+         * noticed that when it differs, the one on the right is an opening he wrote.
+         *
+         * No new read, no new grant: the same RPC the drafting brief calls, asked a question nobody
+         * had asked it. Weighed above everything else in this brief — the corpus figures are
+         * strangers, and these are him.
+         */
+        openings_he_wrote_himself: await (async () => {
+          try {
+            const rows = await db.rpc("joshs_notes", { p_limit: 120 });
+            const his = [];
+            for (const r of rows ?? []) {
+              const before = firstLine(r.before_text);
+              const after = firstLine(r.after_text);
+              // Only when he CHANGED it. An identical first line means he approved ours, which is
+              // weaker evidence and is already covered by the block above.
+              if (!after || after === before) continue;
+              if (args.moment_id && Number(r.moment_id) === Number(args.moment_id)) continue;
+              his.push({
+                he_wrote: after,
+                over: before || "(the draft had no first line)",
+                on: r.moment_title ?? null,
+                when: r.said_at ? String(r.said_at).slice(0, 10) : null,
+              });
+            }
+            if (his.length === 0) {
+              return {
+                count: 0,
+                means: "No post yet where he rewrote the opening and both versions were captured. " +
+                  "That is a gap in the record, not evidence that he is happy with ours — the " +
+                  "pairing needs record_post_verdict to have stored the body he approved.",
+              };
+            }
+            return {
+              count: his.length,
+              weigh_these_highest: "These are openings JOSH TYPED, over one the system had written. " +
+                "Everything else in this brief is what strangers do. Read the shape he reached for " +
+                "and what he dropped to get there.",
+              openings: his.slice(0, 12),
+            };
+          } catch (err) {
+            return {
+              count: false,
+              why: `Could not read his approved bodies (${String(err).slice(0, 120)}). Not a ` +
+                `finding that he has never rewritten an opening — nothing looked.`,
+            };
+          }
+        })(),
         /*
          * WHAT HE HAS ACTUALLY PICKED, which is the only hook evidence here that is his.
          *

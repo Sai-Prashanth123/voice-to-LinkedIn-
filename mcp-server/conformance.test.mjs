@@ -53,14 +53,29 @@ test("it accepts nothing the gate is not made of", () => {
 test("the database accepts exactly the same set of keys", () => {
   // Grants and constraints are the real boundary. A key this tool takes and Postgres refuses is a
   // failure at the write door, after the judgement has already been made.
-  const sql = readFileSync(join(HERE, "..", "supabase", "migrations", "0049_shape_check.sql"), "utf8");
-  for (const check of GATE_CHECKS) {
-    assert.ok(
-      sql.includes(`'${check.key}'`) || check.key !== "shape",
-      `the gate_runs constraint has no place for "${check.key}"`,
-    );
-  }
-  assert.ok(sql.includes("'shape'"), "0049 is the migration that added shape; it must name it");
+  /*
+   * THIS TEST PASSED VACUOUSLY UNTIL 18 NOVEMBER.
+   *
+   * It read `sql.includes(key) || check.key !== "shape"`, so for every key that is not "shape" the
+   * second half was true and the assertion held whatever the migration said. It could only ever
+   * check one of the keys, and it was named after the one it had been written for. A tenth check
+   * was added and this would have gone green with no place in the constraint for it — the exact
+   * defect this file exists to catch, sitting inside this file.
+   *
+   * It now reads the migration that currently defines the constraint and requires EVERY key, with
+   * no escape clause. Each such migration drops and re-adds the constraint, so the newest one is
+   * the whole truth; when the next check lands, the name below has to change with it, and a stale
+   * name fails loudly instead of quietly.
+   */
+  const CONSTRAINT_MIGRATION = "0063_holds_together_check.sql";
+  const sql = readFileSync(join(HERE, "..", "supabase", "migrations", CONSTRAINT_MIGRATION), "utf8");
+  const absent = GATE_CHECKS.filter((c) => !sql.includes(`'${c.key}'`)).map((c) => c.key);
+  assert.deepEqual(
+    absent,
+    [],
+    `${CONSTRAINT_MIGRATION} leaves no place in gate_runs_known_check for ${absent.join(", ")}. ` +
+      `An insert for that key is refused at the write door AFTER the judgement has been made.`,
+  );
 });
 
 test("nothing counts the checks by a number written down twice", () => {

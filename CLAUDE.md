@@ -17,8 +17,22 @@ person in his field could have written is a failure, however well written it is.
 ## The three that are never negotiable
 
 1. **Never invent anything.** Every factual claim, quote, number and name in a draft must trace to
-   something Josh actually said, recorded in the idea bank. Missing detail stays missing and the post
-   works without it. Write around a gap; never fill one.
+   something Josh actually said, recorded in the idea bank.
+
+   **You may add argument, and you must declare it.** Changed 18 November 2026 because he asked:
+   *"I want Claude to add detail, examples and argument I haven't given, and to fill a gap when I
+   say it can. Mark each addition in the ledger and read them back to me before I approve, so I'm
+   checking them rather than being blocked by them."* So a thin moment is no longer a reason to
+   refuse, or to hand him a list of options to choose from — on 12 November it did both and neither
+   post reached the review he was waiting for. Reasoning, an implication, a general example: write
+   it, and give it a ledger entry of kind `added` with a one-line `why`. That line is what he reads.
+
+   **Four things are still refused, mechanically, declared or not:** a figure of any kind including
+   a written-out one, a quotation, an uncleared name, and any account of something Josh did, saw or
+   was told. The last is the one to watch — *"I ran the same test"* and *"a founder told me the
+   same"* are inventions with a label on, and he would be checking them against his own memory
+   rather than reviewing them. Make the point in the third person or leave it out. Missing detail
+   still stays missing: write around a gap in his facts, even while filling one in the argument.
 2. **Never publish.** Nothing reaches LinkedIn except a post Josh has approved with a date, through
    `mark_ready`. The database refuses every other route, four ways. Do not imply something has gone
    out when it has not.
@@ -59,6 +73,7 @@ Postgres.
 | He says | You call |
 |---|---|
 | anything that happened to him | **one_step:** `start_post` with his words. **interviewed:** `capture_thought`, then ask the question it returns |
+| "actually, make it about X" — more on a post already started | `continue_post`, then `write_post` with `redo`. **Not `start_post`**: that makes a second idea, and nothing in the bank is ever deleted (6.3). One idea became seven that way on 10 November |
 | answers your questions | `answer_interview`, **his exact words**, untidied |
 | "write the next one" | **one_step:** ask what he wants written, then `start_post`. **interviewed:** `next_work`, then the **draft-post** skill |
 | "stop asking me questions" | `set_writing_mode` — only ever when he asks for it |
@@ -71,6 +86,7 @@ Postgres.
 | "not that one" / "not yet" | `kill_idea` with a reason / `park_idea` |
 | "never open with a question" | `add_library_rule`, immediately, in his words |
 | "show me Matt Barker" | `get_reference_posts`, `analyse_reference_writer` |
+| "what's doing well for them lately" | `what_did_well` — ranked against that writer's **own** median, never against each other |
 | "the hook isn't strong enough" | the **josh-hook** skill — not a rewrite from instinct |
 | "draft me some comments" | the **josh-comment** skill. He pastes the posts, or the poll found them |
 | "watch these people" / "stop those" | `watch_creator` / `stop_watching_creator` — **only** ever names he gave you |
@@ -86,7 +102,11 @@ Thirteen, in `.claude/skills/`. Use them rather than writing from instinct.
 
 - **josh-voice** — before writing, editing or judging anything in his voice.
 - **draft-post** — writing a post from an idea, or redrafting after a rejection.
-- **gate-check** — every check the brief hands back, judged on its own rubric, adversarially.
+- **gate-check** — every check the brief hands back, judged on its own rubric, adversarially. Never
+  state how many there are: count them from `GATE_CHECKS`. A tenth, `holds_together`, was added on
+  18 November at his request, for contradictions and for a post drifting off its one point — he had
+  given that note three times to drafts that passed everything else, because every other check reads
+  a post as a set of properties and that fault is a property of the sequence.
 - **josh-hook** — the first line, added 2 November. The only line most readers see and the only
   one `hook_opens_loop` judges. It carries what the writers measurably do with an opening, and the
   two detectors that were refusing the hook he asked for out loud. It JUDGES one line.
@@ -164,8 +184,23 @@ Four things catch people out:
 
 ## The reference writers
 
-He chose eight for their storytelling structure — Matt Barker most of all. You can read their posts
-(`get_reference_posts`) and discuss them freely.
+He chose eight for their storytelling structure — Matt Barker most of all — and added Tim Scheuer on
+5 November, making nine. You can read their posts (`get_reference_posts`) and discuss them freely.
+It pages now: `offset`, and up to 200 at a time. PostgREST truncates any response at 1,000 rows
+whatever you ask for, which is the real ceiling.
+
+`worker-corpus` collects all nine on Monday and Thursday mornings, added 18 November because nothing
+ever had: seven of the nine had carried **no reaction count since 20 October**. Which key is in the
+vault decides what a run can do, and it says so rather than implying it worked — Apify keeps line
+breaks and refreshes everything, while the console strips them, so it may only add posts not already
+held. Six columns here are counted from line breaks and `merge-duplicates` lets a null overwrite, so
+a flat row is refused over a shaped one. `run_worker` with `corpus` runs it now.
+
+`what_did_well` ranks a writer's recent posts against **their own** median, because follower counts
+across these accounts differ by two orders of magnitude. Read it to him; it is never a rule and no
+gate check sees a reaction count. Two things to know before reading it out: engagement puts personal
+news first — the strongest post in the corpus is a birth announcement at 17× its author's median —
+and for six of the nine writers it will correctly tell you there are no counts stored at all.
 
 **Take the shape. Never the words.** Not quoted, not near-quoted, not paraphrased into a draft. If a
 run of words from one of them could be recognised in something of his, it has been used wrongly.

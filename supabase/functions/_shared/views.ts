@@ -266,9 +266,13 @@ export const CHECK_NEEDS_SECTION: Record<string, string> = {
  * THE RULE
  *
  * A check is shown the post, and nothing else unless its rubric cannot be answered without it.
- * Three of the eight compare the post against something outside itself, and they are named here.
- * The other five — hook_opens_loop, voice_guide, banned_phrases, aimed_at_someone, and anything
- * added later — judge the text in front of them.
+ * Four of them compare the post against something outside itself, and they are named here. The
+ * rest — hook_opens_loop, voice_guide, banned_phrases, aimed_at_someone, shape, and anything added
+ * later — judge the text in front of them.
+ *
+ * The counts in this file are deliberately written as "four" and "the rest" rather than as totals.
+ * A number spelled out beside a list that grows is the defect this repository keeps finding: both
+ * of the sentences above were written when there were eight checks and were still here at ten.
  *
  * WHY IT IS IN THIS FILE
  *
@@ -285,6 +289,15 @@ export const CHECK_SEES_SOURCE = new Set([
   "anyone_else",
   // Shown who is being protected — explicitly not as grounds to fail. See the rubric's guard.
   "identifiable",
+  /*
+   * Added 18 November with the check itself. "Drift off its one point" is unanswerable without
+   * knowing what the point was: the post's own opening is evidence of where it meant to go, but a
+   * post that drifts has an opening that drifted too. The material says what the moment was about.
+   *
+   * It is NOT given this to check the claims against — claims_trace owns that, and the rubric says
+   * so in those words.
+   */
+  "holds_together",
 ]);
 
 /** Only the check that asks who the post is for. */

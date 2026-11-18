@@ -158,3 +158,77 @@ export function selfEchoReport(echo) {
   );
   return lines;
 }
+
+/* ────────────────────────────────────────────────────────────────────────────────────────────── *
+ * HIS SPOKEN WORDS, LIFTED STRAIGHT INTO THE POST
+ * ────────────────────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Runs of his own typed or spoken words that the draft reproduces verbatim.
+ *
+ * WHY, AND WHY IT IS THE SPAN RULE'S SHADOW
+ *
+ * Josh, 18 November: "It copies my spoken words too closely - I tend to just give a stream of
+ * conciousness for it to make sense of. Keep the claim, rewrite the words. My guess is the ledger
+ * wanting exact spans pulls my phrasing into the post."
+ *
+ * He is right, and it is structural rather than a habit of any one drafter. `his_words` — the join
+ * of every raw_inputs row — is a CLAIMABLE field, and `claims.ts` checks a span as a verbatim
+ * substring of the field it names. So the cheapest way to make any claim verify is to lift the
+ * sentence he spoke into the body and cite it as its own evidence. The ledger passes, every
+ * mechanical check passes, and the post is a transcript.
+ *
+ * And nothing looked. The seven-word shingle guard is pointed exclusively at the eight reference
+ * writers (8.3), `selfEcho` above compares a draft against earlier DRAFTS, and no code anywhere
+ * compared a draft against the material it was written from. A draft that was 60% his spoken
+ * sentences was reported as `borrowed_phrases: { checked: N, found: 0 }` — truthfully, about a
+ * different question.
+ *
+ * ADVISORY, AND IT HAS TO STAY THAT WAY. Some of his phrasing is exactly what should survive: the
+ * voice guide's whole argument is that the shape of his thinking transfers, and a signature term of
+ * his is not a borrowing. A quote he gave is meant to appear verbatim. What this catches is the
+ * failure mode he described — long runs of stream-of-consciousness arriving unedited — and only a
+ * reader can tell that from a line worth keeping.
+ *
+ * @param body     the draft
+ * @param hisWords the `his_words` field of the entry, or null/empty when he typed nothing
+ * @returns {{checked: boolean, source_words: number, runs: Array<{run: string}>}}
+ */
+export function liftedFromHisWords(body, hisWords) {
+  const source = String(hisWords ?? "").trim();
+  if (!source) return { checked: false, source_words: 0, runs: [] };
+
+  const index = new Set();
+  for (const run of shinglesOf(source)) index.add(hashRun(run));
+
+  // Same primitive as the reference-writer guard, pointed the other way.
+  const runs = borrowedRuns(body, index).map((run) => ({ run }));
+
+  return {
+    checked: true,
+    source_words: source.split(/\s+/).filter(Boolean).length,
+    runs,
+  };
+}
+
+/**
+ * The reportable form. Null when there is nothing to say, like `selfEchoReport`.
+ *
+ * The caller prints the silence too, because "he typed nothing to compare against" and "nothing was
+ * lifted" are different answers and only one of them is good news.
+ */
+export function liftedReport(lifted) {
+  if (!lifted || !lifted.checked || lifted.runs.length === 0) return null;
+
+  const shown = lifted.runs.slice(0, 3).map((r) => `"${r.run}"`).join(", ");
+  return [
+    `${lifted.runs.length} passage(s) of ${SHINGLE_WORDS} words or more in this post are his own ` +
+    `words verbatim: ${shown}${lifted.runs.length > 3 ? ` and ${lifted.runs.length - 3} more` : ""}.`,
+    "KEEP THE CLAIM, REWRITE THE WORDS. He asked for this on 18 November: he gives a stream of " +
+    "consciousness for the system to make sense of, not a draft to transcribe. His spoken filler " +
+    "is not his written voice, and the ledger's span rule makes lifting the easy path — a span is " +
+    "evidence for a claim, not a sentence to paste.",
+    "A quote he gave, and a signature term of his, are not this. Read these to him and let him " +
+    "decide which were deliberate.",
+  ];
+}

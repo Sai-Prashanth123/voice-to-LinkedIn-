@@ -147,6 +147,21 @@ export async function pollDetached(
   db: SupabaseClient,
   write: OptionWriter = optionsFor,
 ): Promise<Response> {
+  await logEvent(db, "creator_poll_started", "info", {
+    means: "The response goes out before the harvest finishes, because the harvest does not fit " +
+      "in the 30 second budget invoke_worker allows. A start with no finish beside it is a run " +
+      "that was torn down part-way.",
+  }).catch(() => {});
+
+  /*
+   * The start is filed BEFORE the work begins, not alongside it.
+   *
+   * It was the other way round until a test caught it: the work promise starts
+   * executing the moment it is created, and the first thing it does is load secrets, which
+   * files an event of its own on failure. So the first event of a run could be a secrets
+   * failure with no start above it — which is precisely the unreadable state this event was
+   * added to prevent.
+   */
   const work = (async () => {
     try {
       await loadSecrets(db);
@@ -159,12 +174,6 @@ export async function pollDetached(
         .catch(() => {});
     }
   })();
-
-  await logEvent(db, "creator_poll_started", "info", {
-    means: "The response goes out before the harvest finishes, because the harvest does not fit " +
-      "in the 30 second budget invoke_worker allows. A start with no finish beside it is a run " +
-      "that was torn down part-way.",
-  }).catch(() => {});
 
   try {
     // The same hold used by `nudge` in jobs.ts: it keeps the isolate alive past the response on

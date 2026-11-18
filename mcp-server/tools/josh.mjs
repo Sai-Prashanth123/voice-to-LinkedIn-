@@ -439,10 +439,11 @@ export const joshTools = [
         "Publishing is deliberately NOT on the list: a post goes out on the date he set, never " +
         "because something asked for it now.",
       inputSchema: {
-        worker: z.enum(["select", "learn", "ops", "triage", "engage"]).describe(
+        worker: z.enum(["select", "learn", "ops", "triage", "engage", "corpus"]).describe(
           "select = choose what to write next · learn = look for library changes · " +
             "ops = the health check · triage = read waiting candidates · " +
-            "engage = check his creators for new posts and draft comment options now",
+            "engage = check his creators for new posts and draft comment options now · " +
+            "corpus = collect the reference writers' latest posts and reaction counts now",
         ),
       },
     },

@@ -27,6 +27,9 @@ import { recordEditDiff } from "../_shared/outcome.ts";
 import { notice } from "../_shared/notices.ts";
 import { enqueue, json } from "../_shared/jobs.ts";
 import { oneStepMode } from "../_shared/mode.ts";
+// Counted, never written down. This notice goes straight to Josh, and it said "eight ways" from
+// 14 to 28 October because the number was spelled out in a template literal no guard could read.
+import { GATE_CHECKS } from "../_shared/prompts.ts";
 import {
   applyRecencySpacing,
   ineligible,
@@ -335,7 +338,7 @@ Deno.serve(async () => {
         "ready_to_write",
         `${wrote === 1 ? "An idea is" : `${wrote} ideas are`} ready to write.\n\n` +
           `Say "write the next one" — it will pick ${wrote === 1 ? "it" : "them"} up with ` +
-          `everything you told me, and every draft is checked nine ways before you see it.`,
+          `everything you told me, and every draft is checked ${GATE_CHECKS.length} ways before you see it.`,
         { actedOn: ["next_work"] },
       );
     } catch (err) {

@@ -103,7 +103,27 @@ export interface Draft {
   gate_reason: string | null;
 }
 
-/** The six checks of 9.6, plus two we add. Each runs as its own call. */
+/**
+ * The gate's check keys. Kept in step with GATE_CHECKS by a test, not by hope.
+ *
+ * WHY IT IS WRITTEN OUT AND NOT DERIVED
+ *
+ * This was a hand-written union of eight. `shape` was added on 14 October and this was not
+ * touched, so it sat wrong for over a month, and nothing caught it because nothing imports it — a
+ * type nobody reads cannot fail a build, so being wrong costs nothing until somebody trusts it.
+ *
+ * Deriving it was tried first, on 18 November, and backed out. `GATE_CHECKS` is annotated
+ * `GateCheckSpec[]`, whose `key` is `string`, so `(typeof GATE_CHECKS)[number]["key"]` resolves to
+ * `string`: a type named after ten specific keys that accepts every string there is. That was
+ * found by probing it with a key that does not exist and watching it typecheck — worse than the
+ * stale union, because it looks maintained. Making the keys literal with `as const` fixed the type
+ * and made the array readonly, which broke six call sites that pass it as a mutable array. The
+ * ripple was wider than the benefit.
+ *
+ * So it is written out, and `gate-keys-agree.test.ts` fails if this list and GATE_CHECKS differ.
+ * That is the same arrangement `s6-gate.mjs` uses for the same reason, and it is the only one here
+ * that has ever caught a divergence.
+ */
 export type GateCheckKey =
   | "anyone_else"
   | "claims_trace"
@@ -112,7 +132,9 @@ export type GateCheckKey =
   | "voice_guide"
   | "names_cleared"
   | "banned_phrases"
-  | "identifiable";
+  | "identifiable"
+  | "shape"
+  | "holds_together";
 
 export interface Job {
   id: number;

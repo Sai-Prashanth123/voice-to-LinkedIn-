@@ -339,10 +339,23 @@ async function daily(db: SupabaseClient): Promise<Response> {
    * nothing reads — and the person who eventually noticed was the client, which is the worst
    * possible detector.
    *
-   * So this is the noticing. The scrape itself is still a script someone runs, deliberately: it
+   * So this is the noticing, and since 18 November it is no longer the only half that works.
+   *
+   * This comment used to end: "The scrape itself is still a script someone runs, deliberately: it
    * needs a key that does not live in this vault, and automating the collection of a corpus that
-   * currently comes back without line breaks would be automating something half useless. This says
-   * when it went stale, which is the half that failed.
+   * currently comes back without line breaks would be automating something half useless." Josh
+   * asked for the collection on 18 November — seven of his nine writers had carried no reaction
+   * count since 20 October — so `worker-corpus` now runs it on Monday and Thursday mornings.
+   *
+   * Both halves of that old reasoning are still respected rather than overridden. The key still has
+   * to be in the vault, and `_shared/corpus.ts` reports `corpus_blocked` rather than pretending
+   * when it is not; and with only the console key it ADDS posts it does not already hold and says
+   * it cannot refresh the rest, because the console strips line breaks and six columns here are
+   * counted from them.
+   *
+   * This alarm therefore now means something different and more useful: not "nobody has run the
+   * script" but "the scheduled run is not landing". That is a fault to investigate rather than a
+   * chore to do.
    */
   const { data: freshest } = await db
     .from("reference_writer_posts")
@@ -360,10 +373,13 @@ async function daily(db: SupabaseClient): Promise<Response> {
     const days = Math.floor((Date.now() - new Date(freshest.scraped_at).getTime()) / 86_400_000);
     if (days >= 7) {
       alerts.push(
-        `The reference writers were last collected ${days} days ago. We told Josh at the kickoff ` +
-          `that we keep scraping them, and in September they went a month without a refresh before ` +
-          `he noticed rather than us. Run: node scripts/scrape-sentinels.mjs --out <file>, then ` +
-          `load-reference-posts.mjs --apply.`,
+        `The reference writers were last collected ${days} days ago, and corpus-refresh runs ` +
+          `every Monday and Thursday — so the schedule is not landing, rather than nobody having ` +
+          `got round to it. Read the event log: corpus_blocked means no scraping key is in the ` +
+          `vault, corpus_failed carries the error, and a corpus_started with neither beside it ` +
+          `means the run was torn down part-way. It can also be run on demand. In September they ` +
+          `went a month without a refresh before Josh noticed rather than us, which is why this ` +
+          `alarm exists.`,
       );
     }
   }

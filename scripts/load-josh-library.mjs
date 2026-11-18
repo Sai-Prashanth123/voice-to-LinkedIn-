@@ -285,7 +285,7 @@ gets cut to fit one.`,
 
   gate_rules: `# Gate rules
 
-Constraints the gate applies on top of the eight checks it always runs. All of these are Josh's,
+Constraints the gate applies on top of the checks it always runs. All of these are Josh's,
 from *Reference library inputs* v1.0.
 
 ## Never
