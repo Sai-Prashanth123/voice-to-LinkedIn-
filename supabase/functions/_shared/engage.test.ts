@@ -76,6 +76,75 @@ Deno.test("an empty creator list fetches nothing and spends nothing", async () =
   assert(events.includes("creator_poll_idle"), `no event recorded: ${events.join(",")}`);
 });
 
+/* ── A harvest that fails must not stop the drafting ──────────────────────── */
+
+Deno.test("a failed harvest still drafts what is already stored, and still reports", async () => {
+  /*
+   * MEASURED 19 NOVEMBER, AND IT WAS NOT A SMALL EFFECT.
+   *
+   * poll() used to await harvestFor directly, so an empty answer from the scraper threw and skipped
+   * the drafting below it. creator_posts held 41 posts across five creators and 26 had never been
+   * drafted: the run that stored them was killed before reaching the drafting, and every run since
+   * threw in the harvest above it. Josh had three comment options, from the day before, while
+   * twenty-six of his creators' posts waited behind a third-party scraper that answers emptily
+   * about one time in three. The scraper's flakiness is not ours to fix; letting it block work that
+   * needs no scraper is.
+   *
+   * HOW THIS REACHES THE FAILURE WITHOUT A NETWORK, and why the first version of this test did not.
+   *
+   * It was written with the stub's `failReadWith`, which makes the CREATORS read fail — and that
+   * throws inside creatorsDueForPoll, upstream of the new catch. The test passed, filed
+   * creator_poll_failed and never executed one line of the path it was named after: a check with
+   * nothing to check, in the test for the fix.
+   *
+   * No secret is set here, so harvestFor throws "neither XP_API_KEY nor APIFY_TOKEN is in the
+   * vault" before it reaches any backend. That is a genuine harvest failure, offline.
+   */
+  const db = fakeDb({
+    creators: [{
+      handle: "kddorsey3",
+      display_name: "KD Dorsey",
+      profile_url: "https://www.linkedin.com/in/kddorsey3/",
+      active: true,
+      last_polled_at: null,
+    }],
+    creator_posts: [postRow(1), postRow(2)],
+    settings: [setting("comment_posts_per_run", 3), setting("comment_options_per_post", 1)],
+  });
+
+  const writer = fakeWriter(1);
+  const res = await poll(db, writer.write);
+  const body = await res.json();
+
+  // THE POINT: the drafting happened even though the harvest did not.
+  assertEquals(writer.seen.length, 2, "stored posts were left undrafted after a failed harvest");
+  assertEquals(db.tables.comment_options.length, 2);
+  assertEquals(body.harvest_failed, true);
+
+  const events = db.tables.system_events.map((e: Record<string, unknown>) => e.kind);
+  assert(events.includes("creator_poll_ran"), `no run event: ${events.join(",")}`);
+  assert(
+    events.includes("creator_poll_failed"),
+    `the harvest failure must still reach Josh: ${events.join(",")}`,
+  );
+
+  const ran = db.tables.system_events.find((e: Record<string, unknown>) =>
+    e.kind === "creator_poll_ran"
+  ) as { detail: Record<string, unknown> };
+  assert(ran.detail.harvest_error, "creator_poll_ran does not say the harvest failed");
+  assertEquals(ran.detail.newly_stored, 0, "nothing can be stored from a harvest that failed");
+
+  /*
+   * And NOBODY is stamped as polled. A last_polled_at written after a failed fetch would claim the
+   * creator had been read, and the next run would then skip them for someone already done.
+   */
+  assertEquals(
+    db.tables.creators[0].last_polled_at,
+    null,
+    "a creator was stamped as polled by a run that never reached the scraper",
+  );
+});
+
 /* ── Which creators a run covers ──────────────────────────────────────────── */
 
 const creatorRow = (handle: string, lastPolled: string | null) => ({

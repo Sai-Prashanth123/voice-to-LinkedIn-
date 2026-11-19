@@ -334,20 +334,49 @@ export async function poll(db: SupabaseClient, write: OptionWriter = optionsFor)
     });
   }
 
-  const harvest = await harvestFor(list, db);
-
-  // Every creator polled gets a timestamp whether or not they posted, or "the poll stopped" and
-  // "nobody posted" become the same observation.
-  const polledAt = new Date().toISOString();
-  for (const c of list) {
-    await db.from("creators").update({ last_polled_at: polledAt }).eq("handle", c.handle);
+  /*
+   * A FAILED HARVEST MUST NOT STOP THE DRAFTING OF WHAT IS ALREADY STORED.
+   *
+   * This was `const harvest = await harvestFor(list, db);` with everything below it downstream of
+   * the throw — so one empty answer from the scraper skipped the drafting entirely.
+   *
+   * Measured 19 November, and it is not a small effect. `creator_posts` held 41 posts across five
+   * creators and 26 of them had never been drafted: the run that stored them was killed before it
+   * got here, and every run since threw in the harvest above this line. Josh had three comment
+   * options, from 18 November, while twenty-six of his creators' posts sat waiting behind a
+   * third-party scraper that answers emptily about one time in three.
+   *
+   * The scraper's flakiness is not ours to fix. Letting it block work that needs no scraper is.
+   */
+  let harvest: { rows: unknown[]; source: string } | null = null;
+  let harvestError: string | null = null;
+  try {
+    harvest = await harvestFor(list, db);
+  } catch (err) {
+    harvestError = err instanceof Error ? err.message : String(err);
   }
 
-  const allowed = Object.fromEntries(list.map((c) => [c.handle, c.display_name ?? c.handle]));
-  const { rows, foreign, unmapped } = normaliseRows(harvest.rows, allowed) as
-    { rows: HarvestedPost[]; foreign: number; unmapped: string[] };
+  let stored = { inserted: 0 };
+  let rows: HarvestedPost[] = [];
+  let foreign = 0;
+  let unmapped: string[] = [];
 
-  const stored = await store(db, rows);
+  if (harvest) {
+    // Every creator polled gets a timestamp whether or not they posted, or "the poll stopped" and
+    // "nobody posted" become the same observation. Only on a harvest that actually answered: a
+    // stamp after a failed fetch would claim they had been read.
+    const polledAt = new Date().toISOString();
+    for (const c of list) {
+      await db.from("creators").update({ last_polled_at: polledAt }).eq("handle", c.handle);
+    }
+
+    const allowed = Object.fromEntries(list.map((c) => [c.handle, c.display_name ?? c.handle]));
+    ({ rows, foreign, unmapped } = normaliseRows(harvest.rows, allowed) as
+      { rows: HarvestedPost[]; foreign: number; unmapped: string[] });
+
+    stored = await store(db, rows);
+  }
+
   const drafted = await draftWaiting(db, write);
 
   await logEvent(db, "creator_poll_ran", "info", {
@@ -356,8 +385,9 @@ export async function poll(db: SupabaseClient, write: OptionWriter = optionsFor)
     // are nine more waiting". A run that covered part of the list has to say so.
     active_total: activeTotal,
     creators_left_for_next_run: Math.max(0, activeTotal - list.length),
-    source: harvest.source,
-    rows_returned: harvest.rows.length,
+    source: harvest?.source ?? "none",
+    harvest_error: harvestError,
+    rows_returned: harvest?.rows.length ?? 0,
     theirs: rows.length,
     dropped_not_on_the_list: foreign,
     unmapped,
@@ -369,15 +399,36 @@ export async function poll(db: SupabaseClient, write: OptionWriter = optionsFor)
 
   if (drafted.options > 0) await announce(db, drafted);
 
+  /*
+   * The harvest failure still surfaces, AFTER the drafting rather than instead of it.
+   *
+   * `worker-ops` aggregates `error` events and tells Josh once, so this is how a flaky scraper
+   * reaches him. Filing it last means the useful work is already done and recorded when the bad
+   * news goes in — the previous order threw here and the drafting never happened at all.
+   */
+  if (harvestError) {
+    await logEvent(db, "creator_poll_failed", "error", {
+      error: harvestError.slice(0, 500),
+      drafted_anyway: drafted.options,
+      means: "The scraper did not answer, so nobody was polled and no new post was stored. " +
+        "Anything already waiting WAS drafted — see posts_drafted on the creator_poll_ran event " +
+        "beside this one.",
+    });
+  }
+
   return json({
     ok: true,
-    source: harvest.source,
-    creators: list.length,
+    source: harvest?.source ?? "none",
+    harvest_failed: harvestError !== null,
+    creators: harvest ? list.length : 0,
     newly_stored: stored.inserted,
     drafted: drafted.posts,
     options: drafted.options,
     still_waiting: drafted.remaining,
-    means: drafted.options > 0
+    means: harvestError
+      ? `The scraper did not answer, so nothing new was collected. ${drafted.options} option(s) ` +
+        `were drafted from posts already stored.`
+      : drafted.options > 0
       ? `${drafted.options} comment option(s) are waiting for Josh.`
       : stored.inserted > 0
       ? "New posts were stored but nothing was worth a comment."

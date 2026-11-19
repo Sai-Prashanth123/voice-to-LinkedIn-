@@ -126,8 +126,12 @@ export async function fetchFromConsole({ profileUrls, key, base, log = noop }) {
   if (rows.length === 0) {
     throw new Error(
       `job ${job.id} succeeded but returned no posts. ` +
-        `That is distinct from "they have not posted": the scraper returned without reading the ` +
-        `page, usually because LinkedIn is blocking the egress IP.`,
+        `That is distinct from "they have not posted" — but it is NOT evidence that LinkedIn is ` +
+        `blocking us, which is what this message asserted until 19 November. Measured that day: ` +
+        `the same profile, three jobs inside four minutes, gave 16 rows in 109s, 0 rows in 11s and ` +
+        `16 rows in 129s. The backend answers emptily and fast every so often and the data is ` +
+        `there on the next attempt, so this is flaky rather than blocked. A fast empty answer is ` +
+        `the tell: a real read of one profile took 65-129s.`,
     );
   }
   return { rows, source: "console", job: job.id };
