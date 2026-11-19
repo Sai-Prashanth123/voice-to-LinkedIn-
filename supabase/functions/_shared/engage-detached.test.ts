@@ -217,6 +217,44 @@ Deno.test("work that finishes in time is returned untouched and the timer is cle
   assertEquals(value, "harvested");
 });
 
+Deno.test("the budget wraps the HARVEST, not the whole poll", async () => {
+  /*
+   * A STRUCTURAL ASSERTION, because the failure it guards cannot be driven through the stub: making
+   * `harvestFor` hang means reaching a scraping backend, and the hang itself is already covered by
+   * "a harvest that hangs reports giving up" above.
+   *
+   * What went wrong is worth the guard. `withBudget` wrapped `poll()` from outside, so the deadline
+   * aborted the drafting along with the harvest — and the drafting needs no scraper at all. The
+   * commit before this one caught a harvest that THREW and proved it live at 12:19 on 19 November,
+   * eight options written while the scraper returned nothing. At 12:33 the slow shape came up
+   * instead: the harvest ran long, the budget rejected the whole poll from outside, and a run with
+   * 34 posts waiting wrote ZERO options. Same cause, different shape, and the fix had missed it.
+   *
+   * So: the deadline belongs on the one slow thing, where both shapes of failure reach the same
+   * catch and the drafting below is reached either way.
+   */
+  const src = await Deno.readTextFile(new URL("./engage.ts", import.meta.url));
+
+  assert(
+    /withBudget\(\s*harvestFor\(/.test(src),
+    "the budget no longer wraps harvestFor, so a slow harvest starves the drafting again",
+  );
+  assert(
+    !/withBudget\(\s*poll\(/.test(src),
+    "withBudget is wrapping poll() again — that aborts the drafting with the harvest",
+  );
+
+  // And the drafting must still sit AFTER the harvest's catch, not inside the try with it.
+  const tryAt = src.indexOf("harvest = await withBudget(");
+  const draftAt = src.indexOf("const drafted = await draftWaiting(");
+  const catchAt = src.indexOf("harvestError = err instanceof Error");
+  assert(tryAt > 0 && catchAt > tryAt, "the harvest is no longer inside a try/catch");
+  assert(
+    draftAt > catchAt,
+    "draftWaiting moved above the catch, so a failed harvest skips it again",
+  );
+});
+
 Deno.test("the harvest budget is below the runtime's own kill, so it can still report", async () => {
   /*
    * THIS TEST PREVIOUSLY ASSERTED THE OPPOSITE, AND THE OPPOSITE WAS WRONG.

@@ -237,9 +237,18 @@ export async function pollDetached(
   const work = (async () => {
     try {
       await loadSecrets(db);
-      // Under a deadline this runtime can hold. The harvest allows itself ten minutes, which is
-      // longer than the isolate survives — see withBudget for the run that proved it.
-      await withBudget(poll(db, write), HARVEST_BUDGET_MS, "the creator poll");
+      /*
+       * NOT wrapped in withBudget any more. The budget sits on the harvest inside `poll`, which is
+       * the only slow thing here — a deadline out here aborts the drafting as well, and on
+       * 19 November at 12:33 that is exactly what it did: the harvest ran long, the 140s budget
+       * rejected the whole poll, and a run with 34 posts waiting wrote nothing.
+       *
+       * The drafting is capped at three posts a run and makes one model call each, so it is not the
+       * thing that needs a deadline. The isolate's own 150s kill is the backstop, and a run it
+       * takes down now leaves a `creator_poll_started` with no finish, which `reportVanishedRuns`
+       * turns into an error the next morning.
+       */
+      await poll(db, write);
     } catch (err) {
       // 13.2: failures surface rather than being swallowed, and this worker has no job row to
       // carry `last_error`. This event is the only place the failure can now appear.
@@ -351,7 +360,18 @@ export async function poll(db: SupabaseClient, write: OptionWriter = optionsFor)
   let harvest: { rows: unknown[]; source: string } | null = null;
   let harvestError: string | null = null;
   try {
-    harvest = await harvestFor(list, db);
+    /*
+     * THE BUDGET BELONGS ON THE HARVEST, NOT ON THE WHOLE RUN.
+     *
+     * It wrapped `poll()` entirely until 19 November, which meant a HANGING harvest aborted the
+     * drafting too — and the catch above only ever saw a harvest that THREW. The commit before this
+     * one fixed the throwing case and proved it live at 12:19; at 12:33 the slow case came up and
+     * the run produced zero options, because the 140s budget rejected the whole poll from outside.
+     *
+     * With it here, both shapes of failure arrive at the same catch, and the drafting below is
+     * reached either way. Drafting needs no scraper, so nothing it does should depend on one.
+     */
+    harvest = await withBudget(harvestFor(list, db), HARVEST_BUDGET_MS, "the harvest");
   } catch (err) {
     harvestError = err instanceof Error ? err.message : String(err);
   }
