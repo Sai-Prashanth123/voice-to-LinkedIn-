@@ -202,3 +202,50 @@ Deno.test("work that finishes in time is returned untouched and the timer is cle
   const value = await withBudget(Promise.resolve("harvested"), 5_000, "a quick harvest");
   assertEquals(value, "harvested");
 });
+
+Deno.test("the harvest budget is above the slowest harvest actually measured", async () => {
+  /*
+   * THE TEST THAT WOULD HAVE CAUGHT A REGRESSION I SHIPPED.
+   *
+   * The budget was first set to 110s, to sit inside what the runtime holds after the response has
+   * gone. The only timed successful harvest in the record had taken 147 seconds — the corpus
+   * refresh of 18 November, corpus_started 15:34:53 to corpus_refreshed 15:37:20, 67 posts stored.
+   * The number was chosen without checking the measurement that already existed.
+   *
+   * The first scheduled run proved it the next morning: corpus_started 06:00:09, corpus_failed
+   * 06:01:59 — killed at 110s by the budget itself. A path that worked when run by hand failed on
+   * every schedule, and the mechanism built to make failures legible is what made it fail.
+   *
+   * So the measurement is written down here as a floor. Lowering the budget under it fails this
+   * test and names the run that disproves the new number. Raise it against a measurement from the
+   * event log, never against a hope.
+   */
+  const SLOWEST_MEASURED_MS = 147_000; // 18 Nov, nine profiles, succeeded
+
+  const sources = ["./engage.ts", "./corpus.ts"];
+  for (const path of sources) {
+    const src = await Deno.readTextFile(new URL(path, import.meta.url));
+    const found = src.match(/HARVEST_BUDGET_MS = ([\d_]+);/);
+    assert(found, `${path} has no HARVEST_BUDGET_MS to check`);
+    const ms = Number(found[1].replaceAll("_", ""));
+    assert(
+      ms > SLOWEST_MEASURED_MS,
+      `${path} allows ${ms / 1000}s, but a harvest that SUCCEEDED took ${
+        SLOWEST_MEASURED_MS / 1000
+      }s (18 November, nine profiles, 67 posts). A budget under the measured need fails every run.`,
+    );
+  }
+});
+
+Deno.test("both workers allow the same budget, so one cannot be tuned alone by accident", async () => {
+  const read = async (path: string) => {
+    const src = await Deno.readTextFile(new URL(path, import.meta.url));
+    return Number(src.match(/HARVEST_BUDGET_MS = ([\d_]+);/)![1].replaceAll("_", ""));
+  };
+  assertEquals(
+    await read("./engage.ts"),
+    await read("./corpus.ts"),
+    "the two harvests allow different budgets; they run on the same runtime against the same " +
+      "backend, so a difference here is a mistake rather than a decision",
+  );
+});

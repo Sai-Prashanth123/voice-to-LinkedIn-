@@ -74,11 +74,26 @@ import {
 /**
  * How long a detached harvest may take before it reports giving up.
  *
- * Comfortably inside what the runtime will hold after the response has gone, and far short of the
- * ten minutes the harvest module allows itself. A run that exceeds this says so; one that exceeds
- * the runtime says nothing, which is the state observed on 18 November.
+ * MEASURED, AND THE FIRST VALUE WAS WRONG.
+ *
+ * This was 110s, chosen to sit inside what the runtime holds after the response has gone. It was
+ * set while the only timed successful harvest in the record — the corpus refresh of 18 November,
+ * corpus_started 15:34:53 to corpus_refreshed 15:37:20 — had taken 147 SECONDS. The number was
+ * picked without checking the measurement that was already there.
+ *
+ * The first scheduled run proved it: 19 November, corpus_started 06:00:09, corpus_failed 06:01:59,
+ * killed at 110s by this constant. A path that worked when run by hand failed on every schedule,
+ * and the budget built to make failures legible is what made it fail.
+ *
+ * 240s now. The 147s success is evidence the runtime holds at least that long, so this is above the
+ * measured need with headroom and still far short of the ten minutes the harvest module allows
+ * itself. If the runtime does kill a run before this fires, the start event with no finish beside
+ * it still says so — which is no worse than before this constant existed.
+ *
+ * Raise it against a measurement, never against a hope. The elapsed time of every run is in the
+ * event log: corpus_started to corpus_refreshed, creator_poll_started to creator_poll_ran.
  */
-const HARVEST_BUDGET_MS = 110_000;
+const HARVEST_BUDGET_MS = 240_000;
 
 /** Sentence-count band from the skill: "Two to five sentences is the band that gets read". */
 const MIN_SENTENCES = 2;

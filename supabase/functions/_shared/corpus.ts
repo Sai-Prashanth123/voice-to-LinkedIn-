@@ -74,8 +74,15 @@ export const CORPUS_WRITERS: Record<string, string> = {
 
 export const CORPUS_HANDLES = Object.keys(CORPUS_WRITERS);
 
-/** Same budget as the creator poll, and the same reason. See withBudget in jobs.ts. */
-const HARVEST_BUDGET_MS = 110_000;
+/**
+ * Same budget as the creator poll, and the same reason. See the note on it in engage.ts.
+ *
+ * This is the worker that proved 110s was too tight: nine profiles took 147s when the refresh was
+ * run by hand on 18 November and succeeded with 67 posts, and the first scheduled run was killed at
+ * 110s by the budget itself. Nine profiles is the slowest harvest here, so this worker is the one
+ * that sets the floor for the number.
+ */
+const HARVEST_BUDGET_MS = 240_000;
 
 const PROFILE_URL = (handle: string) => `https://www.linkedin.com/in/${handle}/`;
 
