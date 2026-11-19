@@ -13,9 +13,11 @@ import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 
 import { fakeDb } from "./fake-db.ts";
 import {
+  creatorsDueForPoll,
   draftWaiting,
   type Flag,
   poll,
+  POLL_BATCH,
   review,
   sentenceCount,
   store,
@@ -72,6 +74,100 @@ Deno.test("an empty creator list fetches nothing and spends nothing", async () =
   // And it must say it ran. "It ran and there was nobody" is not "it did not run".
   const events = db.tables.system_events.map((e: Record<string, unknown>) => e.kind);
   assert(events.includes("creator_poll_idle"), `no event recorded: ${events.join(",")}`);
+});
+
+/* ── Which creators a run covers ──────────────────────────────────────────── */
+
+const creatorRow = (handle: string, lastPolled: string | null) => ({
+  handle,
+  display_name: handle,
+  profile_url: `https://www.linkedin.com/in/${handle}/`,
+  active: true,
+  last_polled_at: lastPolled,
+});
+
+Deno.test("a creator who has never been polled is taken before one who has", async () => {
+  /*
+   * THE REAL SHAPE OF THE FAULT THIS FIXES.
+   *
+   * On 19 November, four of Josh's six creators had `last_polled_at` null — never read once. Two
+   * were polled on 18 November at 15:02, four were added at 15:24, and every run after that was
+   * torn down before it stamped anybody. Ordered by handle, as it was, the same two could come
+   * first forever while the other four were never reached.
+   */
+  const db = fakeDb({
+    creators: [
+      creatorRow("juliacarter98", "2026-11-18T15:02:10Z"),
+      creatorRow("demandjen1", "2026-11-18T15:02:10Z"),
+      creatorRow("kddorsey3", null),
+      creatorRow("kyleasay", null),
+      creatorRow("mikegroeneveldjr", null),
+      creatorRow("ralph-barsi", null),
+    ],
+  });
+
+  const { list, activeTotal } = await creatorsDueForPoll(db, 3);
+
+  assertEquals(activeTotal, 6, "the total must count everyone, not just this batch");
+  assertEquals(list.length, 3, "the batch size did not bite");
+  assert(
+    list.every((c) => ["kddorsey3", "kyleasay", "mikegroeneveldjr", "ralph-barsi"].includes(c.handle)),
+    `a never-polled creator was skipped for one already read: ${list.map((c) => c.handle).join(",")}`,
+  );
+});
+
+Deno.test("successive runs move through the list instead of re-reading the head", async () => {
+  /*
+   * The property that makes a torn-down run survivable: progress is durable. If this regressed to
+   * an unordered or handle-ordered read, run two would fetch the same three profiles and the tail
+   * of the list would never be polled at all.
+   */
+  const db = fakeDb({
+    creators: [
+      creatorRow("a", null),
+      creatorRow("b", null),
+      creatorRow("c", null),
+      creatorRow("d", null),
+    ],
+  });
+
+  const first = await creatorsDueForPoll(db, 2);
+  // Stamp them, as `poll` does once the harvest returns.
+  for (const c of first.list) {
+    await db.from("creators").update({ last_polled_at: "2026-11-19T07:00:00Z" }).eq("handle", c.handle);
+  }
+
+  const second = await creatorsDueForPoll(db, 2);
+
+  assertEquals(second.list.length, 2);
+  assertEquals(
+    second.list.map((c) => c.handle).sort().join(","),
+    ["a", "b", "c", "d"].filter((h) => !first.list.some((c) => c.handle === h)).sort().join(","),
+    "the second run re-read the first run's creators",
+  );
+});
+
+Deno.test("an inactive creator is not polled and is not counted", async () => {
+  const db = fakeDb({
+    creators: [
+      { ...creatorRow("stopped", null), active: false },
+      creatorRow("watched", null),
+    ],
+  });
+
+  const { list, activeTotal } = await creatorsDueForPoll(db, 5);
+  assertEquals(activeTotal, 1);
+  assertEquals(list.map((c) => c.handle), ["watched"]);
+});
+
+Deno.test("the batch is a number small enough that being wrong costs one run", () => {
+  /*
+   * Pinned deliberately. Two profiles are the only measured success and six are the only measured
+   * failure; a batch at or above six would reproduce the fault this was written to fix, and raising
+   * it is the wrong lever if runs start vanishing again.
+   */
+  assert(POLL_BATCH >= 1, "a batch of zero polls nobody");
+  assert(POLL_BATCH < 6, `POLL_BATCH is ${POLL_BATCH}; six profiles is the size that vanished twice`);
 });
 
 /* ── The cap, and the ordering ────────────────────────────────────────────── */

@@ -397,8 +397,8 @@ test("the three passages destroyed by the 20 October refresh are present", () =>
     "## There is no house length",
     "Do not let a target length near the drafter",
     "## Two structural modes, and they do not mix",
-    "## The closest structural match, and the furthest",
-    "Curtis Howland is the furthest",
+    "## Where to look for structure",
+    "Curtis Howland and Adam Treboutat",
   ]) {
     assert.ok(body.includes(passage), `"${passage}" is missing from the section`);
   }
@@ -407,6 +407,31 @@ test("the three passages destroyed by the 20 October refresh are present", () =>
   // are now the table's to support.
   for (const stale of ["8 of 9 posts", "median 214 words", "6-word opener", "28 words above"]) {
     assert.ok(!body.includes(stale), `the restored prose carries the stale figure "${stale}"`);
+  }
+});
+
+test("the line Josh deleted cannot come back through the generator", () => {
+  /*
+   * On 18 November he wrote, of the Curtis sentence in this section: "That line should go." The
+   * proposal removed it from the LIVE row and this generator kept composing it, which is not a
+   * cosmetic divergence — the two then said opposite things. The live section points at Curtis and
+   * Adam as where the structure he asked for already lives; this function still called Curtis "the
+   * furthest" from his rules and said "do not take his shape".
+   *
+   * That matters because `sentinel-refresh.mjs --apply` and `load-josh-library.mjs` both rebuild the
+   * WHOLE body from here. Either one would have overwritten the live text with its opposite and
+   * reversed a change he asked for, with nothing reporting it — and a fresh clone seeded it back.
+   * `refresh_sentinels` is safe, because `maintenance.ts` replaces only the marked span.
+   *
+   * So this asserts the deletion, not the wording: the test is what makes it survive the next
+   * person who regenerates this file.
+   */
+  for (const gone of [
+    "do not take his shape",
+    "Curtis Howland is the furthest",
+    "The closest structural match",
+  ]) {
+    assert.ok(!body.includes(gone), `"${gone}" is back; he asked for it to go on 18 November`);
   }
 });
 

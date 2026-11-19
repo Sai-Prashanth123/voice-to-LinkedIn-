@@ -72,7 +72,7 @@ export function fakeDb(seed: Record<string, Row[]> = {}): any {
     let limit: number | null = null;
     let rangeFrom: number | null = null;
     let rangeTo: number | null = null;
-    let orderBy: { col: string; asc: boolean } | null = null;
+    let orderBy: { col: string; asc: boolean; nullsFirst: boolean } | null = null;
     let headCount = false;
     let mode: "select" | "update" | "insert" | "upsert" = "select";
     let payload: Row | Row[] = {};
@@ -80,9 +80,22 @@ export function fakeDb(seed: Record<string, Row[]> = {}): any {
     const apply = () => {
       let out = rows().filter((r) => filters.every((f) => f(r)));
       if (orderBy) {
-        const { col, asc } = orderBy;
+        const { col, asc, nullsFirst } = orderBy;
+        /*
+         * NULLS ARE SORTED EXPLICITLY, not coerced to "".
+         *
+         * They used to become `""`, which sorts before every string ascending — so a row with no
+         * value landed first whether or not the caller asked for that. PostgREST's default is the
+         * opposite (NULLS LAST on ascending), and a read that depends on `nullsFirst: true` would
+         * have passed here with the option removed. The check with nothing to check, in the fake.
+         */
+        const missing = (v: unknown) => v === null || v === undefined;
         out = [...out].sort((a, b) => {
-          const x = a[col] ?? "", y = b[col] ?? "";
+          const x = a[col], y = b[col];
+          if (missing(x) || missing(y)) {
+            if (missing(x) && missing(y)) return 0;
+            return (missing(x) ? -1 : 1) * (nullsFirst ? 1 : -1);
+          }
           if (x === y) return 0;
           return (x < y ? -1 : 1) * (asc ? 1 : -1);
         });
@@ -155,8 +168,27 @@ export function fakeDb(seed: Record<string, Row[]> = {}): any {
         filters.push((r) => vals.includes(r[col]));
         return self;
       },
-      order(col: string, opts?: { ascending?: boolean }) {
-        orderBy = { col, asc: opts?.ascending !== false };
+      /*
+       * `gte`/`lte` compare with `<`/`>` like PostgREST does on a timestamptz or a bigint, which
+       * works for ISO strings and numbers alike and for nothing else. Added 19 November for the
+       * scan that looks for a worker run which started and never finished — it reads a time window,
+       * and without these the test could not express one.
+       *
+       * A row MISSING the column does not match, rather than matching as `undefined` would. That is
+       * PostgREST's behaviour and it is the safer default here: a start event with no timestamp
+       * should not silently fall inside every window.
+       */
+      gte(col: string, val: unknown) {
+        filters.push((r) => r[col] !== undefined && r[col] !== null && r[col] >= (val as never));
+        return self;
+      },
+      lte(col: string, val: unknown) {
+        filters.push((r) => r[col] !== undefined && r[col] !== null && r[col] <= (val as never));
+        return self;
+      },
+      order(col: string, opts?: { ascending?: boolean; nullsFirst?: boolean }) {
+        // PostgREST's own defaults: ascending unless told otherwise, and NULLS LAST on ascending.
+        orderBy = { col, asc: opts?.ascending !== false, nullsFirst: opts?.nullsFirst === true };
         return self;
       },
       range(from: number, to: number) {

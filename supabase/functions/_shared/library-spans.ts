@@ -731,18 +731,18 @@ every refresh and the preference does not move with them. The writer at the bott
 not failing — his posts are uniformly short by design — but a drafter aiming at what Josh asked for
 aims at the range, and the gate could check it if it ever needed to.
 
-**The band in the table is not an instruction.** It is what these eight happen to do. The range
-above is the instruction.
+**The band in the table is not an instruction.** It is what the writers in it happen to do. The
+range above is the instruction.
 
-## The closest structural match, and the furthest
+## Where to look for structure
 
-**Eric Nowoslawski's structure most resembles what Josh's own rules describe.** Long, prose rather
-than bullets, opening on a specific number, closing soft — the formatting section's lean-fat-lean,
-bullets only for a genuine list, already being executed by somebody.
+**Curtis Howland and Adam Treboutat are where the structure Josh asked for already lives.** Labelled
+sections, arrow lines under each, a fact or a rule to a line. Take the shape, and Curtis's subject
+discipline with it. Their list rates in the table are this corpus's extreme rather than its middle,
+and partly their own house style: the formatting section governs how much structure a post gets.
 
-**Curtis Howland is the furthest**, and the table shows why: he is the heaviest lister here.
-The formatting section says bullets are a crutch when they replace sentences. Take his subject
-discipline if anything; do not take his shape.
+**Eric Nowoslawski is the contrast, and still worth reading.** Prose rather than bullets, opening on
+a specific number, closing soft — the structure that carries a scene rather than a set of findings.
 
 ## What never to take
 

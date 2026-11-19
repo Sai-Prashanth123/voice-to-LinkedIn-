@@ -104,6 +104,18 @@ import {
  */
 const HARVEST_BUDGET_MS = 240_000;
 
+/**
+ * How many creators one run harvests.
+ *
+ * Three, because the only two data points are: two profiles completed (18 November, 15:02) and six
+ * profiles did not, twice. Three is the larger number that is still under the one measured success
+ * plus a margin — not a guess at where the isolate dies, which nothing here can measure, but a size
+ * small enough that being wrong about it costs one run rather than the whole list.
+ *
+ * Raising it is the wrong lever if runs start vanishing again; the right one is lowering it.
+ */
+export const POLL_BATCH = 3;
+
 /** Sentence-count band from the skill: "Two to five sentences is the band that gets read". */
 const MIN_SENTENCES = 2;
 const MAX_SENTENCES = 5;
@@ -232,15 +244,52 @@ export async function pollDetached(
   });
 }
 
-export async function poll(db: SupabaseClient, write: OptionWriter = optionsFor): Promise<Response> {
+/**
+ * Which creators this run harvests, and how many are being watched in total.
+ *
+ * LONGEST-UNPOLLED FIRST, AND ONLY A FEW OF THEM.
+ *
+ * The read this replaces was every active creator ordered by handle, and the whole list went into
+ * one harvest call. That is all-or-nothing: `last_polled_at` is stamped only after the harvest
+ * returns, so a run torn down mid-fetch stores nothing, stamps nobody and leaves no trace of having
+ * tried.
+ *
+ * It is not hypothetical. Josh named two creators on 18 November and the 15:02 run completed. Four
+ * more were added at 15:24, and every run since — 15:39, then 07:00 the next morning — vanished
+ * without filing an outcome. Measured on 19 November: FOUR OF THE SIX HAD NEVER BEEN POLLED ONCE.
+ * The feature looked switched on and two thirds of his list had never been read.
+ *
+ * The budget cannot be raised to fix that. `withBudget` is already 240s and the isolate is torn
+ * down before it fires, which is why nothing reported — code inside a process cannot report that
+ * the process stopped existing. So the run gets smaller instead, and each one makes durable
+ * progress: oldest first, nulls before everything, and the next run continues where this stopped.
+ *
+ * Separated from `poll` so it can be tested without a network: everything past this point in `poll`
+ * reaches a scraping backend, which is why the only `poll` test for a long time was the empty list.
+ */
+export async function creatorsDueForPoll(
+  db: SupabaseClient,
+  batch: number = POLL_BATCH,
+): Promise<{ list: Creator[]; activeTotal: number }> {
   const { data: creators, error } = await db
     .from("creators")
     .select("handle, display_name, profile_url")
     .eq("active", true)
-    .order("handle");
+    .order("last_polled_at", { ascending: true, nullsFirst: true })
+    .limit(batch);
   if (error) throw new Error(`could not read creators: ${error.message}`);
 
+  const { count } = await db
+    .from("creators")
+    .select("*", { count: "exact", head: true })
+    .eq("active", true);
+
   const list = (creators ?? []) as Creator[];
+  return { list, activeTotal: count ?? list.length };
+}
+
+export async function poll(db: SupabaseClient, write: OptionWriter = optionsFor): Promise<Response> {
+  const { list, activeTotal } = await creatorsDueForPoll(db);
 
   /*
    * THE OFF STATE. No fetch, no model call, no notice — and an event, because "it ran and there was
@@ -276,6 +325,10 @@ export async function poll(db: SupabaseClient, write: OptionWriter = optionsFor)
 
   await logEvent(db, "creator_poll_ran", "info", {
     creators: list.length,
+    // Both numbers, because "polled 3" alone cannot be read as either "that is everyone" or "there
+    // are nine more waiting". A run that covered part of the list has to say so.
+    active_total: activeTotal,
+    creators_left_for_next_run: Math.max(0, activeTotal - list.length),
     source: harvest.source,
     rows_returned: harvest.rows.length,
     theirs: rows.length,

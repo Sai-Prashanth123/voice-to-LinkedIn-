@@ -225,6 +225,98 @@ run: it answers immediately and records what it did afterwards, on every path.
 
 ---
 
+## Added 19 November — what the first scheduled runs found
+
+The schedules fired for the first time unattended. Three things came out of it, and the first is
+serious enough that you should see it before anything else.
+
+### A comment it drafted put a number in your mouth that you never said
+
+The creator poll drafted three comment options on a Julia Carter post — the first comments this
+system has ever produced. One of them read:
+
+> "I've found that even with a waterfall, you're looking at a **15-20% drop in accuracy on mobile
+> numbers within 60 days.**"
+
+and the model's own note on it said `[his_number]`. I searched every note you have given this
+system, every summarised field and the receipts: **that figure appears nowhere you have ever said
+it.** Nothing flagged it.
+
+A draft could not have done this — the claim ledger refuses an unsourced number outright. A comment
+had no ledger at all, and the code said so in its own header: *"they cannot catch an invented
+number."* It was right, and the first real run produced exactly that.
+
+There is now a fourth check on comments: a figure that appears neither in your material nor in the
+post being replied to is flagged. **It is weaker than it sounds and you should know by how much.**
+Your material holds 241 distinct figures, and against that comment it catches "60" and nothing
+else — "15" and "20" both appear somewhere in your notes in unrelated contexts, so "a 15-20% drop"
+passes on its digits. It caught that one by one number out of three. Only a per-comment ledger could
+do better; a whole-corpus match cannot tell "15 appears in his material" from "15% of mobile numbers
+decay".
+
+**I have struck that option.** It is recorded as discarded, not deleted. The other two are still
+waiting for you and both are clean.
+
+### Four of your six creators had never been read once
+
+This is the one I would least like to have missed, and the comment options above are what led to
+it.
+
+Julia Carter and Jen Allen-Knuth were switched on at 13:56 on 18 November and the 15:02 run polled
+them — that is the run that produced your three comment options. The other four went on at 15:24.
+**Every run since then has been torn down mid-harvest**: 15:39 that afternoon, and 07:00 the next
+morning. Each filed a start and then no outcome of any kind — no result, no failure — because the
+isolate is destroyed while the fetch is still going, which takes its own timeout and its own error
+handling with it. Code inside a run cannot report that the run stopped existing, and nothing did.
+
+The consequence is not a log oddity. `last_polled_at` was stamped only after the whole harvest came
+back, so a torn-down run stored nothing and stamped nobody: **KD Dorsey, Kyle Asay, Mike Groeneveld
+and Ralph Barsi have never been polled once.** The feature read as switched on with two thirds of
+your list never looked at.
+
+Two changes. Each run now takes the three longest-unpolled creators rather than all of them, so
+progress is durable and the next run continues where the last one stopped — the four who have never
+been read go first. And a daily scan turns a run that started and never finished into a real error,
+which the existing daily summary already carries to you, once per disappearance rather than once a
+day forever.
+
+Raising the timeout was not available: it is already four minutes and the isolate dies well before
+that. The run had to get smaller.
+
+### The collection is working; the counts are the half that is not
+
+8 of your 9 writers are now current to 17–18 November, against 19 October before. That half works.
+
+The reaction counts do not, and the reason is structural rather than a bug. The scraper that is
+configured returns counts on every post it brings and **no line breaks on any of them**, and six
+columns here are counted from line breaks. A guard refuses a flat row over a shaped one — correctly;
+that guard is why a field-name mismatch in October did not wipe the counts off 1,900 posts twice. So
+it can **add** posts and can never **update** one already stored with its shape. Per writer, between
+232 and 250 posts still have no count.
+
+So "what's done well lately" now runs, and for Matt Barker it is genuinely useful — his median is
+194 reactions and it ranks his last fortnight from 2.23× down to 0.51×. For six of the nine it
+correctly tells you there are too few counts to have a median worth ranking against. Closing that
+needs the other scraping key, which is the one thing I cannot supply myself.
+
+### One of my own library changes needs your eye
+
+The wording I applied to `reference_posts` under your delegation put four lines of measured figures
+into the hand-written part of that section — the part no refresh can reach. That section is built so
+that every quantity lives inside a block that gets rewritten on each scrape, precisely so prose and
+table cannot drift apart. My figures sit outside it and will go stale with nothing to correct them.
+
+The generated version is now count-free and says the same thing qualitatively, pointing at the table
+for the numbers. **The live row still carries my figures**, because the library is yours; say the
+word and I will propose the tightened wording properly.
+
+Related, and now fixed: the line you asked to go — *"do not take his shape"*, about Curtis — was
+removed from the live section but the code that regenerates that section still composed it. The two
+then said opposite things, and re-running the refresh script would have put your deleted line back
+and reversed the change with nothing reporting it. A test now fails if it ever returns.
+
+---
+
 ## What was deliberately not changed
 
 - **No gate rubric was loosened to make posts pass.** The only rubric changes are the two you asked

@@ -36,13 +36,27 @@ function stubDb(opts: { creators?: unknown[]; failReadWith?: string } = {}) {
     events,
     from(table: string) {
       if (table === "creators") {
+        /*
+         * A THENABLE CHAIN, not a terminal `order()`.
+         *
+         * `order()` used to return the promise, which worked only while `order` happened to be the
+         * last call in the builder. On 19 November the read gained `.limit()` after it — the poll
+         * now takes the longest-unpolled few rather than the whole list — and this stub threw
+         * `limit is not a function`, which surfaced as the off state filing `creator_poll_failed`.
+         * A stub narrower than the code under test reports a fault in the stub as a fault in the
+         * code, so the chain now ends wherever the caller stops.
+         */
         const result = opts.failReadWith
-          ? { data: null, error: { message: opts.failReadWith } }
-          : { data: opts.creators ?? [], error: null };
-        const chain = {
+          ? { data: null, error: { message: opts.failReadWith }, count: null }
+          : { data: opts.creators ?? [], error: null, count: (opts.creators ?? []).length };
+        // deno-lint-ignore no-explicit-any
+        const chain: any = {
           select: () => chain,
           eq: () => chain,
-          order: () => Promise.resolve(result),
+          order: () => chain,
+          limit: () => chain,
+          // deno-lint-ignore no-explicit-any
+          then: (resolve: any, reject: any) => Promise.resolve(result).then(resolve, reject),
         };
         return chain;
       }

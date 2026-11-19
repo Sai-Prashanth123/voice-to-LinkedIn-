@@ -22,6 +22,7 @@ import { overall, score, summarise, voiceGuideWarning } from "../_shared/accepta
 import { gatherCounts } from "../_shared/acceptance-data.ts";
 import { ReportSchema } from "../_shared/schemas.ts";
 import { notice } from "../_shared/notices.ts";
+import { reportVanishedRuns } from "../_shared/orphan-runs.ts";
 
 Deno.serve(async (req) => {
   const db = admin();
@@ -139,6 +140,27 @@ async function daily(db: SupabaseClient): Promise<Response> {
             `to run you through some questions. Running short is better than writing something thin.`),
     );
     shortReason = null; // said once, inside the alert above
+  }
+
+  /*
+   * A RUN THAT STARTED AND NEVER SAID HOW IT ENDED — TURNED INTO AN ERROR EVENT.
+   *
+   * This runs BEFORE the aggregation below, deliberately: a disappearance found now is carried to
+   * Josh by this same run rather than waiting a day for the next one.
+   *
+   * It exists because of 19 November. `creator_poll_started` was filed at 07:00:07 and nothing
+   * followed it — the scheduled poll produced nothing and reported nothing, and the aggregation
+   * below could not tell him because there was no error row to count. The staleness alarm further
+   * down would eventually have noticed the corpus going cold, at seven days; for the creator poll
+   * there was no detector of any kind.
+   *
+   * It converts a silence into an `error` event and then stays out of the way. Nothing here talks
+   * to Josh directly, because the channel below already does and a second one for the same class of
+   * news is the 1,581-stale-events fault rebuilt.
+   */
+  const vanished = await reportVanishedRuns(db);
+  if (vanished > 0) {
+    console.log(`reported ${vanished} worker run(s) that started and never finished`);
   }
 
   // 13.2 — failures surface rather than being swallowed.
