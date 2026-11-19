@@ -401,7 +401,7 @@ const POST = "We pulled the numbers from the vendor's own booking pages and the 
 const NO_FIGURES = new Set<string>();
 
 Deno.test("a clean comment carries no flags", () => {
-  const f = review("That matches what we saw. The gap widened once we checked the raw source.", POST, ["marguerite"], NO_FIGURES);
+  const f = review("That reads like a sequencing problem rather than a targeting one. The gap tends to widen once the raw source is checked.", POST, ["marguerite"], NO_FIGURES);
   assertEquals(flagsOf(f), []);
 });
 
@@ -411,19 +411,19 @@ Deno.test("a name nobody cleared is flagged, in the spelling he used", () => {
    * sentence Josh reads. "Names nobody has cleared: marguerite" is a worse sentence than the one with
    * her name spelled properly in it, and the match is case-insensitive either way.
    */
-  const f = review("Marguerite told me the same thing last week. It took us a while to believe it.", POST, ["Marguerite"], NO_FIGURES);
+  const f = review("Marguerite makes the same point about this. It is the part most teams miss.", POST, ["Marguerite"], NO_FIGURES);
   assertEquals(flagsOf(f), ["named_someone"]);
   assertStringIncludes(f[0].detail, "Marguerite");
 
   // And the match does not care how either side is cased.
-  assertEquals(flagsOf(review("marguerite said so. And she was right about it.", POST, ["Marguerite"], NO_FIGURES)), ["named_someone"]);
-  assertEquals(flagsOf(review("MARGUERITE said so. And she was right about it.", POST, ["marguerite"], NO_FIGURES)), ["named_someone"]);
+  assertEquals(flagsOf(review("marguerite says so. And that holds up well.", POST, ["Marguerite"], NO_FIGURES)), ["named_someone"]);
+  assertEquals(flagsOf(review("MARGUERITE says so. And that holds up well.", POST, ["marguerite"], NO_FIGURES)), ["named_someone"]);
 });
 
 Deno.test("a name is matched on word boundaries, not inside another word", () => {
   // A three-letter company name must not fire inside an unrelated word, and a short name must
   // not fire on a substring of a longer one.
-  const f = review("We measured this and the result held. Nothing surprising in it.", POST, ["qtx", "vellum"], NO_FIGURES);
+  const f = review("The result held when it was measured again. Nothing surprising in it.", POST, ["qtx", "vellum"], NO_FIGURES);
   assertEquals(flagsOf(f), [], `fired on a substring: ${JSON.stringify(f)}`);
 });
 

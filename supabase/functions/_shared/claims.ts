@@ -298,8 +298,54 @@ export function extractQuotedStrings(text: string): string[] {
  * whole; this is the mechanical floor under it, and a floor that catches the common forms is worth
  * more than a clever one nobody can read.
  */
-const FIRST_PERSON_FACT =
-  /\b(?:I|we)\s+(?:just\s+|then\s+|once\s+|recently\s+)?(?:ran|run|tested|measured|checked|tried|built|sent|called|asked|told|saw|watched|noticed|found|spoke|spoken|talked|met|sat|heard|learned|learnt|audited|analysed|analyzed|reviewed|counted|scraped|pulled|compared|shipped|launched|hired|fired|lost|won|closed|charged|paid|billed)\b|\b(?:told|said to|asked|emailed|messaged|called)\s+(?:me|us)\b|\b(?:my|our)\s+(?:client|clients|customer|customers|team|rep|reps|call|calls|meeting|meetings|data|numbers|test|tests|audit)\b/i;
+const FP_VERBS =
+  "ran|run|tested|measured|checked|tried|built|sent|called|asked|told|saw|seen|watched|noticed|" +
+  "found|spoke|spoken|talked|met|sat|heard|learned|learnt|audited|analysed|analyzed|reviewed|" +
+  "counted|scraped|pulled|compared|shipped|launched|hired|fired|lost|won|closed|charged|paid|" +
+  "billed|used|worked|managed|coached|scaled|sold|interviewed|trained|implemented|deployed";
+
+/**
+ * Words allowed between the pronoun and the verb.
+ *
+ * `have` and `has` are the ones that matter, and their absence was a hole wide enough to drive the
+ * whole feature through. The first version allowed only `just|then|once|recently`, so `I found`
+ * matched and **`I have found` did not** — and `I have found`, `I've seen`, `I have used` are the
+ * forms a model actually reaches for. Probed 19 November against the comments this system had just
+ * written: four of the six fabricated first-person claims in them used the perfect tense and sailed
+ * straight past this.
+ */
+const FP_FILLER =
+  "just|then|once|recently|also|always|often|personally|usually|have|has|had|having|been|only|never";
+
+const FP_NOUNS =
+  "client|clients|customer|customers|team|teams|rep|reps|call|calls|meeting|meetings|data|numbers|" +
+  "test|tests|audit|experience|practice|portfolio|agency|company|pipeline";
+
+/** Up to two adjectives between the possessive and the noun: `my direct management experience`. */
+const FP_ADJ = "(?:\\s+[a-z][a-z-]{2,14}){0,2}";
+
+const FIRST_PERSON_FACT = new RegExp(
+  "\\b(?:I|we)(?:'ve|'d)?(?:\\s+(?:" + FP_FILLER + "))*\\s+(?:" + FP_VERBS + ")\\b" +
+    "|\\b(?:told|said to|asked|emailed|messaged|called)\\s+(?:me|us)\\b" +
+    "|\\b(?:my|our)" + FP_ADJ + "\\s+(?:" + FP_NOUNS + ")\\b",
+  "i",
+);
+
+/**
+ * WHERE THIS MAY BE APPLIED, AND WHERE IT MAY NEVER BE.
+ *
+ * Measured 19 November against 1,000 reference posts: **46% would match.** That is the calibration
+ * habit answering exactly as it is meant to — a rule firing on half the posts Josh chose as models
+ * is detecting writing, not invention, and a body-wide scan of a draft would be useless.
+ *
+ * So it runs on two narrow things only, and in both of them nothing sources the text: a DECLARED
+ * ADDITION in a draft, which by definition rests on no span of his; and a COMMENT, which has no
+ * ledger at all. On the comments this system had written by 19 November it matched 6 of 9 — and
+ * three sampled by eye were all true positives, including "I have seen reps lose credibility in a
+ * room that wanted an agenda" and "when my reps stop relying on a script". That is an invention
+ * rate, not a false-positive rate.
+ */
+export { FIRST_PERSON_FACT };
 
 /**
  * An addition, which rests on nothing and so is judged on what it is rather than on a span.

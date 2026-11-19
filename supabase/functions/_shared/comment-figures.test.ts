@@ -75,13 +75,31 @@ Deno.test("a figure quoted from their own post is not flagged", () => {
   );
 });
 
-Deno.test("a comment with no figures at all raises nothing", () => {
-  // Option 2 from the same run, which was genuinely clean.
+Deno.test("a comment with no figures raises no FIGURE flag", () => {
+  /*
+   * This fixture was labelled "option 2 from the same run, which was genuinely clean" when it was
+   * written on 19 November, and asserted that it raised no flags at all. Both were wrong, by my
+   * hand: it opens "I have found the error rate..." — an account of something Josh found, which the
+   * ledger refuses outright in a draft and which the fifth check now flags on a comment.
+   *
+   * It was clean OF FIGURES, which is this file's subject, so the assertion is narrowed to that
+   * rather than the fixture being softened. A test for the figure check must not also silently
+   * assert that nothing else fires, or the next check added makes it fail for an unrelated reason.
+   */
   const body =
     "How are you handling the feedback loop when these selected accounts turn out to be poor " +
     "fits? I have found the error rate in the selection logic bubbles up later in the sequencer.";
   const flags = review(body, THEIR_POST, [], new Set<string>());
-  assertEquals(flagsOf(flags), [], `a clean comment was flagged: ${JSON.stringify(flags)}`);
+  assertEquals(
+    flagsOf(flags).includes("figure_not_his"),
+    false,
+    `no figure here, yet one was flagged: ${JSON.stringify(flags)}`,
+  );
+  assertEquals(
+    flagsOf(flags).includes("figures_not_checked"),
+    false,
+    "his figures were supplied, so the not-checked flag must not fire",
+  );
 });
 
 Deno.test("a failed read of his material is reported, not treated as a pass", () => {

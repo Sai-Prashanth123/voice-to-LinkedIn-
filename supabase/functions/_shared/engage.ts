@@ -64,7 +64,7 @@ import { CommentOptionsSchema } from "../_shared/schemas.ts";
 import { borrowedRuns, hashRun, shinglesOf } from "../_shared/shingles.ts";
 // The ledger’s own number extractor, reused rather than re-written: it canonicalises written-out
 // numerals, so "fifteen percent" and "15%" are the same figure to both readers.
-import { extractNumbers } from "../_shared/claims.ts";
+import { extractNumbers, FIRST_PERSON_FACT } from "../_shared/claims.ts";
 import { SOURCE_FIELDS } from "../_shared/entry.ts";
 import { isRealName } from "../_shared/names.ts";
 
@@ -623,7 +623,7 @@ export async function draftWaiting(
       const kept: Record<string, unknown>[] = [];
 
       for (const o of options) {
-        const flags = review(o.body, post.text, banned, figures);
+        const flags = review(o.body, post.text, banned, figures, o.why);
         if (flags.some((f) => f.flag === "empty")) continue;
         kept.push({
           activity_id: post.activity_id,
@@ -778,6 +778,7 @@ export function review(
   postText: string,
   bannedNames: string[],
   hisFigures: Set<string> | null = null,
+  why: string | null = null,
 ): Flag[] {
   const flags: Flag[] = [];
   const text = (body ?? "").trim();
@@ -878,6 +879,45 @@ export function review(
           `route out that has no claim ledger. Check it with him or cut the number.`,
       });
     }
+  }
+
+  /*
+   * FIFTH CHECK: AN ACCOUNT OF SOMETHING JOSH DID, SAW OR WAS TOLD.
+   *
+   * CLAUDE.md names this as the one to watch of the four that stay refused however they are
+   * declared: *"'I ran the same test' and 'a founder told me the same' are inventions with a label
+   * on."* A draft cannot carry one — the ledger refuses it. A comment had nothing.
+   *
+   * Found by reading what this feature actually wrote on 19 November, hours after the invented
+   * statistic was fixed. Of nine options, SIX carried fabricated first-person experience, and the
+   * three sampled by eye were all genuine:
+   *
+   *   "I have seen reps lose credibility by trying to be too casual in a room that wanted an
+   *    agenda."                                                   — flags: []
+   *   "When my reps stop relying on a script, the first thing I look for..."
+   *                                                               — flags: []
+   *   "I have used similar automated summaries for 1:1 prep, and the risk I found was..."
+   *                                                               — flags: []
+   *
+   * Josh runs a consultancy. He does not have "my reps", and he never told this system about a room
+   * that wanted an agenda. Each of those would have been refused outright in a draft.
+   *
+   * The `why` is scanned as well as the body, because that is where the model states its grounds —
+   * "drawing on my experience diagnosing rep performance" — and that sentence is what Josh reads
+   * when deciding whether to use the comment.
+   *
+   * ADVISORY, like the four above. 46% of the reference posts match this pattern, which is why it
+   * may never scan a draft body; a comment is different because nothing sources a comment at all.
+   */
+  const firstPerson = [text, why ?? ""].filter((s) => FIRST_PERSON_FACT.test(s));
+  if (firstPerson.length > 0) {
+    flags.push({
+      flag: "his_experience_invented",
+      detail: "Claims something he did, saw or was told. Nothing sources a comment, so there is " +
+        "no way for this to be true unless he says it is — and a model reaching for 'I have " +
+        "found' is the commonest way an invention gets a label on it. Either he confirms it or " +
+        "the point gets made in the third person.",
+    });
   }
 
   return flags;
