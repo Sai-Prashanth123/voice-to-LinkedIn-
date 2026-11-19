@@ -75,14 +75,22 @@ export const CORPUS_WRITERS: Record<string, string> = {
 export const CORPUS_HANDLES = Object.keys(CORPUS_WRITERS);
 
 /**
- * Same budget as the creator poll, and the same reason. See the note on it in engage.ts.
+ * Same budget as the creator poll, and the same reason. The full note is in engage.ts.
  *
- * This is the worker that proved 110s was too tight: nine profiles took 147s when the refresh was
- * run by hand on 18 November and succeeded with 67 posts, and the first scheduled run was killed at
- * 110s by the budget itself. Nine profiles is the slowest harvest here, so this worker is the one
- * that sets the floor for the number.
+ * In short: the edge runtime kills every execution at 150.0s with `reason: WallClockTime`, measured
+ * from its own logs on 19 November, so a budget above that can never fire and the run dies in
+ * silence. 140s is the largest value that leaves ten seconds to report the failure.
+ *
+ * THE CONSEQUENCE THIS WORKER CARRIES, STATED RATHER THAN DISCOVERED LATER
+ *
+ * The one successful refresh here took 147s — nine profiles, 67 posts, 18 November — which is three
+ * seconds inside the platform's kill. Under a 140s budget that run would be stopped and REPORTED
+ * instead of finishing. That is the right trade against dying silently, and it is not a fix: nine
+ * profiles do not reliably fit in one isolate and this worker still needs the batching that
+ * `POLL_BATCH` gives the creator poll. Until it has that, expect this to report rather than
+ * complete whenever the backend is slow.
  */
-const HARVEST_BUDGET_MS = 240_000;
+const HARVEST_BUDGET_MS = 140_000;
 
 const PROFILE_URL = (handle: string) => `https://www.linkedin.com/in/${handle}/`;
 

@@ -94,15 +94,31 @@ import {
  * killed at 110s by this constant. A path that worked when run by hand failed on every schedule,
  * and the budget built to make failures legible is what made it fail.
  *
- * 240s now. The 147s success is evidence the runtime holds at least that long, so this is above the
- * measured need with headroom and still far short of the ten minutes the harvest module allows
- * itself. If the runtime does kill a run before this fires, the start event with no finish beside
- * it still says so — which is no worse than before this constant existed.
+ * THEN IT WENT TO 240s, WHICH COULD NEVER FIRE, AND THAT WAS WORSE.
  *
- * Raise it against a measurement, never against a hope. The elapsed time of every run is in the
- * event log: corpus_started to corpus_refreshed, creator_poll_started to creator_poll_ran.
+ * Measured from the edge runtime's own logs on 19 November: **every execution of every worker on
+ * this project is shut down at 150.0 seconds with `reason: WallClockTime`.** Dozens of them, all
+ * within a tenth of a second of each other. `waitUntil` extends the isolate past the response and
+ * not past that ceiling.
+ *
+ * So a 240s budget is unreachable code. The isolate is destroyed 90 seconds before the timer can
+ * fire, which takes the timer and the catch block with it — and that is exactly what happened:
+ * creator_poll_started at 10:50:33, booted 10:50:32.492, shut down 10:53:02.511 on WallClockTime,
+ * with no outcome filed. Raising 110s to 240s traded a premature kill for a SILENT death. The 110s
+ * budget at least reported.
+ *
+ * 140s: the largest value that still leaves the run ten seconds to write its own failure. The
+ * ceiling is a fact about the platform, so this cannot be raised to fit a slow harvest — work that
+ * needs longer has to get smaller instead, which is what POLL_BATCH below does.
+ *
+ * And the 147s "success" that justified 240s was three seconds inside the kill. It was luck, not
+ * headroom, and it is not a target to protect.
+ *
+ * `cpu_time_used` on that killed run was 159 MILLISECONDS against 150 seconds of wall clock. The
+ * time is spent waiting on the scraping backend, not computing, so the number of profiles is not
+ * the variable that decides whether a run fits — nine took 147s and three exceeded 150s.
  */
-const HARVEST_BUDGET_MS = 240_000;
+const HARVEST_BUDGET_MS = 140_000;
 
 /**
  * How many creators one run harvests.

@@ -280,8 +280,22 @@ been read go first. And a daily scan turns a run that started and never finished
 which the existing daily summary already carries to you, once per disappearance rather than once a
 day forever.
 
-Raising the timeout was not available: it is already four minutes and the isolate dies well before
-that. The run had to get smaller.
+And then the runtime logs gave the actual number, which corrected something I had got wrong myself
+a few hours earlier. **Every run of every worker on this project is killed at exactly 150.0 seconds**
+by the platform. I had raised the internal timeout from 110 seconds to 240 that morning, reasoning
+that a harvest measured at 147 seconds should not be cut off. But a 240-second timeout can never
+fire — the run stops existing ninety seconds before it comes due — so I had turned a run that
+reported being cut off into a run that dies without a word. The 110 seconds I replaced was the
+better of the two.
+
+It is now 140 seconds: the most that still leaves time to write down the failure. The 147-second
+success that justified 240 was three seconds inside the platform's kill — luck, not headroom.
+
+One consequence you should expect rather than discover: under 140 seconds, a nine-profile corpus
+refresh that takes 147 will now be stopped and reported instead of finishing. That is the right way
+round, and it is not a fix — the corpus collection needs the same splitting the creator poll just
+got, and until it has it you will see it report more often than complete. The code says so in the
+place someone will read it.
 
 ### The collection is working; the counts are the half that is not
 

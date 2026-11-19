@@ -217,24 +217,30 @@ Deno.test("work that finishes in time is returned untouched and the timer is cle
   assertEquals(value, "harvested");
 });
 
-Deno.test("the harvest budget is above the slowest harvest actually measured", async () => {
+Deno.test("the harvest budget is below the runtime's own kill, so it can still report", async () => {
   /*
-   * THE TEST THAT WOULD HAVE CAUGHT A REGRESSION I SHIPPED.
+   * THIS TEST PREVIOUSLY ASSERTED THE OPPOSITE, AND THE OPPOSITE WAS WRONG.
    *
-   * The budget was first set to 110s, to sit inside what the runtime holds after the response has
-   * gone. The only timed successful harvest in the record had taken 147 seconds — the corpus
-   * refresh of 18 November, corpus_started 15:34:53 to corpus_refreshed 15:37:20, 67 posts stored.
-   * The number was chosen without checking the measurement that already existed.
+   * It required the budget to EXCEED the slowest measured successful harvest (147s, nine profiles,
+   * 18 November), on the reasoning that a budget under the measured need fails every run. That
+   * reasoning is sound only if the runtime lets a run take as long as it needs. It does not.
    *
-   * The first scheduled run proved it the next morning: corpus_started 06:00:09, corpus_failed
-   * 06:01:59 — killed at 110s by the budget itself. A path that worked when run by hand failed on
-   * every schedule, and the mechanism built to make failures legible is what made it fail.
+   * Measured from the edge runtime's own logs on 19 November: every execution of every worker on
+   * this project shuts down at 150.0s with `reason: WallClockTime`. Dozens, all within a tenth of a
+   * second. So the old assertion forced the budget into a range where it could never fire — 240s,
+   * ninety seconds past the point the isolate stops existing — and the run died in silence instead
+   * of reporting. creator_poll_started 10:50:33, booted 10:50:32.492, killed 10:53:02.511, no
+   * outcome filed. A premature kill that REPORTS beats a silent death, and the 110s this was
+   * originally set to did at least report.
    *
-   * So the measurement is written down here as a floor. Lowering the budget under it fails this
-   * test and names the run that disproves the new number. Raise it against a measurement from the
-   * event log, never against a hope.
+   * The 147s success was three seconds inside that kill. Luck, not headroom.
+   *
+   * So the invariant inverts: the budget must sit BELOW the platform ceiling, with enough room left
+   * to write the failure event. A harvest that needs longer cannot be bought more time at any
+   * number; it has to be made smaller.
    */
-  const SLOWEST_MEASURED_MS = 147_000; // 18 Nov, nine profiles, succeeded
+  const RUNTIME_KILLS_AT_MS = 150_000; // measured 19 Nov, reason: WallClockTime, every execution
+  const ROOM_TO_REPORT_MS = 5_000; // one insert, generously
 
   const sources = ["./engage.ts", "./corpus.ts"];
   for (const path of sources) {
@@ -243,10 +249,15 @@ Deno.test("the harvest budget is above the slowest harvest actually measured", a
     assert(found, `${path} has no HARVEST_BUDGET_MS to check`);
     const ms = Number(found[1].replaceAll("_", ""));
     assert(
-      ms > SLOWEST_MEASURED_MS,
-      `${path} allows ${ms / 1000}s, but a harvest that SUCCEEDED took ${
-        SLOWEST_MEASURED_MS / 1000
-      }s (18 November, nine profiles, 67 posts). A budget under the measured need fails every run.`,
+      ms + ROOM_TO_REPORT_MS <= RUNTIME_KILLS_AT_MS,
+      `${path} allows ${ms / 1000}s, but the runtime kills every execution at ${
+        RUNTIME_KILLS_AT_MS / 1000
+      }s on WallClockTime. A budget that cannot fire before the kill reports nothing at all — ` +
+        `which is the fault this file exists to prevent. Make the work smaller, not the budget bigger.`,
+    );
+    assert(
+      ms > 0,
+      `${path} allows no time at all, so every harvest is killed before it starts`,
     );
   }
 });
