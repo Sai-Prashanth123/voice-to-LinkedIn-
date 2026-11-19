@@ -225,8 +225,18 @@ Deno.test("only genuinely new posts are counted as new", async () => {
 const flagsOf = (f: Flag[]) => f.map((x) => x.flag).sort();
 const POST = "We pulled the numbers from the vendor's own booking pages and the gap was enormous.";
 
+/*
+ * "His material was read, and none of his figures are in play here."
+ *
+ * The fourth parameter of review() defaults to NULL rather than to this, on purpose: a caller that
+ * forgets it gets a figures_not_checked flag instead of a silent pass, because a check that did not
+ * run is not a check that found nothing. These tests are about the other three screens, so they say
+ * so explicitly. comment-figures.test.ts covers the figure screen itself.
+ */
+const NO_FIGURES = new Set<string>();
+
 Deno.test("a clean comment carries no flags", () => {
-  const f = review("That matches what we saw. The gap widened once we checked the raw source.", POST, ["marguerite"]);
+  const f = review("That matches what we saw. The gap widened once we checked the raw source.", POST, ["marguerite"], NO_FIGURES);
   assertEquals(flagsOf(f), []);
 });
 
@@ -236,19 +246,19 @@ Deno.test("a name nobody cleared is flagged, in the spelling he used", () => {
    * sentence Josh reads. "Names nobody has cleared: marguerite" is a worse sentence than the one with
    * her name spelled properly in it, and the match is case-insensitive either way.
    */
-  const f = review("Marguerite told me the same thing last week. It took us a while to believe it.", POST, ["Marguerite"]);
+  const f = review("Marguerite told me the same thing last week. It took us a while to believe it.", POST, ["Marguerite"], NO_FIGURES);
   assertEquals(flagsOf(f), ["named_someone"]);
   assertStringIncludes(f[0].detail, "Marguerite");
 
   // And the match does not care how either side is cased.
-  assertEquals(flagsOf(review("marguerite said so. And she was right about it.", POST, ["Marguerite"])), ["named_someone"]);
-  assertEquals(flagsOf(review("MARGUERITE said so. And she was right about it.", POST, ["marguerite"])), ["named_someone"]);
+  assertEquals(flagsOf(review("marguerite said so. And she was right about it.", POST, ["Marguerite"], NO_FIGURES)), ["named_someone"]);
+  assertEquals(flagsOf(review("MARGUERITE said so. And she was right about it.", POST, ["marguerite"], NO_FIGURES)), ["named_someone"]);
 });
 
 Deno.test("a name is matched on word boundaries, not inside another word", () => {
   // A three-letter company name must not fire inside an unrelated word, and a short name must
   // not fire on a substring of a longer one.
-  const f = review("We measured this and the result held. Nothing surprising in it.", POST, ["qtx", "vellum"]);
+  const f = review("We measured this and the result held. Nothing surprising in it.", POST, ["qtx", "vellum"], NO_FIGURES);
   assertEquals(flagsOf(f), [], `fired on a substring: ${JSON.stringify(f)}`);
 });
 
@@ -269,15 +279,15 @@ Deno.test("handing the poster their own words back is flagged", () => {
 
 Deno.test("a comment the length of a post is flagged", () => {
   const long = Array.from({ length: 9 }, (_, i) => `Sentence number ${i} about the thing.`).join(" ");
-  assert(flagsOf(review(long, POST, [])).includes("too_long"));
+  assert(flagsOf(review(long, POST, [], NO_FIGURES)).includes("too_long"));
 });
 
 Deno.test("a one-liner is flagged as too short", () => {
-  assert(flagsOf(review("Completely agree with this.", POST, [])).includes("too_short"));
+  assert(flagsOf(review("Completely agree with this.", POST, [], NO_FIGURES)).includes("too_short"));
 });
 
 Deno.test("an empty body is its own flag, and is never filed", () => {
-  assertEquals(flagsOf(review("   ", POST, [])), ["empty"]);
+  assertEquals(flagsOf(review("   ", POST, [], NO_FIGURES)), ["empty"]);
 });
 
 Deno.test("sentences are counted without a trailing full stop", () => {

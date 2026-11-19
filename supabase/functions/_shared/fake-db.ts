@@ -70,6 +70,8 @@ export function fakeDb(seed: Record<string, Row[]> = {}): any {
     const rows = () => tables[table];
     const filters: Array<(r: Row) => boolean> = [];
     let limit: number | null = null;
+    let rangeFrom: number | null = null;
+    let rangeTo: number | null = null;
     let orderBy: { col: string; asc: boolean } | null = null;
     let headCount = false;
     let mode: "select" | "update" | "insert" | "upsert" = "select";
@@ -86,6 +88,10 @@ export function fakeDb(seed: Record<string, Row[]> = {}): any {
         });
       }
       if (limit != null) out = out.slice(0, limit);
+      // `range` is inclusive at both ends, as PostgREST's is. Added 19 November, when a paged read
+      // of his material was written against the real client and this fake could not serve it — so a
+      // test failed for want of a method rather than for anything about the code under test.
+      if (rangeFrom != null) out = out.slice(rangeFrom, (rangeTo ?? out.length) + 1);
       return out;
     };
 
@@ -152,6 +158,11 @@ export function fakeDb(seed: Record<string, Row[]> = {}): any {
       order(col: string, opts?: { ascending?: boolean }) {
         orderBy = { col, asc: opts?.ascending !== false };
         return self;
+      },
+      range(from: number, to: number) {
+        rangeFrom = from;
+        rangeTo = to;
+        return this;
       },
       limit(n: number) {
         limit = n;

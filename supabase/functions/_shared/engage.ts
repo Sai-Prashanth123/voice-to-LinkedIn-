@@ -41,9 +41,14 @@
  *
  * The claim ledger, the nine gate checks and the shingle guard all read drafts, and a comment is
  * none of those. In a session the writer is the check. Here there is no writer, so `review()` runs
- * three deterministic checks and records what they find on the row. They are a FLOOR, not a gate:
- * they catch a named client and a copied phrase, and they cannot catch an invented number or the
- * composite that actually identifies a company — a figure plus a niche plus a date.
+ * four deterministic checks and records what they find on the row. They are a FLOOR, not a gate.
+ *
+ * The fourth was added on 19 November because this comment used to say the checks "cannot catch an
+ * invented number", and the first run after the feature was switched on produced one: a drafted
+ * comment citing "a 15-20% drop in accuracy on mobile numbers within 60 days", a figure that
+ * appears nowhere in any raw input, material field or receipt, labelled by the model as his. It is
+ * checked now. What none of these can still catch is the composite that actually identifies a
+ * company — a figure plus a niche plus a date. No string search will ever find that.
  */
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
@@ -57,6 +62,10 @@ import { loadLibrary } from "../_shared/library.ts";
 import { COMMENT_SYSTEM, COMMENT_USER, PROMPT_VERSION } from "../_shared/prompts.ts";
 import { CommentOptionsSchema } from "../_shared/schemas.ts";
 import { borrowedRuns, hashRun, shinglesOf } from "../_shared/shingles.ts";
+// The ledger’s own number extractor, reused rather than re-written: it canonicalises written-out
+// numerals, so "fifteen percent" and "15%" are the same figure to both readers.
+import { extractNumbers } from "../_shared/claims.ts";
+import { SOURCE_FIELDS } from "../_shared/entry.ts";
 import { isRealName } from "../_shared/names.ts";
 
 /*
@@ -474,6 +483,8 @@ export async function draftWaiting(
   // draft; a change mid-run reaching three of four comments would be worse than either.
   const library = await loadLibrary(db, "commenting");
   const banned = await uncleared(db);
+  // One read for the whole run, same as the name screen above it.
+  const figures = await hisFigures(db);
 
   for (const post of queue) {
     try {
@@ -481,7 +492,7 @@ export async function draftWaiting(
       const kept: Record<string, unknown>[] = [];
 
       for (const o of options) {
-        const flags = review(o.body, post.text, banned);
+        const flags = review(o.body, post.text, banned, figures);
         if (flags.some((f) => f.flag === "empty")) continue;
         kept.push({
           activity_id: post.activity_id,
@@ -631,7 +642,12 @@ export function sentenceCount(text: string): number {
  * it. The thing none of these can catch is the composite that actually identifies a company: a
  * figure plus a niche plus a date. No string search will ever find that.
  */
-export function review(body: string, postText: string, bannedNames: string[]): Flag[] {
+export function review(
+  body: string,
+  postText: string,
+  bannedNames: string[],
+  hisFigures: Set<string> | null = null,
+): Flag[] {
   const flags: Flag[] = [];
   const text = (body ?? "").trim();
 
@@ -676,7 +692,152 @@ export function review(body: string, postText: string, bannedNames: string[]): F
     });
   }
 
+  /*
+   * 4 — A FIGURE THAT IS NOT HIS. Added 19 November, after the first real run produced one.
+   *
+   * The header above used to say these checks "cannot catch an invented number". It was right, and
+   * within minutes of the feature being switched on that is exactly what arrived. The 07:00 poll
+   * drafted a comment reading "you're looking at a 15-20% drop in accuracy on mobile numbers within
+   * 60 days", and labelled its own reasoning "[his_number]". Searched across every raw input, every
+   * material field and the receipts section: zero hits. The figure exists nowhere Josh has ever
+   * spoken or supplied, and `flags` came back empty, so nothing stood between it and a comment
+   * published in his name under somebody else's post.
+   *
+   * A draft cannot do this — the claim ledger refuses an unsourced number outright. A comment had
+   * no equivalent, and "in a session the writer is the check" assumes the writer knows which
+   * figures are his, which nothing told them.
+   *
+   * SO THIS IS THE SAME TEST THE LEDGER APPLIES, in the one place it was missing. A number is his
+   * if it appears anywhere in his own material. It is also allowed if it appears in the post being
+   * replied to, because quoting their figure back is legitimate and common.
+   *
+   * HOW WEAK THIS IS, MEASURED, because it would be easy to read it as more than it is.
+   *
+   * Josh's material holds 241 distinct figures. Run against the real comment above, the check
+   * flags "60" and NOTHING ELSE: "15" and "20" both appear somewhere in his notes in unrelated
+   * contexts, so "a 15-20% drop" passes on its digits. It caught that comment by one number out of
+   * three, and a differently worded invention using only common figures would pass entirely.
+   *
+   * A whole-corpus match cannot tell "15 appears in his material" from "15% of mobile numbers
+   * decay in 60 days". Only a per-comment claim ledger could, and comments do not have one. So this
+   * is a floor that happens to catch the case that occurred, not a guarantee against the next one.
+   *
+   * ADVISORY, like the other three, and for one reason beyond the above: a year, a round number in
+   * a turn of phrase, and a figure he gave in a session that was never filed would all trip it. It
+   * is a prompt to check, and the detail says which figure. If the read of his material failed,
+   * that is reported rather than passed over — a check that did not run is not one that found
+   * nothing.
+   */
+  if (hisFigures === null) {
+    flags.push({
+      flag: "figures_not_checked",
+      detail: "His own material could not be read, so no figure in this comment was checked " +
+        "against it. NOT a pass — nothing looked. Read any number here out to him before it goes " +
+        "anywhere.",
+    });
+  } else {
+    const theirs = new Set(extractNumbers(postText ?? ""));
+    const unsourced = extractNumbers(text).filter((n) => !hisFigures.has(n) && !theirs.has(n));
+    if (unsourced.length > 0) {
+      flags.push({
+        flag: "figure_not_his",
+        detail: `Cites ${unsourced.join(", ")}, which appears nowhere in his own material and ` +
+          `nowhere in the post being replied to. A comment goes out in his name: an invented ` +
+          `statistic is the one thing this system exists to prevent, and a comment is the only ` +
+          `route out that has no claim ledger. Check it with him or cut the number.`,
+      });
+    }
+  }
+
   return flags;
+}
+
+/**
+ * Every figure Josh has ever supplied, for the check above.
+ *
+ * Read once per run, like the name screen beside it. Across ALL of his material rather than one
+ * moment's, because a comment is not written from a moment — he is replying to somebody, and any
+ * number he has ever given is fair for him to use again.
+ *
+ * Returns null when the read fails, which `review` reports as a check that did not run. Swallowing
+ * it and returning an empty set would flag every figure in every comment, and a check that cries
+ * wolf on everything is one nobody reads.
+ */
+export async function hisFigures(db: SupabaseClient): Promise<Set<string> | null> {
+  try {
+    const out = new Set<string>();
+
+    /*
+     * PAGED AND ORDERED, because the first version was neither.
+     *
+     * It read `.limit(2000)` with no order, and `row-ceiling.test.ts` failed it immediately: a
+     * limited read with no order on a table that grows returns an arbitrary slice, so which of his
+     * figures the screen knew about would depend on row order. Worse, the 2000 was a fiction —
+     * PostgREST truncates any response at 1,000 rows however many are asked for, silently.
+     *
+     * This has to see ALL of it or the check quietly weakens as the bank grows: a figure it misses
+     * is a figure flagged as not his. So it pages until a short page ends it, ordered by id so the
+     * pages cannot overlap or skip.
+     */
+    const PAGE = 500;
+    /*
+     * `key` is a parameter because the two tables do not share one. `material` has NO `id` column
+     * at all — it is keyed on `moment_id`, one row per moment — and the first version of this
+     * ordered both by `id`, so the whole screen returned null against the live schema and every
+     * comment would have carried figures_not_checked for ever.
+     *
+     * The fake client did not catch it: its `order()` on a column that does not exist sorts on
+     * undefined and its select list is ignored. Only running it against the real database did.
+     */
+    const pageThrough = async (
+      table: string,
+      key: string,
+      select: string,
+      take: (row: Record<string, unknown>) => string,
+    ) => {
+      for (let from = 0;; from += PAGE) {
+        const { data, error } = await db
+          .from(table)
+          .select(select)
+          .order(key, { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) throw new Error(`${table}: ${error.message}`);
+        // Through `unknown`: the select list is built at runtime, so the client cannot type it.
+        const rows = (data ?? []) as unknown as Record<string, unknown>[];
+        for (const row of rows) {
+          for (const n of extractNumbers(take(row))) out.add(n);
+        }
+        if (rows.length < PAGE) return;
+      }
+    };
+
+    await pageThrough(
+      "raw_inputs",
+      "id",
+      "id, transcript, text_body",
+      (r) => `${r.transcript ?? ""} ${r.text_body ?? ""}`,
+    );
+    await pageThrough(
+      "material",
+      "moment_id",
+      `moment_id, ${SOURCE_FIELDS.join(", ")}`,
+      (r) => Object.values(r).join(" "),
+    );
+
+    const receipts = await db.from("library_sections").select("body").eq("key", "receipts")
+      .maybeSingle();
+    if (receipts.data?.body) {
+      for (const n of extractNumbers(String(receipts.data.body))) out.add(n);
+    }
+
+    return out;
+  } catch (err) {
+    await logEvent(db, "comment_figure_screen_unavailable", "warn", {
+      error: err instanceof Error ? err.message : String(err),
+      means: "Comments from this run carry a figures_not_checked flag rather than a silent pass.",
+    }).catch(() => {});
+    return null;
+  }
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
