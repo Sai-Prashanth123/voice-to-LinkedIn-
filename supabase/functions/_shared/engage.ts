@@ -115,8 +115,19 @@ import {
  * headroom, and it is not a target to protect.
  *
  * `cpu_time_used` on that killed run was 159 MILLISECONDS against 150 seconds of wall clock. The
- * time is spent waiting on the scraping backend, not computing, so the number of profiles is not
- * the variable that decides whether a run fits — nine took 147s and three exceeded 150s.
+ * time is spent waiting on the scraping backend, not computing.
+ *
+ * WHAT THAT BACKEND ACTUALLY COSTS, CORRECTED
+ *
+ * The first version of this note said "nine took 147s and three exceeded 150s". The second half was
+ * wrong, and the run it described says so: the three-profile harvest FINISHED at 10:52:59.086 —
+ * 146s in, having stamped all three creators — and the isolate was killed 3.4 seconds later, during
+ * the storing and option-drafting that follow. The harvest fitted; what came after it did not.
+ *
+ * And the same three profiles answered in 11.9 SECONDS on the next run (11:24:47 to 11:24:58.947).
+ * So backend latency is the variable, it swings by more than tenfold on identical work, and profile
+ * count barely enters into it. Neither raising this budget nor lowering POLL_BATCH addresses that;
+ * only not waiting synchronously for the scrape job would.
  */
 const HARVEST_BUDGET_MS = 140_000;
 
