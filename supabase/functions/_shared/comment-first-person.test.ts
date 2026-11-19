@@ -87,6 +87,52 @@ Deno.test("the grounds in `why` are scanned too, not just the comment", () => {
   assert(FIRST_PERSON_FACT.test("our own sales data"));
 });
 
+Deno.test("the two forms the first LIVE run slipped through", () => {
+  /*
+   * Both of these came back `flags: []` from the run on 19 November that first had this check
+   * deployed. Reading the options that PASSED is what found them; counting the ones that flagged
+   * would have reported five of eight and looked like a success.
+   *
+   * 1. A CURLY APOSTROPHE. The pattern had only U+0027, and the model writes U+2019. Inspected byte
+   *    by byte to be certain: `I`, U+2019, `ve seen`. An ASCII-only contraction pattern is closer
+   *    to decorative than to working, because a model emits typographic quotes as a matter of
+   *    course.
+   *
+   * 2. ONE MISSING VERB. "we've pushed" passed because `pushed` was not on the allowlist. That is
+   *    the failure mode of every allowlist, so the regular past tense is now matched by shape and
+   *    only the irregulars are enumerated.
+   */
+  assert(
+    FIRST_PERSON_FACT.test("I’ve seen teams where the AE was still liable for churn"),
+    "a curly apostrophe still defeats the contraction branch",
+  );
+  assert(
+    FIRST_PERSON_FACT.test("When we've pushed for this kind of agreement, it usually stalls"),
+    "a past-tense verb that is not on any list still slips through",
+  );
+  // The straight apostrophe must keep working too, and so must the modifier letter form.
+  assert(FIRST_PERSON_FACT.test("I've seen that happen"));
+  assert(FIRST_PERSON_FACT.test("Iʼve seen that happen"));
+});
+
+Deno.test("a position is not an event, so the stance verbs stay clear", () => {
+  /*
+   * The carve-out that makes matching the regular past tense by shape safe. Without it, `\w+ed`
+   * reads "I wanted a cleaner answer" as a claim about something that happened — and a check that
+   * fires on every opinion fires on every comment, which is worth nothing at all.
+   */
+  for (const stance of [
+    "I wanted a cleaner answer than that.",
+    "I agreed with the premise but not the method.",
+    "I expected the opposite result.",
+    "I decided it was not worth the effort.",
+    "We assumed the shorter cycle would win.",
+    "I doubted that would hold at scale.",
+  ]) {
+    assertEquals(FIRST_PERSON_FACT.test(stance), false, `fired on a position: "${stance}"`);
+  }
+});
+
 /* ── What it must NOT fire on ─────────────────────────────────────────────── */
 
 Deno.test("an opinion, a hedge and a question are not accounts of anything", () => {
@@ -128,9 +174,10 @@ Deno.test("it is a flag, not a block, and it says what it does not mean", () => 
   );
 });
 
-Deno.test("46% of the reference posts match, which is why this never scans a draft body", () => {
+Deno.test("65% of the reference posts match, which is why this never scans a draft body", () => {
   /*
-   * Measured 19 November against 1,000 stored reference posts. That rate is the calibration habit
+   * Measured 19 November against 1,000 stored reference posts: 46% with the verb allowlist, 65%
+   * once the regular past tense was matched by shape. That rate is the calibration habit
    * answering as designed: a rule firing on half the posts Josh chose as models is detecting
    * writing, not invention. It is recorded as a REASON here rather than as a threshold — the number
    * is in the note on FIRST_PERSON_FACT, and the thing that matters is that nothing applies this

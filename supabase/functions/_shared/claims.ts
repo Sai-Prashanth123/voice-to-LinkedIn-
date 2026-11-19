@@ -298,11 +298,31 @@ export function extractQuotedStrings(text: string): string[] {
  * whole; this is the mechanical floor under it, and a floor that catches the common forms is worth
  * more than a clever one nobody can read.
  */
-const FP_VERBS =
-  "ran|run|tested|measured|checked|tried|built|sent|called|asked|told|saw|seen|watched|noticed|" +
-  "found|spoke|spoken|talked|met|sat|heard|learned|learnt|audited|analysed|analyzed|reviewed|" +
-  "counted|scraped|pulled|compared|shipped|launched|hired|fired|lost|won|closed|charged|paid|" +
-  "billed|used|worked|managed|coached|scaled|sold|interviewed|trained|implemented|deployed";
+/**
+ * IRREGULAR past forms, listed because no rule generates them.
+ *
+ * The regular ones are matched by shape below (`\w+ed`) rather than enumerated, because an
+ * allowlist of verbs cannot be completed and every absence is a silent hole. That is not a
+ * theoretical worry: the first live run after this check shipped produced *"When we've **pushed**
+ * for this kind of agreement"* and it passed, because `pushed` was not on the list. One verb.
+ */
+const FP_IRREGULAR =
+  "ran|run|saw|seen|built|sent|told|found|spoke|spoken|met|sat|heard|learnt|won|lost|paid|sold|" +
+  "did|done|went|got|gotten|took|taken|made|gave|given|kept|left|put|read|set|wrote|written|" +
+  "spent|brought|caught|taught|sought|held|ran|began|begun|broke|broken|chose|chosen|drove|" +
+  "driven|grew|grown|knew|known|led|meant|rebuilt|resent|rewrote|shut|sung|swore|understood";
+
+/**
+ * Regular past tense by SHAPE, with the stance verbs carved out.
+ *
+ * `\w+ed` catches pushed, tested, measured, noticed, worked, managed, scaled, implemented and every
+ * other one nobody thought to list. The carve-out is what stops it reading an opinion as an event:
+ * "I wanted", "I hoped", "I agreed" are positions, not accounts of something that happened, and a
+ * check that flagged those would fire on every comment and be worth nothing.
+ */
+const FP_STANCE =
+  "wanted|needed|hoped|liked|loved|hated|agreed|disagreed|guessed|assumed|expected|preferred|" +
+  "wished|intended|believed|doubted|suspected|wondered|figured|reckoned|decided|aimed|tried";
 
 /**
  * Words allowed between the pronoun and the verb.
@@ -324,8 +344,22 @@ const FP_NOUNS =
 /** Up to two adjectives between the possessive and the noun: `my direct management experience`. */
 const FP_ADJ = "(?:\\s+[a-z][a-z-]{2,14}){0,2}";
 
+/**
+ * BOTH APOSTROPHES. U+0027 and U+2019.
+ *
+ * The first version had only the ASCII one, and the very first live run after this check shipped
+ * went straight through it: *"**I’ve seen** teams where the AE was still technically liable for
+ * churn 90 days post-onboarding"* came back clean, because the model had written a curly
+ * apostrophe. Inspected byte by byte to be sure of it — `I`, U+2019, `ve seen`.
+ *
+ * Models emit typographic quotes as a matter of course, so an ASCII-only contraction pattern is
+ * closer to decorative than to working.
+ */
+const FP_APOS = "['’ʼ]";
+
 const FIRST_PERSON_FACT = new RegExp(
-  "\\b(?:I|we)(?:'ve|'d)?(?:\\s+(?:" + FP_FILLER + "))*\\s+(?:" + FP_VERBS + ")\\b" +
+  "\\b(?:I|we)(?:" + FP_APOS + "(?:ve|d))?(?:\\s+(?:" + FP_FILLER + "))*\\s+" +
+    "(?!(?:" + FP_STANCE + ")\\b)(?:" + FP_IRREGULAR + "|\\w+ed)\\b" +
     "|\\b(?:told|said to|asked|emailed|messaged|called)\\s+(?:me|us)\\b" +
     "|\\b(?:my|our)" + FP_ADJ + "\\s+(?:" + FP_NOUNS + ")\\b",
   "i",
@@ -334,7 +368,7 @@ const FIRST_PERSON_FACT = new RegExp(
 /**
  * WHERE THIS MAY BE APPLIED, AND WHERE IT MAY NEVER BE.
  *
- * Measured 19 November against 1,000 reference posts: **46% would match.** That is the calibration
+ * Measured 19 November against 1,000 reference posts: **65% would match.** That is the calibration
  * habit answering exactly as it is meant to — a rule firing on half the posts Josh chose as models
  * is detecting writing, not invention, and a body-wide scan of a draft would be useless.
  *
@@ -344,6 +378,13 @@ const FIRST_PERSON_FACT = new RegExp(
  * three sampled by eye were all true positives, including "I have seen reps lose credibility in a
  * room that wanted an agenda" and "when my reps stop relying on a script". That is an invention
  * rate, not a false-positive rate.
+ *
+ * The rate rose from 46% to 65% when the regular past tense was matched by shape instead of by an
+ * allowlist. That is recall of the same thing rather than lost precision: every branch of the first
+ * alternative requires `I` or `we` in front of the verb, so what it now also catches is first-person
+ * narration of events — which is what a reference writer's post is largely made of, and what a
+ * comment in Josh's name has no business containing. The stance verbs are carved out by name so
+ * that "I wanted", "I agreed", "I expected" and "I decided" stay clear: a position is not an event.
  */
 export { FIRST_PERSON_FACT };
 
