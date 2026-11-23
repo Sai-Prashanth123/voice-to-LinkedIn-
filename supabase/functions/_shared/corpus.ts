@@ -21,11 +21,28 @@
  * something half useless." The first half of that is now addressable — a key can be put in the
  * vault — and the second half is why the backend choice below is not a detail.
  *
- * THE TWO BACKENDS ARE NOT INTERCHANGEABLE, AND THIS IS THE WHOLE RISK
+ * WHAT CHANGED ON 23 NOVEMBER, BECAUSE IT REVERSES THE PREMISE BELOW
  *
- * The console (XP_API_KEY) strips line breaks from every LinkedIn post it returns — verified
- * against the live API on 9 October, when all 14 rows of a Matt Barker harvest came back as one
- * unbroken paragraph each. Apify (APIFY_TOKEN) preserves them.
+ * The console was fixed. Measured by submitting eight live jobs rather than by being told: 111 of
+ * the 114 posts returned carried their line breaks, all 114 carried a reaction count, and a job
+ * that fetches nothing now reports `failed` with a reason instead of `succeeded` with no rows —
+ * which was the dangerous one, because a success with nothing in it is indistinguishable from a
+ * quiet week.
+ *
+ * The limit MOVED rather than disappearing, and the remaining half is the half Josh asked about.
+ * The console reads the profile page, which shows a logged-out reader a handful of recent entries —
+ * every job today returned 7 to 8 posts per profile. So it collects new posts beautifully and
+ * cannot reach an old one: a post-URL harvest of six stored posts (entity_type "post") and the
+ * `linkedin-backfill` actor over March–May 2026 each returned zero rows and reported success. The
+ * 1,649 stored posts with no reaction count therefore stay uncounted until APIFY_TOKEN exists, and
+ * everything collected from here on arrives counted.
+ *
+ * THE TWO BACKENDS ARE STILL NOT INTERCHANGEABLE, AND THIS IS THE WHOLE RISK
+ *
+ * On 9 October all 14 rows of a Matt Barker harvest came back from the console as one unbroken
+ * paragraph each, three of today's 114 rows still arrived flat, and a third party can regress
+ * without telling us. Apify (APIFY_TOKEN) preserves them by design. So every guard below stays
+ * exactly as it was: what changed is what this reports, not what it is allowed to overwrite.
  *
  * That is not a quality preference, it is a correctness boundary. Six columns here are counted FROM
  * line breaks, and `merge-duplicates` means a key present with a null value overwrites. So one
@@ -81,16 +98,39 @@ export const CORPUS_HANDLES = Object.keys(CORPUS_WRITERS);
  * from its own logs on 19 November, so a budget above that can never fire and the run dies in
  * silence. 140s is the largest value that leaves ten seconds to report the failure.
  *
- * THE CONSEQUENCE THIS WORKER CARRIES, STATED RATHER THAN DISCOVERED LATER
+ * THE CONSEQUENCE THIS WORKER CARRIED UNTIL 23 NOVEMBER, AND NO LONGER DOES
  *
- * The one successful refresh here took 147s — nine profiles, 67 posts, 18 November — which is three
- * seconds inside the platform's kill. Under a 140s budget that run would be stopped and REPORTED
- * instead of finishing. That is the right trade against dying silently, and it is not a fix: nine
- * profiles do not reliably fit in one isolate and this worker still needs the batching that
- * `POLL_BATCH` gives the creator poll. Until it has that, expect this to report rather than
- * complete whenever the backend is slow.
+ * The one successful refresh here took 147s — nine profiles, 67 posts, 18 November — three seconds
+ * inside the platform's kill. Under a 140s budget that run is stopped and REPORTED instead of
+ * finishing, which is the right trade against dying silently and was never a fix. It then failed on
+ * every scheduled run: 19 November and 23 November, both at this budget.
+ *
+ * Measured on 23 November, submitting the real jobs rather than reasoning about them:
+ *
+ *   nine profiles in one job   273.1s   76 posts     — cannot fit, and never could
+ *   three profiles in one job  120.2s   17 posts     — fits, with 20s to spare
+ *   one profile in one job     111.7s, 128.5s        — the cost is overhead, not per-profile
+ *
+ * So the ceiling is not about how many profiles are asked for; a single profile already spends most
+ * of the budget. That is what `CORPUS_BATCH` answers.
  */
 const HARVEST_BUDGET_MS = 140_000;
+
+/**
+ * How many writers one run fetches, and why it is three.
+ *
+ * The same shape as `POLL_BATCH` in engage.ts and for the same reason, with one difference worth
+ * knowing: there, batching made progress durable. Here it is the only thing that makes the run
+ * possible at all — nine profiles measured 273s against a platform that kills every execution at
+ * 150s, so the scheduled refresh could not have completed however reliable the backend became.
+ *
+ * Three measured 120s. Two runs a week covers all nine in a week and a half, and `run_worker` with
+ * `corpus` walks through them faster when somebody is waiting.
+ *
+ * NOT raised to four without measuring it. 120s of a 140s budget is already thin, and the overhead
+ * reading above means a fourth profile is not a third of the cost of three.
+ */
+export const CORPUS_BATCH = 3;
 
 const PROFILE_URL = (handle: string) => `https://www.linkedin.com/in/${handle}/`;
 
@@ -217,6 +257,76 @@ function withoutEmptyFields(rows: Row[]): { rows: Row[]; held: number } {
   return { rows, held };
 }
 
+/**
+ * Which three writers this run fetches: the three whose turn it has been longest.
+ *
+ * ROTATION BY ATTEMPT, NOT BY WHAT IS STORED.
+ *
+ * The obvious signal is `max(scraped_at)` per handle, and it is the wrong one. A writer whose fetch
+ * returns nothing stores nothing, so `scraped_at` does not move, so that writer is the stalest
+ * again next run and the other eight never get a turn. `ryanscarlin` is exactly that case already —
+ * last stored 20 October, newest post 10 September — so this is not a hypothetical.
+ *
+ * `corpus_started` is filed on every run before any work begins, which makes it the one record of
+ * an ATTEMPT rather than of a success. Reading the recent ones rotates: a writer that failed is
+ * retried once the others have had their turn, and a run that dies part-way does not pin the
+ * schedule to the same three forever.
+ *
+ * ORDERED AND LIMITED rather than windowed by `created_at`, for the reason orphan-runs.ts records
+ * at length: the row this system writes takes `created_at` from the column default, so the value is
+ * not in the payload a fake database sees.
+ */
+export async function corpusDueForRefresh(
+  db: SupabaseClient,
+  batch = CORPUS_BATCH,
+): Promise<{ handles: string[]; basis: string }> {
+  const { data, error } = await db
+    .from("system_events")
+    .select("detail")
+    .eq("kind", "corpus_started")
+    .order("id", { ascending: false })
+    .limit(20);
+
+  if (error) {
+    /*
+     * Reported in the event, not swallowed into a silent default.
+     *
+     * The fallback still has to pick somebody, and it picks the first three — but a run that
+     * chose them because it could not read its own history is a different fact from a run that
+     * chose them because it was their turn, and only one of those is worth acting on.
+     */
+    return {
+      handles: CORPUS_HANDLES.slice(0, batch),
+      basis: `could not read which writers ran recently (${error.message}), so this is the first ` +
+        `${batch} rather than the longest waiting`,
+    };
+  }
+
+  // Position in the list is recency: 0 is the most recent run. A handle absent from all of them
+  // has never been attempted, and goes first.
+  const lastAttempt = new Map<string, number>();
+  (data ?? []).forEach((row, index) => {
+    const writers = (row as { detail?: { writers?: unknown } }).detail?.writers;
+    if (!Array.isArray(writers)) return;
+    for (const w of writers) {
+      const handle = String(w);
+      if (!lastAttempt.has(handle)) lastAttempt.set(handle, index);
+    }
+  });
+
+  const never = CORPUS_HANDLES.filter((h) => !lastAttempt.has(h));
+  const seen = CORPUS_HANDLES.filter((h) => lastAttempt.has(h))
+    .sort((a, b) => lastAttempt.get(b)! - lastAttempt.get(a)!);
+
+  const handles = [...never, ...seen].slice(0, batch);
+  return {
+    handles,
+    basis: never.length > 0
+      ? `${never.length} of the ${CORPUS_HANDLES.length} have no run on record, and they go first`
+      : "the longest since their last run, from the last 20 runs",
+  };
+}
+
 /** Which backend can run, and what it costs. Apify first, because the console cannot keep shape. */
 export function backendFor(): {
   name: "apify" | "console" | null;
@@ -233,11 +343,25 @@ export function backendFor(): {
   if (secret("XP_API_KEY")) {
     return {
       name: "console",
-      keepsLineBreaks: false,
-      note: "Only the console key is set, and the console strips line breaks (verified 9 October). " +
-        "So this run may ADD posts not already held, and cannot refresh a post that is stored with " +
-        "its shape — which is most of them, and is the half Josh asked for. Set APIFY_TOKEN in the " +
-        "vault to refresh reaction counts on the existing corpus.",
+      /*
+       * TRUE since 23 November, and this is a reversal of the reading this whole file was built
+       * around. Measured by submitting eight jobs: 111 of the 114 posts returned carried their line
+       * breaks and all 114 carried a reaction count, where on 9 October all 14 rows of a Barker
+       * harvest came back as one unbroken paragraph each.
+       *
+       * NOTHING MAY USE THIS TO SKIP `withoutRegressions`. The guard is not an optimisation for a
+       * backend that loses shape, it is the thing that makes an irreversible write safe — three of
+       * the 114 rows still arrived flat, 0046 revokes DELETE from every role, and a third party can
+       * regress without telling us. This field is a report, not a permission.
+       */
+      keepsLineBreaks: true,
+      note: "Measured again on 23 November and this changed: the console now returns line breaks " +
+        "(111 of 114 rows) and a reaction count on every row, so a new post arrives with both its " +
+        "shape and its counts. It still strips them often enough that the shape guard stays. What " +
+        "it CANNOT do is reach a post older than the handful LinkedIn shows a logged-out reader: a " +
+        "post-URL harvest of six stored posts and the backfill actor over March–May 2026 each " +
+        "returned zero rows and reported success. So posts already stored without a count stay " +
+        "uncounted until APIFY_TOKEN is in the vault; everything collected from here on is counted.",
     };
   }
   return {
@@ -247,15 +371,30 @@ export function backendFor(): {
   };
 }
 
-/** The harvest, stored. Returns what it did, for the event log. */
-export async function refreshCorpus(db: SupabaseClient, maxPosts = 50) {
+/**
+ * The harvest, stored. Returns what it did, for the event log.
+ *
+ * `handles` is the batch — see `corpusDueForRefresh`. It defaults to all nine because a caller who
+ * wants the whole corpus in one go (a script, where nothing is killed at 150 seconds) should not
+ * have to know about batching, and because that is what every existing caller meant.
+ *
+ * Attribution is NOT narrowed to the batch. `normaliseRows` still gets all nine writers, because a
+ * profile harvest returns other people's posts from the feed and one of those people is sometimes
+ * another reference writer. Narrowing it would throw away a post this corpus wants, and would file
+ * it under `foreign` while it sat there correctly attributed.
+ */
+export async function refreshCorpus(
+  db: SupabaseClient,
+  maxPosts = 50,
+  handles: string[] = CORPUS_HANDLES,
+) {
   const backend = backendFor();
   if (!backend.name) {
     await logEvent(db, "corpus_blocked", "warn", { means: backend.note });
     return { ok: false as const, backend: null, note: backend.note };
   }
 
-  const profileUrls = CORPUS_HANDLES.map(PROFILE_URL);
+  const profileUrls = handles.map(PROFILE_URL);
   const raw = backend.name === "apify"
     ? await fetchFromApify({ profileUrls, token: secret("APIFY_TOKEN"), maxPosts })
     : await fetchFromConsole({
@@ -298,6 +437,8 @@ export async function refreshCorpus(db: SupabaseClient, maxPosts = 50) {
   const result = {
     ok: true as const,
     backend: backend.name,
+    writers: handles,
+    writers_not_in_this_run: CORPUS_HANDLES.filter((h) => !handles.includes(h)),
     theirs: items.length,
     someone_elses: foreign,
     fields_the_backend_did_not_map: [...unmapped],
@@ -305,6 +446,15 @@ export async function refreshCorpus(db: SupabaseClient, maxPosts = 50) {
     dropped_to_protect_shape: dropped,
     empty_fields_held: held,
     with_counts: rows.filter((r) => typeof r.reaction_count === "number").length,
+    /*
+     * The measured answer to the question `keepsLineBreaks` only ever declared.
+     *
+     * That field is read by nothing but its own test, which is this repository's signature defect:
+     * a value nothing reads, reporting success. What a reader actually needs is what THIS run
+     * received, because the backend's behaviour changed under us once already — in our favour on 23
+     * November, and it can change back without a word.
+     */
+    with_line_breaks: rows.filter((r) => r.has_line_breaks === true).length,
     note: backend.note,
   };
 
@@ -324,10 +474,27 @@ export async function refreshCorpus(db: SupabaseClient, maxPosts = 50) {
  * beside it means a run was torn down part-way.
  */
 export async function refreshDetached(db: SupabaseClient): Promise<Response> {
+  /*
+   * The batch is chosen BEFORE the start event, because the start event is what records it.
+   *
+   * That ordering is the whole mechanism: `corpus_started.writers` is the only record that these
+   * three were attempted, and `corpusDueForRefresh` reads it back on the next run to rotate. If the
+   * batch were chosen inside the work, a torn-down run would leave no trace of whose turn it had
+   * been and the rotation would stall on the same three.
+   */
+  const due = await corpusDueForRefresh(db).catch((err) => ({
+    handles: CORPUS_HANDLES.slice(0, CORPUS_BATCH),
+    basis: `choosing the batch threw (${err instanceof Error ? err.message : String(err)})`,
+  }));
+
   await logEvent(db, "corpus_started", "info", {
-    means: "The response goes out before the harvest finishes, because nine profiles do not fetch " +
-      "in the 30 seconds invoke_worker allows. A start with no finish beside it is a run that was " +
-      "torn down part-way.",
+    writers: due.handles,
+    chosen_because: due.basis,
+    means: `This run fetches ${due.handles.length} of the ${CORPUS_HANDLES.length} writers. All ` +
+      `nine in one job measured 273s on 23 November against a platform that kills every run at ` +
+      `150s, so the whole corpus in one execution is not slow, it is impossible. The response goes ` +
+      `out before the harvest finishes, so a start with no finish beside it is a run that was torn ` +
+      `down part-way.`,
   }).catch(() => {});
 
   /*

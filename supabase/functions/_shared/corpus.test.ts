@@ -86,13 +86,29 @@ Deno.test("the console is used only as a fallback, and says what it cannot do", 
     Deno.env.set("XP_API_KEY", "key");
     const chosen = backendFor();
     assertEquals(chosen.name, "console");
+    /*
+     * REVERSED on 23 November, and the reason is a measurement rather than a decision: 111 of the
+     * 114 posts returned across eight live jobs carried their line breaks, where on 9 October all
+     * 14 rows of a Barker harvest arrived as one paragraph each. The guard in `withoutRegressions`
+     * is unchanged and must stay — three of those 114 were still flat — so what changed is what
+     * this reports, not what it is allowed to overwrite.
+     */
     assertEquals(
       chosen.keepsLineBreaks,
-      false,
-      "the console was reported as keeping line breaks; it strips them, verified 9 October",
+      true,
+      "the console was reported as stripping line breaks; it kept them on 111 of 114 rows on 23 November",
     );
-    // The note is what reaches a reader, so it has to name the consequence and the remedy.
-    assert(/strips line breaks/i.test(chosen.note), `the note does not say what is lost: ${chosen.note}`);
+    /*
+     * The note is what reaches a reader, so it has to name what is still impossible and the remedy.
+     * The limit moved rather than disappearing: the console cannot reach a post older than the
+     * handful LinkedIn shows a logged-out reader — a post-URL harvest and the backfill actor both
+     * returned zero rows for March 2026 and reported success — so the stored back catalogue still
+     * needs Apify, and saying "fixed" without that would be the more expensive error.
+     */
+    assert(
+      /older|logged-out/i.test(chosen.note),
+      `the note does not say what the console still cannot reach: ${chosen.note}`,
+    );
     assert(/APIFY_TOKEN/.test(chosen.note), "the note does not say what would fix it");
   } finally {
     if (original === undefined) Deno.env.delete("APIFY_TOKEN");
