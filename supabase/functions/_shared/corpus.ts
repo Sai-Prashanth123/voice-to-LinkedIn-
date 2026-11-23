@@ -282,10 +282,18 @@ function withoutEmptyFields(rows: Row[]): { rows: Row[]; held: number } {
  * again next run and the other eight never get a turn. `ryanscarlin` is exactly that case already —
  * last stored 20 October, newest post 10 September — so this is not a hypothetical.
  *
- * `corpus_started` is filed on every run before any work begins, which makes it the one record of
- * an ATTEMPT rather than of a success. Reading the recent ones rotates: a writer that failed is
- * retried once the others have had their turn, and a run that dies part-way does not pin the
- * schedule to the same three forever.
+ * `corpus_job_submitted` is filed the moment a harvest is handed to the scraper, which makes it the
+ * one record of an ATTEMPT rather than of a success. Reading the recent ones rotates: a writer whose
+ * job failed is retried once the others have had their turn, and a run that dies part-way does not
+ * pin the schedule to the same three forever.
+ *
+ * IT WAS `corpus_started` UNTIL THE FIRST LIVE RUN, AND THAT WAS WRONG IN THE WAY THIS FILE WARNS
+ * ABOUT. `refreshDetached` filed a start event carrying a batch it had chosen, then
+ * `collectThenSubmit` chose a batch again — and the second call could see the first's event, so it
+ * rotated past it and submitted a DIFFERENT three. The start event named writers nobody fetched,
+ * and the rotation was driven by that fiction: writers were marked attempted without being
+ * attempted, and the ones actually harvested looked untouched. It typechecked, every test passed,
+ * and one real run showed it. The batch is now chosen once, by whoever submits.
  *
  * ORDERED AND LIMITED rather than windowed by `created_at`, for the reason orphan-runs.ts records
  * at length: the row this system writes takes `created_at` from the column default, so the value is
@@ -298,7 +306,7 @@ export async function corpusDueForRefresh(
   const { data, error } = await db
     .from("system_events")
     .select("detail")
-    .eq("kind", "corpus_started")
+    .eq("kind", JOB_SUBMITTED)
     .order("id", { ascending: false })
     .limit(20);
 
@@ -740,26 +748,23 @@ export async function collectThenSubmit(db: SupabaseClient, maxPosts = 50) {
  */
 export async function refreshDetached(db: SupabaseClient): Promise<Response> {
   /*
-   * The batch is chosen BEFORE the start event, because the start event is what records it.
+   * NO BATCH IS CHOSEN HERE, deliberately, and the first live run is why.
    *
-   * That ordering is the whole mechanism: `corpus_started.writers` is the only record that these
-   * three were attempted, and `corpusDueForRefresh` reads it back on the next run to rotate. If the
-   * batch were chosen inside the work, a torn-down run would leave no trace of whose turn it had
-   * been and the rotation would stall on the same three.
+   * This used to pick the batch so it could name it in the start event, and `collectThenSubmit`
+   * then picked again — seeing this event and rotating past it, so it submitted a different three
+   * and the start event named writers nobody fetched. Worse, the rotation read that event, so the
+   * named three were marked attempted without being attempted.
+   *
+   * The batch belongs to whoever submits the job. This event's job is narrower and still worth
+   * doing: a start with no finish beside it is how a torn-down run becomes visible at all.
    */
-  const due = await corpusDueForRefresh(db).catch((err) => ({
-    handles: CORPUS_HANDLES.slice(0, CORPUS_BATCH),
-    basis: `choosing the batch threw (${err instanceof Error ? err.message : String(err)})`,
-  }));
-
   await logEvent(db, "corpus_started", "info", {
-    writers: due.handles,
-    chosen_because: due.basis,
-    means: `This run fetches ${due.handles.length} of the ${CORPUS_HANDLES.length} writers. All ` +
-      `nine in one job measured 273s on 23 November against a platform that kills every run at ` +
-      `150s, so the whole corpus in one execution is not slow, it is impossible. The response goes ` +
-      `out before the harvest finishes, so a start with no finish beside it is a run that was torn ` +
-      `down part-way.`,
+    means: `This run fetches ${CORPUS_BATCH} of the ${CORPUS_HANDLES.length} writers, and which ` +
+      `three is recorded on the corpus_job_submitted event beside this one — not here, because ` +
+      `choosing it twice named writers nobody fetched. All nine in one job measured 273s on 23 ` +
+      `November against a platform that kills every run at 150s, and the console takes 111-137s to ` +
+      `answer however few profiles are asked for, which is why the harvest is submitted and ` +
+      `collected by a later run rather than waited for.`,
   }).catch(() => {});
 
   /*

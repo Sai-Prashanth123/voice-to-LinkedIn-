@@ -51,7 +51,12 @@ function stubDb(rows: Array<{ detail: unknown }>, error: { message: string } | n
   return { from: () => chain };
 }
 
-const startEvent = (writers: string[]) => ({ detail: { writers } });
+/**
+ * One recorded ATTEMPT: a `corpus_job_submitted` event. It was `corpus_started` until the first
+ * live run, which named three writers and fetched three others — see the note on
+ * `corpusDueForRefresh`.
+ */
+const attempt = (writers: string[]) => ({ detail: { writers } });
 
 Deno.test("a run takes three writers, not nine, because nine cannot finish", async () => {
   const { handles } = await corpusDueForRefresh(stubDb([]));
@@ -88,7 +93,7 @@ Deno.test("three runs cover all nine, and no writer is fetched twice before the 
   for (let run = 0; run < 3; run++) {
     const { handles } = await corpusDueForRefresh(stubDb(events));
     picked.push(handles);
-    events.unshift(startEvent(handles)); // most recent first, as the read returns them
+    events.unshift(attempt(handles)); // most recent first, as the read returns them
   }
 
   const all = picked.flat();
@@ -118,7 +123,7 @@ Deno.test("a writer whose fetch keeps failing cannot starve the other eight", as
    * stored nothing at all. They must still go last.
    */
   const firstThree = CORPUS_HANDLES.slice(0, CORPUS_BATCH);
-  const { handles } = await corpusDueForRefresh(stubDb([startEvent(firstThree)]));
+  const { handles } = await corpusDueForRefresh(stubDb([attempt(firstThree)]));
 
   for (const handle of firstThree) {
     assert(
@@ -135,7 +140,7 @@ Deno.test("the writer waiting longest goes before the one waiting less long", as
   // attempted, D,E,F have waited longer — but the three never attempted at all still outrank them.
   const [a, b, c, d, e, f, g, h, i] = CORPUS_HANDLES;
   const { handles } = await corpusDueForRefresh(
-    stubDb([startEvent([a, b, c]), startEvent([d, e, f]), startEvent([g, h, i])]),
+    stubDb([attempt([a, b, c]), attempt([d, e, f]), attempt([g, h, i])]),
   );
   assertEquals(
     handles,
@@ -162,58 +167,44 @@ Deno.test("a read it could not do is reported, not turned into a silent default"
   );
 });
 
-Deno.test("the batch reaches the harvest, and the start event records who was attempted", async () => {
+Deno.test("the batch is chosen once, by whoever submits the job", async () => {
   /*
-   * A value nothing reads is this repository's most common defect, and a batch that is computed
-   * and then not passed to the fetch would be precisely that: measured, logged, and inert, with
-   * nine profiles still going out in one job. So this asserts the two places the batch has to
-   * appear — the fetch and the start event — through the public entry point.
+   * THE BUG THE FIRST LIVE RUN FOUND, now asserted so it cannot come back.
+   *
+   * `refreshDetached` chose a batch to name in `corpus_started`, and `collectThenSubmit` chose
+   * again for the actual submission. The second call could see the first's event, rotated past it,
+   * and submitted a different three — so the start event named writers nobody fetched, and the
+   * rotation, which read that event, marked them attempted. Every test passed. One real run at
+   * 15:52 on 23 November showed it: started with amangrowth, adam-treboutat, tim-scheuer and
+   * submitted mattjbarker1, demandjen1, outboundphd.
+   *
+   * Two guards, because the failure needs both halves: the rotation must read the submission, and
+   * the start event must not carry a batch of its own to disagree with.
    */
-  const { refreshDetached } = await import("./corpus.ts");
-  const filed: Array<Record<string, unknown>> = [];
+  const source = await Deno.readTextFile(new URL("./corpus.ts", import.meta.url));
 
-  // deno-lint-ignore no-explicit-any
-  const db: any = {
-    from: (table: string) => {
-      if (table === "system_events") {
-        const chain: Record<string, unknown> = {
-          insert: (row: Record<string, unknown>) => {
-            filed.push(row);
-            return Promise.resolve({ error: null });
-          },
-        };
-        for (const method of ["select", "eq", "order", "limit"]) chain[method] = () => chain;
-        // deno-lint-ignore no-explicit-any
-        (chain as any).then = (resolve: (v: unknown) => unknown) =>
-          Promise.resolve({ data: [], error: null }).then(resolve);
-        return chain;
-      }
-      const chain: Record<string, unknown> = {};
-      for (const method of ["select", "eq", "in", "upsert"]) chain[method] = () => chain;
-      // deno-lint-ignore no-explicit-any
-      (chain as any).then = (resolve: (v: unknown) => unknown) =>
-        Promise.resolve({ data: [], error: null }).then(resolve);
-      return chain;
-    },
-  };
-
-  const res = await refreshDetached(db);
-  assertEquals(res.status, 200);
-  await res.json();
-
-  const start = filed.find((row) => row.kind === "corpus_started");
-  assert(start, `no corpus_started was filed; events were ${JSON.stringify(filed.map((f) => f.kind))}`);
-
-  const detail = start.detail as { writers?: unknown; chosen_because?: unknown };
-  assert(Array.isArray(detail.writers), "the start event does not record which writers it attempted");
-  assertEquals(
-    (detail.writers as string[]).length,
-    CORPUS_BATCH,
-    "the start event records a different number of writers than the batch size",
+  const rotation = source.slice(
+    source.indexOf("export async function corpusDueForRefresh"),
+    source.indexOf("export function backendFor"),
   );
   assert(
-    typeof detail.chosen_because === "string" && (detail.chosen_because as string).length > 0,
-    "the start event does not say why these writers were chosen, so the rotation is unreadable",
+    /\.eq\("kind", JOB_SUBMITTED\)/.test(rotation),
+    "the rotation no longer reads what was actually submitted, so it can rotate on a set nobody fetched",
+  );
+
+  const detached = source.slice(source.indexOf("export async function refreshDetached"));
+  const startLog = detached.slice(detached.indexOf('logEvent(db, "corpus_started"'));
+  const startDetail = startLog.slice(0, startLog.indexOf("}).catch"));
+  // A negative assertion on a slice that might be empty passes for the wrong reason, which is this
+  // repository's defect in miniature. So prove the slice is the start event's detail first.
+  assert(
+    /means:/.test(startDetail) && startDetail.length > 80,
+    `the start-event detail was not found, so the check below would pass vacuously: ${startDetail}`,
+  );
+  assert(
+    !/writers:/.test(startDetail),
+    "corpus_started carries a writers list again, which is the second half of the fault: two " +
+      "independent choices of the batch, one of them fiction",
   );
 });
 
