@@ -67,7 +67,12 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { logEvent } from "../_shared/db.ts";
 import { loadSecrets, secret } from "../_shared/secrets.ts";
 import { json, withBudget } from "../_shared/jobs.ts";
-import { fetchFromApify, fetchFromConsole, normaliseRows } from "../../../scripts/lib/harvest.mjs";
+import {
+  collectConsoleHarvest,
+  fetchFromApify,
+  normaliseRows,
+  submitConsoleHarvest,
+} from "../../../scripts/lib/harvest.mjs";
 import { measurePost } from "../../../scripts/lib/prose.mjs";
 
 /**
@@ -115,6 +120,16 @@ export const CORPUS_HANDLES = Object.keys(CORPUS_WRITERS);
  * of the budget. That is what `CORPUS_BATCH` answers.
  */
 const HARVEST_BUDGET_MS = 140_000;
+
+/**
+ * How long a run may wait for a job it has just submitted, before leaving it for the next run.
+ *
+ * 90s, not 140. The difference is the point: this budget running out is the EXPECTED outcome rather
+ * than a failure, so it is set low enough to leave room for the collect-and-store that follows a
+ * job which does land. Waiting the full budget would turn every slow job into an isolate killed
+ * mid-store, which is the fault this whole two-phase arrangement removes.
+ */
+const OPPORTUNISTIC_BUDGET_MS = 90_000;
 
 /**
  * How many writers one run fetches, and why it is three.
@@ -395,13 +410,59 @@ export async function refreshCorpus(
   }
 
   const profileUrls = handles.map(PROFILE_URL);
-  const raw = backend.name === "apify"
-    ? await fetchFromApify({ profileUrls, token: secret("APIFY_TOKEN"), maxPosts })
-    : await fetchFromConsole({
-      profileUrls,
-      key: secret("XP_API_KEY"),
-      base: secret("XP_BASE") ?? undefined,
-    });
+  let raw: { rows?: unknown[] };
+  if (backend.name === "apify") {
+    raw = await fetchFromApify({ profileUrls, token: secret("APIFY_TOKEN"), maxPosts });
+  } else {
+    /*
+     * Submit, then poll — rather than the old all-in-one `fetchFromConsole`.
+     *
+     * This path is for a caller nothing kills: a script at a terminal, or `refreshCorpus` called
+     * directly. The scheduled worker does NOT come through here, because the polling is exactly
+     * what it cannot afford; see `collectThenSubmit`.
+     */
+    const creds = { key: secret("XP_API_KEY"), base: secret("XP_BASE") ?? undefined };
+    const { jobId } = await submitConsoleHarvest({ profileUrls, ...creds });
+    let got = await collectConsoleHarvest({ jobId, ...creds });
+    const startedAt = Date.now();
+    while (!got.done) {
+      if (Date.now() - startedAt > 10 * 60_000) {
+        throw new Error(`console job ${jobId} still ${got.status} after 10 minutes`);
+      }
+      await new Promise((r) => setTimeout(r, 10_000));
+      got = await collectConsoleHarvest({ jobId, ...creds });
+    }
+    if (!got.won) throw new Error(`job ${jobId} ${got.status}: ${got.error}`);
+    raw = { rows: got.rows };
+  }
+
+  return await storeHarvest(db, {
+    rawRows: raw.rows ?? [],
+    handles,
+    backend: backend.name,
+    note: backend.note,
+  });
+}
+
+/**
+ * Normalise, guard and store a harvest somebody else fetched, then report what happened.
+ *
+ * Split out of `refreshCorpus` on 23 November so the two-phase worker path can reuse it without a
+ * second copy of the guards. The guards are the reason this file exists — 20 October erased the
+ * reaction counts of 1,900 posts through a mapping mistake — and two copies of a guard is one
+ * guard and one liability.
+ */
+export async function storeHarvest(
+  db: SupabaseClient,
+  opts: {
+    rawRows: unknown[];
+    handles: string[];
+    backend: "apify" | "console";
+    note: string;
+    jobId?: number | string | null;
+  },
+) {
+  const { rawRows, handles, backend, note } = opts;
 
   /*
    * `foreign` and `unmapped` are reported, not swallowed. harvest.mjs says why in its own words: "a
@@ -409,7 +470,7 @@ export async function refreshCorpus(
    * A high `foreign` count is expected and healthy — a profile harvest returns other people's posts
    * from the feed — but a run where EVERYTHING was foreign means the attribution broke.
    */
-  const { rows: items, foreign, unmapped } = normaliseRows(raw.rows ?? [], CORPUS_WRITERS);
+  const { rows: items, foreign, unmapped } = normaliseRows(rawRows, CORPUS_WRITERS);
 
   const seen = new Set<string>();
   const shaped: Row[] = [];
@@ -436,7 +497,8 @@ export async function refreshCorpus(
 
   const result = {
     ok: true as const,
-    backend: backend.name,
+    backend,
+    job: opts.jobId ?? null,
     writers: handles,
     writers_not_in_this_run: CORPUS_HANDLES.filter((h) => !handles.includes(h)),
     theirs: items.length,
@@ -455,11 +517,214 @@ export async function refreshCorpus(
      * November, and it can change back without a word.
      */
     with_line_breaks: rows.filter((r) => r.has_line_breaks === true).length,
-    note: backend.note,
+    note,
   };
 
   await logEvent(db, "corpus_refreshed", "info", result);
   return result;
+}
+
+/** The kind that records a submission, which is the only thing that makes a job collectable. */
+export const JOB_SUBMITTED = "corpus_job_submitted";
+
+/**
+ * The job this run should collect before it submits another, or null if there is nothing waiting.
+ *
+ * A submitted job is "pending" until some later run reports an outcome carrying its id. Both
+ * outcomes carry one — `corpus_refreshed.job` and `corpus_failed.job` — so the pending set is
+ * simply the submitted ids with no outcome against them.
+ *
+ * ORDERED AND LIMITED rather than windowed by `created_at`, for the reason orphan-runs.ts records:
+ * the rows this system writes take `created_at` from the column default, so the value is not in the
+ * payload.
+ */
+export async function pendingConsoleJob(
+  db: SupabaseClient,
+): Promise<{ jobId: number | string; writers: string[] } | null> {
+  const { data: submitted, error } = await db
+    .from("system_events")
+    .select("detail")
+    .eq("kind", JOB_SUBMITTED)
+    .order("id", { ascending: false })
+    .limit(10);
+  if (error || !submitted?.length) return null;
+
+  const { data: finished } = await db
+    .from("system_events")
+    .select("detail")
+    .in("kind", ["corpus_refreshed", "corpus_failed"])
+    .order("id", { ascending: false })
+    .limit(40);
+
+  const settled = new Set(
+    (finished ?? [])
+      .map((r) => (r as { detail?: { job?: unknown } }).detail?.job)
+      .filter((j) => j !== null && j !== undefined)
+      .map(String),
+  );
+
+  for (const row of submitted) {
+    const detail = (row as { detail?: { job?: unknown; writers?: unknown } }).detail ?? {};
+    const jobId = detail.job;
+    if (jobId === null || jobId === undefined) continue;
+    if (settled.has(String(jobId))) continue;
+    return {
+      jobId: jobId as number | string,
+      writers: Array.isArray(detail.writers) ? detail.writers.map(String) : [],
+    };
+  }
+  return null;
+}
+
+/**
+ * Collect whatever is waiting, then submit the next batch. The worker's whole job.
+ *
+ * WHY THIS SHAPE, AND WHAT IT REPLACES
+ *
+ * Until today this worker submitted a harvest and waited for it inside the isolate. That could
+ * never work and the logs say so: it failed on 19 November, on 23 November at 06:00, and twice more
+ * this afternoon under the new three-writer batch. The reason is not the batch size, which is what
+ * I assumed and fixed first. It is that the console takes 111s to 137s to answer AT ALL — measured
+ * across six jobs of one and three profiles — against a platform that kills every execution at
+ * 150.0s. A single profile already spends most of the budget, so no batch size fits.
+ *
+ * The job does not need us. It runs server-side to completion whether anybody is listening. So:
+ *
+ *   1. Collect the job the last run submitted, if it has landed. This costs one API call and a
+ *      page of rows, because the waiting already happened in the gap between runs.
+ *   2. Submit the next batch and record its id. If this isolate dies now, nothing is lost: the
+ *      submission is on record and the next run collects it.
+ *   3. If there is budget left, poll the new job too, so one manual `run_worker` can still finish
+ *      a whole writer in one go when somebody is sitting there waiting for it.
+ *
+ * Step 3 is the opportunistic half and it is allowed to fail. Steps 1 and 2 are what make the
+ * schedule work.
+ */
+export async function collectThenSubmit(db: SupabaseClient, maxPosts = 50) {
+  const backend = backendFor();
+  if (!backend.name) {
+    await logEvent(db, "corpus_blocked", "warn", { means: backend.note });
+    return { ok: false as const, note: backend.note };
+  }
+
+  /*
+   * Apify fetches synchronously and has no two-phase API here, so it keeps the old path. It is also
+   * not configured, so this branch has never run — said plainly rather than implied, because an
+   * untested branch that looks tested is how 20 October happened.
+   */
+  if (backend.name === "apify") {
+    const { handles } = await corpusDueForRefresh(db);
+    return await refreshCorpus(db, maxPosts, handles);
+  }
+
+  const creds = { key: secret("XP_API_KEY"), base: secret("XP_BASE") ?? undefined };
+  const collected: Record<string, unknown>[] = [];
+
+  // ── 1. Collect what is already waiting ──────────────────────────────────
+  const pending = await pendingConsoleJob(db);
+  if (pending) {
+    try {
+      const got = await collectConsoleHarvest({ jobId: pending.jobId, ...creds });
+      if (!got.done) {
+        await logEvent(db, "corpus_job_waiting", "info", {
+          job: pending.jobId,
+          writers: pending.writers,
+          status: got.status,
+          means: "The job submitted by an earlier run has not finished. Nothing is lost and no new " +
+            "job is submitted on top of it — the next run collects this one.",
+        });
+        return { ok: true as const, waiting_on: pending.jobId, submitted: null };
+      }
+      if (!got.won) {
+        await logEvent(db, "corpus_failed", "error", {
+          job: pending.jobId,
+          writers: pending.writers,
+          error: `job ${pending.jobId} ${got.status}: ${got.error}`,
+          means: "The scraper refused this one. Those writers go to the back of the rotation and " +
+            "are retried once the others have had a turn, which is why a failure cannot stall the " +
+            "corpus.",
+        });
+      } else {
+        collected.push(
+          await storeHarvest(db, {
+            rawRows: got.rows,
+            handles: pending.writers.length ? pending.writers : CORPUS_HANDLES,
+            backend: "console",
+            note: backend.note,
+            jobId: pending.jobId,
+          }) as unknown as Record<string, unknown>,
+        );
+      }
+    } catch (err) {
+      await logEvent(db, "corpus_failed", "error", {
+        job: pending.jobId,
+        error: `collecting job ${pending.jobId} threw: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      });
+    }
+  }
+
+  // ── 2. Submit the next batch, and record it before anything can kill us ──
+  const due = await corpusDueForRefresh(db);
+  const { jobId } = await submitConsoleHarvest({
+    profileUrls: due.handles.map(PROFILE_URL),
+    ...creds,
+  });
+  await logEvent(db, JOB_SUBMITTED, "info", {
+    job: jobId,
+    writers: due.handles,
+    chosen_because: due.basis,
+    means: "Submitted and deliberately not waited for. The console takes 111-137s to answer and " +
+      "this runtime is killed at 150s, so waiting is what broke every previous run. The next run " +
+      "collects this job; if this isolate dies now, the work is still on record.",
+  });
+
+  // ── 3. If there is time, finish it now rather than next run ─────────────
+  let finishedNow: Record<string, unknown> | null = null;
+  try {
+    finishedNow = await withBudget(
+      (async () => {
+        let got = await collectConsoleHarvest({ jobId, ...creds });
+        while (!got.done) {
+          await new Promise((r) => setTimeout(r, 8_000));
+          got = await collectConsoleHarvest({ jobId, ...creds });
+        }
+        if (!got.won) {
+          await logEvent(db, "corpus_failed", "error", {
+            job: jobId,
+            writers: due.handles,
+            error: `job ${jobId} ${got.status}: ${got.error}`,
+          });
+          return null;
+        }
+        return await storeHarvest(db, {
+          rawRows: got.rows,
+          handles: due.handles,
+          backend: "console",
+          note: backend.note,
+          jobId,
+        }) as unknown as Record<string, unknown>;
+      })(),
+      OPPORTUNISTIC_BUDGET_MS,
+      "waiting for the job just submitted",
+    );
+  } catch {
+    /*
+     * Deliberately swallowed, and this is the only place in this file where that is right.
+     *
+     * Running out of budget here is the EXPECTED path, not a fault: the job is submitted, its id is
+     * on record, and the next run collects it. Filing an error would train whoever reads these
+     * events to ignore `corpus_failed`, which is the one event that has to keep meaning something.
+     */
+  }
+
+  return {
+    ok: true as const,
+    collected_from_last_run: collected,
+    submitted: { job: jobId, writers: due.handles, chosen_because: due.basis },
+    finished_in_this_run: finishedNow,
+  };
 }
 
 /**
@@ -509,9 +774,13 @@ export async function refreshDetached(db: SupabaseClient): Promise<Response> {
   const work = (async () => {
     try {
       await loadSecrets(db);
-      // Under a deadline this runtime can hold — see withBudget. Nine profiles is the slowest
-      // harvest here, so if anything hits this it will be this.
-      await withBudget(refreshCorpus(db), HARVEST_BUDGET_MS, "the corpus refresh");
+      /*
+       * Under a deadline this runtime can hold — see withBudget. The budget is a backstop here
+       * rather than the mechanism: `collectThenSubmit` is built so that the expensive part, waiting
+       * for the scraper, happens between runs instead of inside one. If this fires, something other
+       * than the harvest latency is slow.
+       */
+      await withBudget(collectThenSubmit(db), HARVEST_BUDGET_MS, "the corpus refresh");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await logEvent(db, "corpus_failed", "error", { error: message.slice(0, 500) })

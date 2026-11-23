@@ -233,8 +233,14 @@ Deno.test("the whole corpus is still reachable deliberately, for a caller nothin
     /const profileUrls = handles\.map\(PROFILE_URL\)/.test(source),
     "the batch is not what gets fetched — profileUrls is still built from something else",
   );
+  /*
+   * Asserted on the ARGUMENT, not on the whole call, because the call moved into `storeHarvest`
+   * when the two-phase path needed the same guards. What must not change is that attribution is
+   * given all nine writers: a profile harvest returns other people's posts from the feed, and one
+   * of those people is sometimes another reference writer.
+   */
   assert(
-    /normaliseRows\(raw\.rows \?\? \[\], CORPUS_WRITERS\)/.test(source),
+    /normaliseRows\([A-Za-z.? \[\]]+, CORPUS_WRITERS\)/.test(source),
     "attribution was narrowed to the batch, which files another reference writer's post as foreign",
   );
 });

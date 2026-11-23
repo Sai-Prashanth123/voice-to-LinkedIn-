@@ -129,12 +129,90 @@ export async function fetchFromConsole({ profileUrls, key, base, log = noop }) {
         `That is distinct from "they have not posted" — but it is NOT evidence that LinkedIn is ` +
         `blocking us, which is what this message asserted until 19 November. Measured that day: ` +
         `the same profile, three jobs inside four minutes, gave 16 rows in 109s, 0 rows in 11s and ` +
-        `16 rows in 129s. The backend answers emptily and fast every so often and the data is ` +
-        `there on the next attempt, so this is flaky rather than blocked. A fast empty answer is ` +
-        `the tell: a real read of one profile took 65-129s.`,
+        `16 rows in 129s. The backend answers emptily every so often and the data is there on the ` +
+        `next attempt, so this is flaky rather than blocked. DURATION IS NOT THE TELL, though it ` +
+        `looked like one: the same day a job returned 0 rows in 311.2s and another returned 16 in ` +
+        `35.8s. Since 23 November the console reports an empty read as \`failed\` with a reason, so ` +
+        `this path is the old behaviour and should now be rare.`,
     );
   }
   return { rows, source: "console", job: job.id };
+}
+
+/* ── The console, in two halves, for a caller the platform kills ──────────── */
+
+/**
+ * Submit a profile harvest and return its job id WITHOUT waiting for it.
+ *
+ * WHY THIS EXISTS, MEASURED RATHER THAN ASSUMED
+ *
+ * `fetchFromConsole` above submits and waits, which is right for a script at a terminal and
+ * impossible for an edge worker. The edge runtime kills every execution at 150.0s, and on 23
+ * November the console took 111.7s, 120.2s, 128.5s and 136.6s to answer jobs of one and three
+ * profiles. The latency is mostly fixed cost, not per-profile — so there is no batch size that
+ * reliably fits, and the scheduled corpus refresh failed on every run it ever had while we treated
+ * it as a batching problem.
+ *
+ * The job itself does not care. It runs server-side to completion whether anybody is listening, so
+ * the fix is to stop listening inside the isolate: submit here, collect in `collectConsoleHarvest`
+ * once it has landed. Nothing is lost when the caller dies, which is the whole point.
+ */
+export async function submitConsoleHarvest({ profileUrls, key, base, log = noop }) {
+  if (!key) throw new Error("no console key");
+  const job = await consoleApi({ key, base }, "POST", "/jobs", {
+    actor: "linkedin-harvest",
+    // ttl_seconds 0 forces a fresh read; the default 86400 would serve yesterday's answer. No
+    // `since` — see fetchFromConsole, which records what that filter actually does.
+    input: { urls: profileUrls, entity_type: "profile", ttl_seconds: 0 },
+  });
+  if (!job?.id) throw new Error(`no job id: ${JSON.stringify(job).slice(0, 200)}`);
+  log(`console job ${job.id} submitted, ${profileUrls.length} profile(s), not waited for`);
+  return { jobId: job.id };
+}
+
+/**
+ * Read a submitted job: is it finished, did it win, and what rows does it hold.
+ *
+ * Returns `{ done, won, status, error, rows }`. `done: false` is not a failure — it means come
+ * back, and the caller must leave the job pending rather than treating it as empty.
+ *
+ * An empty win is reported as `won: true` with `rows: []` rather than thrown, because the console
+ * stopped doing that on 23 November: it now reports `failed` with "Bright Data did not serve the
+ * request" where it used to report success with nothing in it. Throwing on an empty win would turn
+ * the genuinely-quiet case into an error the day a writer posts nothing.
+ */
+export async function collectConsoleHarvest({ jobId, key, base, log = noop }) {
+  const state = await consoleApi({ key, base }, "GET", `/jobs/${jobId}`);
+  const status = String(state.status ?? "unknown");
+  if (!TERMINAL.includes(status.toLowerCase())) {
+    log(`console job ${jobId} still ${status}`);
+    return { done: false, won: false, status, error: null, rows: [] };
+  }
+  if (!WON.includes(status.toLowerCase())) {
+    return {
+      done: true,
+      won: false,
+      status,
+      error: state.error ?? "no reason given",
+      rows: [],
+    };
+  }
+
+  const rows = [];
+  for (let offset = 0; ; offset += 100) {
+    const page = await consoleApi(
+      { key, base },
+      "GET",
+      `/jobs/${jobId}/linkedin-posts?limit=100&offset=${offset}`,
+      undefined,
+      90_000,
+    );
+    const batch = Array.isArray(page) ? page : (page.items ?? []);
+    rows.push(...batch);
+    if (batch.length < 100) break;
+  }
+  log(`console job ${jobId} ${status}, ${rows.length} row(s)`);
+  return { done: true, won: true, status, error: null, rows };
 }
 
 /* ── Apify, the fallback ──────────────────────────────────────────────────── */
